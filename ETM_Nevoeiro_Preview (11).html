@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETM Nevoeiro | Aferições</title>
+<style>
+:root{--navy:#102b46;--blue:#1769aa;--blue2:#eaf3fb;--yellow:#f2c230;--green:#16834a;--red:#c92b35;--orange:#d97706;--ink:#172536;--muted:#64748b;--line:#dbe3ec;--bg:#f3f6fa;--card:#fff;--shadow:0 8px 24px rgba(16,43,70,.07)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,Segoe UI,Arial,sans-serif}
+button,input,select,textarea{font:inherit}button{cursor:pointer;border:0;border-radius:9px;padding:10px 14px;font-weight:650}
+.app{min-height:100vh;display:grid;grid-template-columns:248px 1fr}.sidebar{background:var(--navy);color:#fff;padding:22px 16px;display:flex;flex-direction:column;gap:24px}.brand{display:flex;align-items:center;gap:11px;padding:4px 8px}.brand-mark{width:39px;height:39px;border-radius:11px;background:var(--yellow);color:var(--navy);display:grid;place-items:center;font-weight:900;font-size:18px}.brand strong{display:block;font-size:16px;letter-spacing:.3px}.brand small{color:#b9c8d8}.nav{display:grid;gap:7px}.nav button{background:transparent;color:#dce7f2;text-align:left;display:flex;gap:12px;align-items:center}.nav button.active,.nav button:hover{background:#244563;color:#fff}.nav .ico{width:20px;text-align:center}.side-note{margin-top:auto;color:#a9bdcf;font-size:11px;padding:8px}
+main{min-width:0;padding:26px clamp(16px,3vw,38px) 42px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:24px}.eyebrow{color:var(--blue);font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase}.topbar h1{font-size:25px;margin:3px 0 0}.top-actions{display:flex;gap:9px;flex-wrap:wrap}.btn-primary{background:var(--blue);color:#fff}.btn-dark{background:var(--navy);color:#fff}.btn-light{background:#fff;border:1px solid var(--line);color:var(--ink)}.btn-danger{background:#fff0f0;color:var(--red)}.btn-small{padding:7px 10px;font-size:12px}
+.page{display:none}.page.active{display:block}.grid{display:grid;gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px;box-shadow:var(--shadow)}.stat-label{font-size:12px;color:var(--muted);font-weight:650}.stat-value{font-size:27px;font-weight:800;margin:7px 0 2px}.stat-sub{font-size:11px;color:var(--muted)}.stat-icon{float:right;width:34px;height:34px;border-radius:10px;background:var(--blue2);display:grid;place-items:center;color:var(--blue)}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 13px}.section-head h2{font-size:17px;margin:0}.section-head p{margin:3px 0 0;color:var(--muted);font-size:12px}
+.split{grid-template-columns:1.25fr .75fr}.list{display:grid;gap:10px}.branch-row,.audit-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--line);border-radius:11px}.branch-info{display:flex;align-items:center;gap:11px;min-width:0}.branch-avatar{width:38px;height:38px;border-radius:10px;background:#e9f2fa;color:var(--blue);display:grid;place-items:center;font-weight:800}.branch-info strong{display:block}.branch-info small{color:var(--muted)}.pill{display:inline-flex;padding:4px 8px;border-radius:99px;font-size:11px;font-weight:750;background:#edf2f7;color:#475569}.pill.green{background:#e5f6ec;color:#137443}.pill.yellow{background:#fff6d9;color:#946200}.pill.red{background:#ffebeb;color:#b4232d}
+label{display:block;font-size:12px;font-weight:700;color:#42536a;margin-bottom:5px}input,select,textarea{width:100%;border:1px solid #cfd9e4;border-radius:9px;padding:10px 11px;background:#fff;color:var(--ink);outline:none}input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px #1769aa18}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.field.full{grid-column:1/-1}.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}.muted{color:var(--muted)}.empty{padding:25px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:end;margin-bottom:14px}.toolbar .field{min-width:180px;flex:1}.audit-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.audit-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}.audit-table{width:100%;border-collapse:collapse;min-width:880px}.audit-table th{background:#edf2f7;color:#31445a;text-align:left;font-size:11px;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap}.audit-table td{padding:8px;border-bottom:1px solid #e7edf3}.audit-table tr:last-child td{border-bottom:0}.audit-table td:first-child{font-weight:750}.audit-table select{min-width:110px;padding:7px;font-size:12px}.legend{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.legend span{font-size:11px;font-weight:750;padding:5px 9px;border-radius:6px}.legend .c{background:#d9f6df;color:#126b37}.legend .ob{background:#fff0b8;color:#795600}.legend .nc{background:#ffd9dc;color:#a31724}.legend .na{background:#e8edf2;color:#526173}
+.check-header{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:15px}.check-header .card{padding:12px}.check-header .card label{font-size:11px}.code-box{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:13px;font-size:12px}.code-box strong{color:var(--navy)}.code-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:7px}
+.modal-backdrop{position:fixed;inset:0;background:#0c2036a8;display:none;align-items:center;justify-content:center;padding:18px;z-index:10}.modal-backdrop.show{display:flex}.modal{width:min(560px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;padding:21px;box-shadow:0 20px 70px #0004}.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:17px}.modal-head h2{margin:0;font-size:19px}.close{background:#edf2f7;padding:7px 10px}
+.toast{position:fixed;bottom:20px;right:20px;background:#132f4a;color:#fff;padding:12px 16px;border-radius:10px;box-shadow:var(--shadow);display:none;z-index:20}.toast.show{display:block}
+.mobile-nav{display:none}
+@media(max-width:950px){.app{grid-template-columns:205px 1fr}.stats{grid-template-columns:repeat(2,1fr)}.split{grid-template-columns:1fr}.audit-meta,.check-header{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.app{display:block}.sidebar{display:none}main{padding:18px 13px 90px}.topbar{align-items:flex-start;flex-direction:column;margin-bottom:18px}.topbar h1{font-size:22px}.top-actions{width:100%}.top-actions button{flex:1}.stats{gap:9px}.card{padding:13px}.stat-value{font-size:23px}.section-head{align-items:flex-start}.audit-meta,.check-header{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.mobile-nav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);padding:7px 5px calc(7px + env(safe-area-inset-bottom));z-index:5}.mobile-nav button{background:transparent;color:#607086;padding:7px 2px;font-size:10px;display:grid;gap:3px;justify-items:center}.mobile-nav button.active{color:var(--blue)}.mobile-nav span{font-size:18px}.code-grid{grid-template-columns:repeat(2,1fr)}.branch-row,.audit-row{align-items:flex-start}.toolbar .field{min-width:calc(50% - 8px)}}
+@media print{.sidebar,.mobile-nav,.top-actions,.no-print{display:none!important}main{padding:0}.page{display:none!important}#page-auditoria{display:block!important}.card{box-shadow:none}.audit-table{min-width:0}.audit-table select{border:0;appearance:none;padding:0}.audit-table th,.audit-table td{font-size:9px;padding:5px}}
+
+/* ===== Tabela de aferição: campos numéricos + responsivo ===== */
+.audit-table .pb{display:grid;gap:5px}.audit-table .pb label{display:none}.audit-table td.rm-col{text-align:center}.row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.step{display:flex;gap:4px;align-items:stretch}
+.step input{flex:1;min-width:0;width:64px;padding:7px 4px!important;text-align:center;font-weight:700}
+.step button{padding:0 9px;background:#edf2f7;color:var(--navy);border:1px solid #cfd9e4;border-radius:9px;font-size:16px;line-height:1;font-weight:800}
+.step button:active{background:#dbe7f3}
+.scale-hint{font-size:12px;color:var(--muted);margin:0 0 12px}.audit-table th small{font-weight:600;color:var(--muted)}
+.audit-table input{min-width:76px;padding:7px 8px;font-size:12px;text-align:center}
+.audit-table input.num{font-variant-numeric:tabular-nums}
+.audit-table td:first-child,.audit-table th:first-child{position:sticky;left:0;z-index:1;background:#fff;box-shadow:1px 0 0 var(--line)}
+.audit-table th:first-child{background:#edf2f7;z-index:2}
+.audit-table td.fuel-col{white-space:nowrap;color:#42536a}
+@media screen and (max-width:900px){
+ .audit-table-wrap{border:0;background:transparent;overflow:visible}
+ .audit-table{min-width:0;display:block}
+ .audit-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+ .audit-table tbody{display:grid;gap:12px}
+ .audit-table tbody tr{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:10px 12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
+ .audit-table td{display:block;padding:0;border:0;min-width:0}
+ .audit-table td:first-child{position:static;box-shadow:none;background:transparent;grid-column:1/-1;font-size:14px;color:var(--navy)}
+ .audit-table td.fuel-col{grid-column:1/-1;margin-top:-8px;padding-bottom:9px;border-bottom:1px dashed var(--line);font-size:12px;color:var(--muted)}
+ .audit-table td[data-label]::before{content:attr(data-label);display:block;font-size:11px;font-weight:700;color:#42536a;margin-bottom:4px}
+ .audit-table td.empty-row{grid-column:1/-1}
+ .audit-table .pb{grid-template-columns:1fr 1fr;gap:10px}.audit-table .pb label{display:block}.audit-table td.rm-col{grid-column:1/-1;text-align:right}
+ .audit-table input,.audit-table select{width:100%;min-width:0;padding:10px 11px;font-size:16px;text-align:left}
+ .audit-table input.num{text-align:center}
+ .step button{min-width:36px}.step input{padding:10px 2px!important}
+}
+@media screen and (max-width:650px){
+ .audit-table tbody tr{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media print{.step button{display:none}.audit-table input{border:0;padding:0;text-align:left;min-width:0}.audit-table td:first-child,.audit-table th:first-child{position:static;box-shadow:none}}
+
+/* ===== Filiais em cards (expansíveis) ===== */
+.bcard{padding:0;overflow:hidden}
+.bhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 17px;cursor:pointer;user-select:none}
+.bhead:hover{background:#f7fafd}.bhead:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.bhead .bactions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.chev{display:inline-block;width:26px;text-align:center;color:var(--muted);font-size:13px;transition:transform .2s}
+.bcard.open .chev{transform:rotate(90deg)}
+.bbody{display:none;padding:2px 17px 17px;border-top:1px solid var(--line)}
+.bcard.open .bbody{display:block}
+.bcard.open .bhead{background:#f7fafd}
+@media(max-width:650px){.bhead{flex-wrap:wrap}.bhead .bactions{width:100%;justify-content:flex-end}}
+/* ===== Campo de descrição para NC / OB ===== */
+.hidden{display:none!important}
+.audit-table input.note{margin-top:5px;min-width:150px;text-align:left;font-size:12px;border-color:#e0a4a9;background:#fff8f8}
+.audit-table input.note.ob{border-color:#e6c76a;background:#fffbea}
+.audit-table select.st-NC{background:#ffd9dc;border-color:#e0a4a9;font-weight:700}
+.audit-table select.st-OB{background:#fff0b8;border-color:#e6c76a;font-weight:700}
+.audit-table select.st-C{background:#d9f6df;border-color:#9ed3ad}
+@media print{.audit-table input.note{border:0;background:transparent;font-style:italic}}
+
+/* ===== Aferição em etapas: filial > bomba > bico ===== */
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 16px}.crumbs .sep{color:var(--muted)}
+.crumb{background:#fff;border:1px solid var(--line);color:var(--blue);padding:6px 11px;border-radius:99px;font-size:12px}
+.crumb.cur{background:var(--navy);color:#fff;border-color:var(--navy);cursor:default}
+.stage-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}.stage-title{font-size:16px;font-weight:750;margin:0}.stage-sub{color:var(--muted);font-size:12px;margin:2px 0 0}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.pick-card{display:flex;flex-direction:column;align-items:flex-start;gap:7px;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);color:var(--ink);transition:transform .15s,border-color .15s}
+.pick-card:hover{border-color:var(--blue);transform:translateY(-2px)}.pick-card strong{font-size:15px}.pick-card small{color:var(--muted);font-weight:500}
+.pick-card.done{border-color:#9ed3ad}.pick-card.warn{border-color:#e6c76a}.pick-card.bad{border-color:#e0a4a9}
+.pick-ico{width:54px;height:54px;border-radius:14px;background:var(--blue2);color:var(--blue);display:grid;place-items:center;font-weight:800;font-size:17px}.pick-ico svg{width:32px;height:32px}.pick-ico.fuel{background:#fff6d9;color:#946200}
+.bar{height:6px;background:#e7edf3;border-radius:9px;width:100%;overflow:hidden}.bar i{display:block;height:100%;background:var(--green)}
+.crit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:15px;margin-top:14px}
+.crit .step input{width:64px}
+.crit select.st-NC{background:#ffd9dc;border-color:#e0a4a9;font-weight:700}.crit select.st-OB{background:#fff0b8;border-color:#e6c76a;font-weight:700}.crit select.st-C{background:#d9f6df;border-color:#9ed3ad}
+.crit input.note{margin-top:6px;font-size:13px;border-color:#e0a4a9;background:#fff8f8}.crit input.note.ob{border-color:#e6c76a;background:#fffbea}
+.sum-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:11px}
+.sum-row .l{display:flex;align-items:center;gap:11px}.sum-row .pick-ico{width:40px;height:40px;border-radius:11px}.sum-row .pick-ico svg{width:24px;height:24px}
+.sum-note{font-size:12px;color:var(--red);margin-top:2px}
+.crit-flow{grid-column:1/-1}
+.timer{margin-top:8px;border:1px solid var(--line);border-radius:11px;background:#f8fafc;padding:10px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.t-disp{font:800 28px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--navy);min-width:116px}.t-disp.run{color:var(--green)}
+.t-vol-wrap{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#42536a}.t-vol-wrap input{width:72px;text-align:center;padding:8px 6px}
+.timer .btn-start.run{background:var(--red)}
+.t-res{font-size:12px;color:var(--muted);flex-basis:100%}
+.sum-note.info{color:var(--muted)}
+.pump-sec{margin-bottom:14px}.pump-head{display:flex;gap:14px;align-items:center;margin-bottom:14px}.pump-head .bar{margin-top:7px;max-width:260px}
+.noz-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}.sum-row.nd{background:#f8fafc}.sum-row.nd .pick-ico{opacity:.5}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+ <div class="brand"><div class="brand-mark">N</div><div><strong>NEVOEIRO</strong><small>Controle de Aferições</small></div></div>
+ <nav class="nav">
+  <button class="active" data-page="inicio"><span class="ico">▦</span>Visão geral</button>
+  <button data-page="auditoria"><span class="ico">✓</span>Nova aferição</button>
+  <button data-page="filiais"><span class="ico">⌂</span>Filiais</button>
+  <button data-page="historico"><span class="ico">▤</span>Histórico</button>
+ </nav>
+ <div class="side-note">Prévia funcional • Dados salvos neste navegador</div>
+</aside>
+<main>
+ <header class="topbar">
+  <div><div class="eyebrow">Rede de Postos Nevoeiro</div><h1 id="page-title">Visão geral</h1></div>
+  <div class="top-actions"><button class="btn-light" onclick="openImport()">⇧ Importar dados</button><button class="btn-light" onclick="exportAll()">⇩ Exportar dados</button><button class="btn-primary" onclick="newAudit()">＋ Nova aferição</button></div>
+ </header>
+
+ <section class="page active" id="page-inicio">
+  <div class="grid stats">
+   <div class="card"><div class="stat-icon">⌂</div><div class="stat-label">Filiais cadastradas</div><div class="stat-value" id="stat-filiais">0</div><div class="stat-sub">Unidades da rede</div></div>
+   <div class="card"><div class="stat-icon">◉</div><div class="stat-label">Bombas cadastradas</div><div class="stat-value" id="stat-bombas">0</div><div class="stat-sub">Equipamentos ativos</div></div>
+   <div class="card"><div class="stat-icon">◎</div><div class="stat-label">Bicos cadastrados</div><div class="stat-value" id="stat-bicos">0</div><div class="stat-sub">Pontos de abastecimento</div></div>
+   <div class="card"><div class="stat-icon">✓</div><div class="stat-label">Aferições realizadas</div><div class="stat-value" id="stat-audits">0</div><div class="stat-sub">Registros salvos</div></div>
+  </div>
+  <div class="grid split">
+   <div class="card"><div class="section-head"><div><h2>Filiais</h2><p>Acesse a estrutura de bombas e bicos cadastrados.</p></div><button class="btn-light btn-small" onclick="go('filiais')">Ver todas</button></div><div class="list" id="home-branches"></div></div>
+   <div class="card"><div class="section-head"><div><h2>Aferições recentes</h2><p>Últimos registros realizados.</p></div><button class="btn-light btn-small" onclick="go('historico')">Histórico</button></div><div class="list" id="home-audits"></div></div>
+  </div>
+  <div class="card" style="margin-top:16px"><div class="section-head"><div><h2>Fluxo de utilização</h2><p>Cadastre a estrutura uma vez e reutilize nas próximas visitas.</p></div></div><div class="grid" style="grid-template-columns:repeat(3,1fr);gap:12px"><div><span class="pill">01 • Cadastro</span><p><b>Filial, bombas e bicos</b><br><small class="muted">Configure os equipamentos e seus combustíveis.</small></p></div><div><span class="pill">02 • Aferição</span><p><b>Preencha a inspeção</b><br><small class="muted">Registre C, OB, NC ou NA em cada critério.</small></p></div><div><span class="pill">03 • Exportação</span><p><b>Compartilhe o resultado</b><br><small class="muted">Exporte o relatório em PDF ou CSV.</small></p></div></div></div>
+ </section>
+
+ <section class="page" id="page-filiais">
+  <div class="section-head"><div><h2>Cadastro de filiais</h2><p>Gerencie unidades, bombas e bicos de abastecimento.</p></div><button class="btn-primary" onclick="openBranch()">＋ Cadastrar filial</button></div>
+  <div class="toolbar"><div class="field"><label>Pesquisar filial</label><input id="branch-search" placeholder="Nome ou código..." oninput="renderBranches()"></div></div>
+  <div class="list" id="branches-list"></div>
+ </section>
+
+ <section class="page" id="page-auditoria">
+  <div class="section-head"><div><h2>Registro de aferição</h2><p>Escolha a filial, depois a bomba e o bico para registrar cada aferição.</p></div><span class="pill yellow">Rascunho até salvar</span></div>
+  <div class="crumbs" id="audit-crumbs"></div>
+  <div id="audit-stage"></div>
+  <div id="audit-final" class="card hidden">
+   <div class="section-head" style="margin-top:0"><div><h2>Finalizar aferição</h2><p>Confira os bicos aferidos e preencha os dados gerais.</p></div></div>
+   <div class="list" id="audit-summary"></div>
+   <div class="row-actions no-print"><button class="btn-light btn-small" type="button" onclick="auditGo('pump')">＋ Aferir outro bico</button></div>
+   <div class="audit-meta" style="margin-top:18px">
+    <div><label>Data da aferição</label><input type="date" id="audit-date"></div>
+    <div><label>Aferidor</label><input id="auditor" placeholder="Nome do responsável"></div>
+    <div><label>Lacre geral</label><input id="general-seal" placeholder="Identificação"></div>
+    <div><label>Selo Inmetro</label><input id="inmetro-seal" placeholder="Nº / validade"></div>
+   </div>
+   <div class="check-header">
+    <div class="card"><label>Painéis das bombas</label><select id="panels"><option value="">Selecione</option><option>Ligados</option><option>Desligados</option><option>Não aplicável</option></select></div>
+    <div class="card"><label>Rodilhas</label><select id="rodilhas"><option value="">Selecione</option><option>Conforme</option><option>Não conforme</option><option>Não aplicável</option></select></div>
+    <div class="card" style="grid-column:span 2"><label>Observação geral</label><input id="general-notes" placeholder="Opcional"></div>
+   </div>
+   <div class="form-grid"><div class="field full"><label>Observações / irregularidades encontradas</label><textarea id="audit-observations" rows="3" placeholder="Descreva a ocorrência e o código NC correspondente..."></textarea></div></div>
+   <div class="code-box"><strong>Códigos de não conformidade</strong><div class="code-grid"><div><b>NC00</b> — Erro fora do limite</div><div><b>NC01</b> — Lacre violado</div><div><b>NC02</b> — Selo vencido</div><div><b>NC03</b> — Vazamento</div></div></div>
+   <div class="form-actions no-print"><button class="btn-light" onclick="auditGo('pump')">← Voltar</button><button class="btn-light" onclick="exportDraftPDF()">⇩ Exportar PDF</button><button class="btn-primary" onclick="saveAudit()">Salvar aferição</button></div>
+  </div>
+ </section>
+
+ <section class="page" id="page-historico">
+  <div class="section-head"><div><h2>Histórico de aferições</h2><p>Consulte, filtre e exporte os resultados realizados.</p></div><button class="btn-primary" onclick="exportAudits()">⇩ Exportar CSV</button></div>
+  <div class="toolbar"><div class="field"><label>Filial</label><select id="history-branch" onchange="renderHistory()"><option value="">Todas as filiais</option></select></div><div class="field"><label>Data inicial</label><input type="date" id="history-from" onchange="renderHistory()"></div><div class="field"><label>Data final</label><input type="date" id="history-to" onchange="renderHistory()"></div></div>
+  <div class="list" id="history-list"></div>
+ </section>
+</main>
+</div>
+<nav class="mobile-nav">
+ <button class="active" data-page="inicio"><span>▦</span>Início</button><button data-page="auditoria"><span>✓</span>Aferir</button><button data-page="filiais"><span>⌂</span>Filiais</button><button data-page="historico"><span>▤</span>Histórico</button>
+</nav>
+
+<div class="modal-backdrop" id="modal"><div class="modal"><div class="modal-head"><h2 id="modal-title">Cadastro</h2><button class="close" onclick="closeModal()">✕</button></div><div id="modal-body"></div></div></div>
+<div class="toast" id="toast"></div>
+<datalist id="scale-list"></datalist>
+<script>
+const KEY='nevoeiro_etm_preview_v1';
+let db=JSON.parse(localStorage.getItem(KEY)||'null')||{branches:[],audits:[]};
+let currentBranchEdit=null;
+const criteria=['Lenta','Rápida','Erro','Luz','Mangueira','BICO','Lacres','Sump','Vazão','Des. 60s'];
+// Campos decimais digitáveis. Os demais continuam como seleção C / OB / NC / NA.
+const numericCriteria=new Set(['Vazão','Des. 60s']);
+// Campos que aceitam valor negativo (desvios)
+// Escala fixa em mL (de -200 a +200, passo 20): valor positivo = mL a mais na aferição
+const scaleCriteria=new Set(['Lenta','Rápida','Erro']);
+const SCALE_MIN=-200,SCALE_MAX=200,SCALE_STEP=20;
+const fmtScale=n=>n>0?'+'+n:String(n);
+document.getElementById('scale-list').innerHTML=Array.from({length:(SCALE_MAX-SCALE_MIN)/SCALE_STEP+1},(_,i)=>`<option value="${fmtScale(SCALE_MIN+i*SCALE_STEP)}">`).join('');
+function snapScale(v){v=String(v).trim().replace(/\s/g,'');if(v===''||v==='+'||v==='-')return'';let n=parseInt(v,10);if(isNaN(n))return'';n=Math.round(n/SCALE_STEP)*SCALE_STEP;n=Math.max(SCALE_MIN,Math.min(SCALE_MAX,n));return fmtScale(n)}
+function sanitizeScale(el){let s=el.value.replace(/[^0-9+\-]/g,''),sign=/^[+-]/.test(s)?s[0]:'';s=sign+s.replace(/[+-]/g,'').slice(0,3);if(el.value!==s)el.value=s}
+function stepScale(el,d){let n=parseInt(snapScale(el.value)||'0',10)+d;n=Math.max(SCALE_MIN,Math.min(SCALE_MAX,n));el.value=fmtScale(n)}
+function sanitizeNum(el){let s=el.value.replace(/\./g,',').replace(/[^0-9,\-]/g,''),neg=el.dataset.signed==='1'&&s.startsWith('-');s=s.replace(/-/g,'');let i=s.indexOf(',');if(i>-1)s=s.slice(0,i+1)+s.slice(i+1).replace(/,/g,'');s=(neg?'-':'')+s;if(el.value!==s)el.value=s}
+function cleanNum(el){let v=el.value.trim().replace(/,$/,'').replace(/^-$/,'');if(el.value!==v)el.value=v}
+document.addEventListener('input',e=>{if(e.target.matches('input.num'))sanitizeNum(e.target);else if(e.target.matches('input.scale'))sanitizeScale(e.target)});
+document.addEventListener('change',e=>{let s=e.target;if(!s.matches('select[data-criterion]'))return;let td=s.closest('.crit'),n=td.querySelector('[data-note]');s.className='st-'+s.value;if(!n)return;let need=s.value==='NC'||s.value==='OB';n.classList.toggle('hidden',!need);n.classList.toggle('ob',s.value==='OB');n.placeholder=s.value==='OB'?'Descreva a observação…':'Onde está o erro?';if(need)n.focus();else n.value=''});
+document.addEventListener('click',e=>{let b=e.target.closest('.step button');if(b){stepScale(b.parentElement.querySelector('input'),+b.dataset.d)}});
+document.addEventListener('focusout',e=>{if(e.target.matches('input.num'))cleanNum(e.target);else if(e.target.matches('input.scale')){let v=snapScale(e.target.value);if(e.target.value!==v)e.target.value=v}});
+document.addEventListener('keydown',e=>{if((e.key==='ArrowUp'||e.key==='ArrowDown')&&e.target.matches('input.scale')){e.preventDefault();stepScale(e.target,e.key==='ArrowUp'?SCALE_STEP:-SCALE_STEP);return}if(e.key==='Enter'&&e.target.matches('#audit-stage input.num,#audit-stage input.scale')){e.preventDefault();let f=[...document.querySelectorAll('#audit-stage input:not(.hidden),#audit-stage select')],i=f.indexOf(e.target);if(f[i+1])f[i+1].focus()}});
+
+// ===== Cronômetro da vazão (apenas apoio; a vazão é digitada manualmente) =====
+let TM={on:false,t0:0,iv:0,box:null,tgt:0};
+const fmtT=ms=>{let s=ms/1000,m=Math.floor(s/60);return String(m).padStart(2,'0')+':'+(s-m*60).toFixed(1).padStart(4,'0').replace('.',',')};
+function beep(){try{let c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.frequency.value=880;g.gain.value=.2;o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.35)}catch(e){}try{navigator.vibrate&&navigator.vibrate(250)}catch(e){}}
+function tmStop(){clearInterval(TM.iv);TM.on=false;if(TM.box&&document.contains(TM.box)){let b=TM.box.querySelector('[data-timer=toggle]');b.textContent='▶ Iniciar';b.classList.remove('run');TM.box.querySelector('[data-tdisp]').classList.remove('run');TM.box.querySelector('.t-tgt').disabled=false}}
+function tmToggle(box){
+ let disp=box.querySelector('[data-tdisp]'),btn=box.querySelector('[data-timer=toggle]'),tg=box.querySelector('.t-tgt'),res=box.querySelector('[data-tres]');
+ if(!TM.on){let tgt=parseFloat(tg.value.replace(',','.'))||0;TM={on:true,t0:performance.now(),box,iv:0,tgt};btn.textContent='■ Parar';btn.classList.add('run');disp.classList.add('run');tg.disabled=true;res.textContent=tgt>0?'Cronometrando… para automaticamente em '+String(tgt).replace('.',',')+' s.':'Cronometrando…';
+  TM.iv=setInterval(()=>{if(!document.contains(box)){tmStop();return}let el=(performance.now()-TM.t0)/1000;
+   if(TM.tgt>0&&el>=TM.tgt){tmStop();disp.textContent=fmtT(TM.tgt*1000);res.textContent='Tempo concluído ('+String(TM.tgt).replace('.',',')+' s). Registre a litragem × 10 no campo Vazão.';beep();return}
+   disp.textContent=fmtT(el*1000)},50);return}
+ let el=(performance.now()-TM.t0)/1000;tmStop();disp.textContent=fmtT(el*1000);res.textContent='Parado em '+el.toFixed(1).replace('.',',')+' s.'}
+document.addEventListener('click',e=>{let b=e.target.closest('[data-timer]');if(!b)return;let box=b.closest('.timer');
+ if(b.dataset.timer==='toggle')tmToggle(box);
+ else{if(TM.on&&TM.box===box)tmStop();box.querySelector('[data-tdisp]').textContent='00:00,0';box.querySelector('[data-tres]').textContent='Cronômetro zerado.'}});
+function persist(){localStorage.setItem(KEY,JSON.stringify(db));renderAll()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(s){let t=document.getElementById('toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
+function go(page){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+page));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));document.getElementById('page-title').textContent=({inicio:'Visão geral',filiais:'Filiais e equipamentos',auditoria:'Nova aferição',historico:'Histórico'})[page];if(page==='auditoria')renderAudit();if(page==='historico')renderHistory();window.scrollTo(0,0)}
+document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
+function openModal(title,body){document.getElementById('modal-title').textContent=title;document.getElementById('modal-body').innerHTML=body;document.getElementById('modal').classList.add('show')}
+function closeModal(){document.getElementById('modal').classList.remove('show')}
+function openBranch(id=null){currentBranchEdit=id;let b=db.branches.find(x=>x.id===id)||{code:'',name:'',city:'',state:'RS',pumps:[]};openModal(id?'Editar filial':'Cadastrar filial',`
+<form onsubmit="saveBranch(event)">
+<div class="form-grid">
+<div><label>Código da filial</label><input name="code" required value="${esc(b.code)}" placeholder="Ex.: 05"></div>
+<div><label>Nome da filial</label><input name="name" required value="${esc(b.name)}" placeholder="Ex.: Posto Centro"></div>
+<div><label>Cidade</label><input name="city" value="${esc(b.city)}" placeholder="Cidade"></div>
+<div><label>UF</label><input name="state" maxlength="2" value="${esc(b.state||'RS')}"></div>
+</div><div class="form-actions"><button type="button" class="btn-light" onclick="closeModal()">Cancelar</button><button class="btn-primary">Salvar filial</button></div></form>`)}
+function saveBranch(e){e.preventDefault();let f=new FormData(e.target),data={code:f.get('code').trim(),name:f.get('name').trim(),city:f.get('city').trim(),state:f.get('state').trim().toUpperCase()||'RS'};if(currentBranchEdit){Object.assign(db.branches.find(x=>x.id===currentBranchEdit),data)}else db.branches.push({...data,id:crypto.randomUUID(),pumps:[]});closeModal();persist();toast('Filial salva com sucesso')}
+function openPump(branchId,pumpId=null){let b=db.branches.find(x=>x.id===branchId),p=b.pumps.find(x=>x.id===pumpId)||{number:'',nozzles:[]};openModal(pumpId?'Editar bomba':'Adicionar bomba',`
+<form onsubmit="savePump(event,'${branchId}','${pumpId||''}')"><div class="form-grid"><div class="field full"><label>Identificação da bomba</label><input name="number" required value="${esc(p.number)}" placeholder="Ex.: Bomba 01"></div></div>
+<div class="form-actions"><button type="button" class="btn-light" onclick="closeModal()">Cancelar</button><button class="btn-primary">Salvar bomba</button></div></form>`)}
+function savePump(e,bid,pid){e.preventDefault();let b=db.branches.find(x=>x.id===bid),num=new FormData(e.target).get('number').trim();if(pid)b.pumps.find(x=>x.id===pid).number=num;else b.pumps.push({id:crypto.randomUUID(),number:num,nozzles:[]});closeModal();persist();toast('Bomba salva')}
+function openNozzle(bid,pid,nid=null){let b=db.branches.find(x=>x.id===bid),p=b.pumps.find(x=>x.id===pid),n=p.nozzles.find(x=>x.id===nid)||{number:'',fuel:'Gasolina comum'};openModal(nid?'Editar bico':'Adicionar bico',`
+<form onsubmit="saveNozzle(event,'${bid}','${pid}','${nid||''}')"><div class="form-grid"><div><label>Número / identificação do bico</label><input name="number" required value="${esc(n.number)}" placeholder="Ex.: 01"></div><div><label>Combustível</label><select name="fuel">${['Gasolina comum','Gasolina aditivada','Gasolina premium','Etanol','Diesel S10','Diesel S500','Outro'].map(x=>`<option ${n.fuel===x?'selected':''}>${x}</option>`).join('')}</select></div></div><div class="form-actions"><button type="button" class="btn-light" onclick="closeModal()">Cancelar</button><button class="btn-primary">Salvar bico</button></div></form>`)}
+function saveNozzle(e,bid,pid,nid){e.preventDefault();let p=db.branches.find(x=>x.id===bid).pumps.find(x=>x.id===pid),f=new FormData(e.target),d={number:f.get('number').trim(),fuel:f.get('fuel')};if(nid)Object.assign(p.nozzles.find(x=>x.id===nid),d);else p.nozzles.push({...d,id:crypto.randomUUID()});closeModal();persist();toast('Bico salvo')}
+function deleteBranch(id){if(confirm('Excluir esta filial e seus equipamentos?')){db.branches=db.branches.filter(x=>x.id!==id);persist()}}
+function deletePump(bid,pid){if(confirm('Excluir esta bomba e seus bicos?')){let b=db.branches.find(x=>x.id===bid);b.pumps=b.pumps.filter(x=>x.id!==pid);persist()}}
+function deleteNozzle(bid,pid,nid){if(confirm('Excluir este bico?')){let p=db.branches.find(x=>x.id===bid).pumps.find(x=>x.id===pid);p.nozzles=p.nozzles.filter(x=>x.id!==nid);persist()}}
+const openBranchesSet=new Set();
+function toggleBranch(id){openBranchesSet.has(id)?openBranchesSet.delete(id):openBranchesSet.add(id);renderBranches()}
+function openBranchCard(id){openBranchesSet.add(id);go('filiais');renderBranches()}
+function renderBranches(){let q=(document.getElementById('branch-search')?.value||'').toLowerCase(),el=document.getElementById('branches-list');let arr=db.branches.filter(b=>(b.name+' '+b.code).toLowerCase().includes(q));
+el.innerHTML=arr.length?arr.map(b=>{let open=openBranchesSet.has(b.id),nz=b.pumps.reduce((s,p)=>s+p.nozzles.length,0);return `<div class="card bcard${open?' open':''}">
+<div class="bhead" role="button" tabindex="0" aria-expanded="${open}" onclick="toggleBranch('${b.id}')" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();toggleBranch('${b.id}')}">
+<div class="branch-info"><span class="chev">▶</span><div class="branch-avatar">${esc(b.code||'N')}</div><div><strong>${esc(b.name)} <span class="muted">#${esc(b.code)}</span></strong><small>${esc(b.city)}${b.city?', ':''}${esc(b.state)} • ${b.pumps.length} bomba(s) • ${nz} bico(s)</small></div></div>
+<div class="bactions"><button class="btn-light btn-small" onclick="event.stopPropagation();openBranch('${b.id}')">Editar</button><button class="btn-danger btn-small" onclick="event.stopPropagation();deleteBranch('${b.id}')">Excluir</button></div></div>
+<div class="bbody">${b.pumps.map(p=>`<div style="border-bottom:1px solid var(--line);padding:12px 0 6px"><div class="section-head" style="margin-top:0"><div><b>◉ ${esc(p.number)}</b> <span class="muted">(${p.nozzles.length} bico(s))</span></div><div><button class="btn-light btn-small" onclick="openNozzle('${b.id}','${p.id}')">＋ Bico</button> <button class="btn-light btn-small" onclick="openPump('${b.id}','${p.id}')">Editar</button> <button class="btn-danger btn-small" onclick="deletePump('${b.id}','${p.id}')">×</button></div></div>${p.nozzles.map(n=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;color:#536477;font-size:12px"><span>↳ Bico ${esc(n.number)} • ${esc(n.fuel)}</span><span><button class="btn-light btn-small" onclick="openNozzle('${b.id}','${p.id}','${n.id}')">Editar</button> <button class="btn-danger btn-small" onclick="deleteNozzle('${b.id}','${p.id}','${n.id}')">×</button></span></div>`).join('')||'<small class="muted">Nenhum bico cadastrado.</small>'}</div>`).join('')||'<p class="muted" style="margin:14px 0 0">Nenhuma bomba cadastrada.</p>'}
+<div style="padding-top:12px"><button class="btn-light btn-small" onclick="openPump('${b.id}')">＋ Adicionar bomba</button></div></div></div>`}).join(''):'<div class="empty">Nenhuma filial cadastrada. Clique em “Cadastrar filial” para começar.</div>'}
+let A={branchId:'',step:'branch',pumpId:'',nozzleId:'',data:{}};
+const freshAudit=()=>({branchId:'',step:'branch',pumpId:'',nozzleId:'',data:{}});
+const SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+const ICON_PUMP=SVG+'<rect x="5" y="2" width="14" height="19" rx="2"/><rect x="8" y="5" width="8" height="5" rx="1"/><path d="M8 14h8M3 22h18M9 17.5h.01M15 17.5h.01"/></svg>';
+const ICON_FUEL=SVG+'<line x1="3" x2="15" y1="22" y2="22"/><line x1="4" x2="14" y1="9" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>';
+const branchOf=()=>db.branches.find(x=>x.id===A.branchId);
+const pumpOf=()=>{let b=branchOf();return b&&b.pumps.find(x=>x.id===A.pumpId)};
+const nozzleOf=()=>{let p=pumpOf();return p&&p.nozzles.find(x=>x.id===A.nozzleId)};
+const doneCount=p=>p.nozzles.filter(n=>A.data[n.id]).length;
+const totalDone=()=>Object.keys(A.data).length;
+const nozSt=d=>!d?'':d.checks.includes('NC')?'NC':d.checks.includes('OB')?'OB':'C';
+const stPill=s=>s==='NC'?'<span class="pill red">Não conforme</span>':s==='OB'?'<span class="pill yellow">Observação</span>':s==='C'?'<span class="pill green">Aferido</span>':'<span class="pill">Não realizado</span>';
+const stCls=s=>s==='NC'?' bad':s==='OB'?' warn':s==='C'?' done':'';
+const toTop=()=>window.scrollTo(0,0);
+function auditGo(step){if(step==='nozzle')step='pump';if(step==='branch'){A.pumpId='';A.nozzleId=''}if(step==='pump'){A.pumpId='';A.nozzleId=''}if(step==='nozzle')A.nozzleId='';A.step=step;renderAudit();toTop()}
+function pickBranch(id){if(A.branchId&&A.branchId!==id&&totalDone()&&!confirm('Trocar de filial descartará os bicos já aferidos neste rascunho. Continuar?'))return;if(A.branchId!==id)A.data={};A.branchId=id;auditGo('pump')}
+function pickPump(id){A.pumpId=id;auditGo('nozzle')}
+function pickNozzle(pid,id){A.pumpId=pid;A.nozzleId=id;A.step='form';renderAudit();toTop()}
+function editNozzle(pid,nid){A.pumpId=pid;A.nozzleId=nid;A.step='form';renderAudit();toTop()}
+function goFinal(){if(!totalDone()){toast('Registre ao menos um bico antes de finalizar');return}auditGo('final')}
+function removeNozzle(nid){delete A.data[nid];if(!totalDone()&&A.step==='final')A.step='pump';renderAudit()}
+const finBtn=()=>`<button class="btn-dark" onclick="goFinal()">Finalizar aferição${totalDone()?' ('+totalDone()+')':''} →</button>`;
+function renderCrumbs(){let b=branchOf(),p=pumpOf(),n=nozzleOf(),items=[['Filiais','branch']];
+ if(b)items.push(['⌂ '+b.name,'pump']);if(p&&n&&A.step==='form')items.push([p.number+' • Bico '+n.number,'form']);if(A.step==='final')items.push(['Finalizar','final']);
+ document.getElementById('audit-crumbs').innerHTML=items.map((it,k)=>{let last=k===items.length-1;return (k?'<span class="sep">›</span>':'')+`<button type="button" class="crumb${last?' cur':''}" ${last?'':`onclick="auditGo('${it[1]}')"`}>${esc(it[0])}</button>`}).join('')}
+function stageBranch(){if(!db.branches.length)return '<div class="empty">Nenhuma filial cadastrada. Cadastre em “Filiais” para começar.</div>';
+ return `<div class="stage-bar"><div><p class="stage-title">Selecione a filial</p><p class="stage-sub">Toque no card da filial que será aferida.</p></div></div><div class="pick-grid">${db.branches.map(b=>{let nz=b.pumps.reduce((s,p)=>s+p.nozzles.length,0),d=A.branchId===b.id?totalDone():0;return `<button type="button" class="pick-card${d?' done':''}" onclick="pickBranch('${b.id}')"><div class="pick-ico">${esc(b.code||'N')}</div><strong>${esc(b.name)}</strong><small>${esc(b.city)}${b.city?', ':''}${esc(b.state)} • ${b.pumps.length} bomba(s) • ${nz} bico(s)</small>${d?`<span class="pill green">${d} bico(s) aferido(s)</span>`:''}</button>`}).join('')}</div>`}
+function stagePump(){let b=branchOf();
+ return `<div class="stage-bar"><div><p class="stage-title">${esc(b.name)} #${esc(b.code)}</p><p class="stage-sub">Todas as bombas e bicos da filial. Toque no bico para aferir. Os bicos não preenchidos saem no relatório como “Não realizado”.</p></div>${finBtn()}</div>${b.pumps.length?b.pumps.map(p=>{let d=doneCount(p),t=p.nozzles.length;return `<div class="card pump-sec"><div class="pump-head"><div class="pick-ico">${ICON_PUMP}</div><div style="flex:1"><strong style="font-size:16px">${esc(p.number)}</strong><div class="muted" style="font-size:12px">${d}/${t} bico(s) aferido(s)</div><div class="bar"><i style="width:${t?Math.round(d/t*100):0}%"></i></div></div></div>${t?`<div class="pick-grid noz-grid">${p.nozzles.map(n=>{let sx=nozSt(A.data[n.id]);return `<button type="button" class="pick-card${stCls(sx)}" onclick="pickNozzle('${p.id}','${n.id}')"><div class="pick-ico fuel">${ICON_FUEL}</div><strong>Bico ${esc(n.number)}</strong><small>${esc(n.fuel)}</small>${stPill(sx)}</button>`}).join('')}</div>`:'<small class="muted">Nenhum bico cadastrado nesta bomba.</small>'}</div>`}).join(''):'<div class="empty">Esta filial ainda não tem bombas. Cadastre em “Filiais”.</div>'}`}
+function stageNozzle(){let p=pumpOf();
+ return `<div class="stage-bar"><div><p class="stage-title">${esc(p.number)} — selecione o bico</p><p class="stage-sub">Toque no bico para registrar a aferição.</p></div>${finBtn()}</div>${p.nozzles.length?`<div class="pick-grid">${p.nozzles.map(n=>{let s=nozSt(A.data[n.id]);return `<button type="button" class="pick-card${stCls(s)}" onclick="pickNozzle('${n.id}')"><div class="pick-ico fuel">${ICON_FUEL}</div><strong>Bico ${esc(n.number)}</strong><small>${esc(n.fuel)}</small>${stPill(s)}</button>`}).join('')}</div>`:'<div class="empty">Esta bomba não tem bicos cadastrados.</div>'}`}
+function field(c,i,v,note){
+ if(scaleCriteria.has(c))return `<div class="crit"><label>${c} (mL)</label><div class="step"><button type="button" data-d="-${SCALE_STEP}" tabindex="-1" aria-label="Diminuir ${SCALE_STEP} mL em ${c}">−</button><input class="scale" type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" list="scale-list" data-criterion="${i}" placeholder="0" aria-label="${c} (mL)" value="${esc(v)}"><button type="button" data-d="${SCALE_STEP}" tabindex="-1" aria-label="Aumentar ${SCALE_STEP} mL em ${c}">+</button></div></div>`;
+ if(c==='Vazão')return `<div class="crit crit-flow"><label>Vazão (L/min)</label><input class="num" type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" data-criterion="${i}" placeholder="Litros em 6 s × 10" aria-label="Vazão (L/min)" value="${esc(v)}">
+ <div class="timer"><div class="t-disp" data-tdisp>00:00,0</div><div class="t-vol-wrap">Tempo (s)<input class="num t-tgt" type="text" inputmode="decimal" autocomplete="off" value="6" aria-label="Tempo padrão em segundos"></div><button type="button" class="btn-primary btn-small btn-start" data-timer="toggle">▶ Iniciar</button><button type="button" class="btn-light btn-small" data-timer="reset">Zerar</button><div class="t-res" data-tres>Cronômetro de apoio (tempo padrão: 6 s). Registre a vazão manualmente: litros despejados em 6 s × 10.</div></div></div>`;
+ if(numericCriteria.has(c))return `<div class="crit"><label>${c}</label><input class="num" type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" data-criterion="${i}" placeholder="0,00" aria-label="${c}" value="${esc(v)}"></div>`;
+ return `<div class="crit"><label>${c}</label><select class="st-${v}" data-criterion="${i}" aria-label="${c}">${[['','—'],['C','C • Conforme'],['OB','OB • Observação'],['NC','NC • Não conforme'],['NA','NA • Não aplicável']].map(([val,t])=>`<option value="${val}"${v===val?' selected':''}>${t}</option>`).join('')}</select><input type="text" class="note${v==='OB'?' ob':''}${v==='NC'||v==='OB'?'':' hidden'}" data-note="${i}" maxlength="200" autocomplete="off" placeholder="${v==='OB'?'Descreva a observação…':'Onde está o erro?'}" aria-label="${c}: descrição" value="${esc(note)}"></div>`}
+function stageForm(){let p=pumpOf(),n=nozzleOf(),d=A.data[n.id]||{checks:[],notes:[]};
+ return `<div class="card"><div class="stage-bar" style="margin-bottom:0"><div style="display:flex;gap:12px;align-items:center"><div class="pick-ico fuel">${ICON_FUEL}</div><div><p class="stage-title">${esc(p.number)} • Bico ${esc(n.number)}</p><p class="stage-sub">${esc(n.fuel)}</p></div></div>${A.data[n.id]?stPill(nozSt(A.data[n.id])):''}</div>
+ <div class="legend"><span class="c">C • Conforme</span><span class="ob">OB • Observação</span><span class="nc">NC • Não conforme</span><span class="na">NA • Não aplicável</span></div>
+ <p class="scale-hint"><b>Lenta, Rápida e Erro:</b> escala de −200 a +200 mL, de 20 em 20 (positivo = mL a mais). Ao marcar <b>NC</b> ou <b>OB</b>, descreva onde está o erro.</p>
+ <div class="crit-grid">${criteria.map((c,i)=>field(c,i,d.checks[i]||'',d.notes[i]||'')).join('')}</div>
+ <div class="form-actions"><button class="btn-light" onclick="auditGo('nozzle')">Cancelar</button>${A.data[n.id]?'<button class="btn-danger" onclick="removeNozzle(\''+n.id+'\');auditGo(\'nozzle\')">Remover aferição</button>':''}<button class="btn-primary" onclick="saveNozzleForm()">Salvar bico</button></div></div>`}
+function saveNozzleForm(){let n=nozzleOf();if(!n)return;let ctr=[...document.querySelectorAll('#audit-stage [data-criterion]')],
+ checks=ctr.map(x=>x.classList.contains('scale')?snapScale(x.value):x.value.trim()),
+ notes=ctr.map(x=>{let nt=x.closest('.crit').querySelector('[data-note]');return nt&&(x.value==='NC'||x.value==='OB'||x.classList.contains('num'))?nt.value.trim():''});
+ if(!checks.some(v=>v!=='')){toast('Preencha ao menos um item da aferição');return}
+ A.data[n.id]={checks,notes};toast('Bico '+n.number+' registrado');auditGo('nozzle')}
+function renderSummary(){let b=branchOf(),rows=[],all=0;
+ b.pumps.forEach(p=>p.nozzles.forEach(n=>{all++;let d=A.data[n.id];
+  if(!d){rows.push(`<div class="sum-row nd"><div class="l"><div class="pick-ico fuel">${ICON_FUEL}</div><div><b>${esc(p.number)} • Bico ${esc(n.number)}</b><div class="muted" style="font-size:12px">${esc(n.fuel)}</div></div></div><div style="display:flex;gap:8px;align-items:center">${stPill('')}<button class="btn-light btn-small" onclick="editNozzle('${p.id}','${n.id}')">Aferir</button></div></div>`);return}
+  let s=nozSt(d),prob=criteria.map((c,i)=>d.notes[i]?`<div class="sum-note${numericCriteria.has(c)?' info':''}">${esc(c+': '+d.notes[i])}</div>`:'').join('');
+  rows.push(`<div class="sum-row"><div class="l"><div class="pick-ico fuel">${ICON_FUEL}</div><div><b>${esc(p.number)} • Bico ${esc(n.number)}</b><div class="muted" style="font-size:12px">${esc(n.fuel)}</div>${prob}</div></div><div style="display:flex;gap:8px;align-items:center">${stPill(s)}<button class="btn-light btn-small" onclick="editNozzle('${p.id}','${n.id}')">Editar</button><button class="btn-danger btn-small" onclick="removeNozzle('${n.id}')">×</button></div></div>`)}));
+ let d=totalDone();document.getElementById('audit-summary').innerHTML=`<p class="muted" style="margin:0 0 4px"><b>${esc(b.name)} #${esc(b.code)}</b> • ${d} de ${all} bico(s) aferido(s)${all-d?` • <b>${all-d} constará(ão) como “Não realizado”</b> no relatório`:''}</p>`+(rows.join('')||'<div class="empty">Nenhum bico cadastrado.</div>')}
+function renderAudit(){
+ if(A.branchId&&!branchOf())A=freshAudit();
+ if(!A.branchId&&A.step!=='branch')A.step='branch';
+ if((A.step==='nozzle'||A.step==='form')&&!pumpOf())A.step='pump';
+ if(A.step==='form'&&!nozzleOf())A.step='nozzle';
+ if(A.step==='nozzle')A.step='pump';
+ if(A.step==='final'&&!totalDone())A.step='pump';
+ let st=document.getElementById('audit-stage'),fin=document.getElementById('audit-final');
+ renderCrumbs();fin.classList.toggle('hidden',A.step!=='final');st.classList.toggle('hidden',A.step==='final');
+ if(A.step==='final'){renderSummary();return}
+ st.innerHTML=({branch:stageBranch,pump:stagePump,nozzle:stageNozzle,form:stageForm})[A.step]()}
+function clearAuditFields(){document.getElementById('audit-date').value=new Date().toISOString().slice(0,10);['auditor','general-seal','inmetro-seal','panels','rodilhas','general-notes','audit-observations'].forEach(id=>document.getElementById(id).value='')}
+function newAudit(){A=freshAudit();clearAuditFields();go('auditoria')}
+function collectAudit(){let b=branchOf();if(!b){toast('Selecione uma filial');return null}
+ let results=[];b.pumps.forEach(p=>p.nozzles.forEach(n=>{let d=A.data[n.id],base={pumpId:p.id,nozzleId:n.id,pump:p.number,nozzle:n.number,fuel:n.fuel};
+  results.push(d?{...base,done:true,checks:d.checks.slice(),notes:d.notes.map((t,i)=>d.checks[i]==='NC'||d.checks[i]==='OB'||numericCriteria.has(criteria[i])?t:'')}:{...base,done:false,checks:criteria.map(()=>''),notes:criteria.map(()=>'')})}));
+ if(!totalDone()){toast('Registre ao menos um bico');return null}
+ let v=id=>document.getElementById(id).value;
+ return{id:crypto.randomUUID(),branchId:b.id,branchName:b.name,branchCode:b.code,branchCity:b.city||'',branchState:b.state||'',date:v('audit-date')||new Date().toISOString().slice(0,10),auditor:v('auditor'),seal:v('general-seal'),inmetro:v('inmetro-seal'),panels:v('panels'),rodilhas:v('rodilhas'),generalNotes:v('general-notes'),observations:v('audit-observations'),results}}
+function saveAudit(){let audit=collectAudit();if(!audit)return;db.audits.unshift(audit);A=freshAudit();clearAuditFields();persist();toast('Aferição salva');go('historico')}
+function exportDraftPDF(){let a=collectAudit();if(a)printReport(a)}
+function exportPDF(id){let a=db.audits.find(x=>x.id===id);if(a)printReport(a)}
+const noteText=r=>criteria.map((c,i)=>(r.notes&&r.notes[i])?c+': '+r.notes[i]:'').filter(Boolean).join(' | ');
+function printReport(a){
+ const fmt=d=>String(d||'').split('-').reverse().join('/'),st=auditStatus(a),stc=st==='Conforme'?'#137443':st==='Não conforme'?'#b4232d':'#946200';
+ const unit=c=>scaleCriteria.has(c)?' <small>mL</small>':'';
+ const cellCls=(c,v)=>scaleCriteria.has(c)||numericCriteria.has(c)?'':(v?'s-'+v:'');
+ const probs=[];a.results.forEach(r=>criteria.forEach((c,i)=>{let v=r.checks[i];if(v==='NC'||v==='OB')probs.push({r,c,v,n:(r.notes&&r.notes[i])||''})}));
+ const counts={C:0,OB:0,NC:0,NA:0};a.results.forEach(r=>r.checks.forEach(v=>{if(counts[v]!==undefined)counts[v]++}));
+ const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Aferição ${esc(a.branchCode)} ${fmt(a.date)}</title><style>
+@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font:11px/1.4 Arial,Helvetica,sans-serif;color:#172536;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #102b46;padding-bottom:8px;margin-bottom:10px}.head h1{font-size:18px;margin:0;color:#102b46}.head small{color:#64748b}.badge{padding:5px 12px;border-radius:99px;color:#fff;font-weight:700;font-size:12px;background:${stc}}
+.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}.meta div{border:1px solid #dbe3ec;border-radius:6px;padding:6px 8px}.meta span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;font-weight:700}.meta b{font-size:12px}
+h2{font-size:12px;margin:12px 0 5px;color:#102b46;text-transform:uppercase;letter-spacing:.5px}
+table{width:100%;border-collapse:collapse}th{background:#102b46;color:#fff;font-size:9px;padding:5px 4px;text-align:center}td{border:1px solid #dbe3ec;padding:4px;text-align:center;font-size:10px;vertical-align:top}td.l,th.l{text-align:left}tr{page-break-inside:avoid}
+.s-C{background:#d9f6df;color:#126b37;font-weight:700}.s-OB{background:#fff0b8;color:#795600;font-weight:700}.s-NC{background:#ffd9dc;color:#a31724;font-weight:700}.s-NA{background:#e8edf2;color:#526173}
+td small.n{display:block;font-weight:400;font-style:italic;color:#333;text-align:left;margin-top:2px;font-size:9px}
+.sum{display:flex;gap:8px;margin:8px 0}.sum span{padding:4px 10px;border-radius:6px;font-weight:700;font-size:10px}
+.box{border:1px solid #dbe3ec;border-radius:6px;padding:8px;min-height:40px;white-space:pre-wrap}
+.sig{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:38px}.sig div{border-top:1px solid #172536;padding-top:4px;text-align:center;font-size:10px}
+.foot{margin-top:12px;color:#64748b;font-size:9px;text-align:right}
+</style></head><body>
+<div class="head"><div><h1>Relatório de Aferição — Bombas de Combustível</h1><small>Rede de Postos Nevoeiro • Controle de Aferições</small></div><div class="badge">${esc(st)}</div></div>
+<div class="meta"><div><span>Filial</span><b>${esc(a.branchName)} #${esc(a.branchCode)}</b></div><div><span>Cidade / UF</span><b>${esc([a.branchCity,a.branchState].filter(Boolean).join(' / ')||'—')}</b></div><div><span>Data da aferição</span><b>${fmt(a.date)}</b></div><div><span>Aferidor</span><b>${esc(a.auditor||'—')}</b></div>
+<div><span>Lacre geral</span><b>${esc(a.seal||'—')}</b></div><div><span>Selo Inmetro</span><b>${esc(a.inmetro||'—')}</b></div><div><span>Painéis das bombas</span><b>${esc(a.panels||'—')}</b></div><div><span>Rodilhas</span><b>${esc(a.rodilhas||'—')}</b></div></div>
+${a.generalNotes?`<div class="meta" style="grid-template-columns:1fr"><div><span>Observação geral</span><b>${esc(a.generalNotes)}</b></div></div>`:''}
+<div class="sum"><span class="s-C">C: ${counts.C}</span><span class="s-OB">OB: ${counts.OB}</span><span class="s-NC">NC: ${counts.NC}</span><span class="s-NA">NA: ${counts.NA}</span><span style="background:#edf2f7">${a.results.filter(isDone).length} de ${a.results.length} bico(s) aferido(s)</span>${a.results.some(r=>!isDone(r))?`<span class="s-NA">Não realizados: ${a.results.filter(r=>!isDone(r)).length}</span>`:''}</div>
+<h2>Inspeção por bico</h2>
+<table><thead><tr><th class="l">Bomba / Bico</th><th class="l">Combustível</th>${criteria.map(c=>`<th>${esc(c)}${unit(c)}</th>`).join('')}</tr></thead><tbody>
+${a.results.map(r=>!isDone(r)?`<tr><td class="l"><b>${esc(r.pump)} / Bico ${esc(r.nozzle)}</b></td><td class="l">${esc(r.fuel)}</td><td colspan="${criteria.length}" class="s-NA" style="text-align:center;font-weight:700;letter-spacing:1px">NÃO REALIZADO</td></tr>`:`<tr><td class="l"><b>${esc(r.pump)} / Bico ${esc(r.nozzle)}</b></td><td class="l">${esc(r.fuel)}</td>${criteria.map((c,i)=>{let v=r.checks[i]||'',n=(r.notes&&r.notes[i])||'';return `<td class="${cellCls(c,v)}">${esc(v||'—')}${n?`<small class="n">${esc(n)}</small>`:''}</td>`}).join('')}</tr>`).join('')}
+</tbody></table>
+<h2>Não conformidades e observações (OB / NC)</h2>
+${probs.length?`<table><thead><tr><th class="l">Bomba / Bico</th><th class="l">Combustível</th><th class="l">Item</th><th>Situação</th><th class="l" style="width:45%">Descrição / local do erro</th></tr></thead><tbody>${probs.map(p=>`<tr><td class="l">${esc(p.r.pump)} / Bico ${esc(p.r.nozzle)}</td><td class="l">${esc(p.r.fuel)}</td><td class="l">${esc(p.c)}</td><td class="s-${p.v}">${p.v}</td><td class="l">${esc(p.n||'—')}</td></tr>`).join('')}</tbody></table>`:'<div class="box">Nenhuma não conformidade ou observação registrada nos itens avaliados.</div>'}
+<h2>Observações / irregularidades encontradas</h2><div class="box">${esc(a.observations||'—')}</div>
+<div class="sig"><div>Aferidor${a.auditor?' — '+esc(a.auditor):''}</div><div>Responsável pela filial</div></div>
+<div class="foot">Gerado em ${new Date().toLocaleString('pt-BR')} • Códigos NC: NC00 erro fora do limite • NC01 lacre violado • NC02 selo vencido • NC03 vazamento</div>
+</body></html>`;
+ let old=document.title,fname=`Afericao_${a.branchCode}_${a.date}`;
+ let f=document.createElement('iframe');f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';document.body.appendChild(f);
+ f.onload=()=>{document.title=fname;let w=f.contentWindow,done=()=>{document.title=old;setTimeout(()=>f.remove(),500)};w.onafterprint=done;w.focus();w.print();setTimeout(()=>{document.title=old},4000)};
+ f.srcdoc=html;toast('Na janela de impressão, escolha “Salvar como PDF”')}
+function fuelsOf(a){return [...new Set(a.results.map(r=>r.fuel).filter(Boolean))].join(', ')}
+const isDone=r=>r.done!==false;
+function auditStatus(a){let all=a.results.filter(isDone).flatMap(x=>x.checks);return all.includes('NC')?'Não conforme':all.includes('OB')?'Com observações':'Conforme'}
+function renderHistory(){let sel=document.getElementById('history-branch'),old=sel.value;sel.innerHTML='<option value="">Todas as filiais</option>'+db.branches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');sel.value=old;let from=document.getElementById('history-from').value,to=document.getElementById('history-to').value,arr=db.audits.filter(a=>(!sel.value||a.branchId===sel.value)&&(!from||a.date>=from)&&(!to||a.date<=to));document.getElementById('history-list').innerHTML=arr.length?arr.map(a=>`<div class="card audit-row"><div><b>${esc(a.branchName)} <span class="muted">#${esc(a.branchCode)}</span></b><div class="muted" style="font-size:12px">${a.date.split('-').reverse().join('/')} • ${esc(a.auditor||'Aferidor não informado')} • ${a.results.filter(isDone).length}/${a.results.length} bico(s) aferido(s)${fuelsOf(a)?' • '+esc(fuelsOf(a)):''}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="pill ${auditStatus(a)==='Conforme'?'green':auditStatus(a)==='Não conforme'?'red':'yellow'}">${auditStatus(a)}</span><button class="btn-light btn-small" onclick="viewAudit('${a.id}')">Detalhes</button><button class="btn-light btn-small" onclick="exportOne('${a.id}')">CSV</button><button class="btn-primary btn-small" onclick="exportPDF('${a.id}')">PDF</button></div></div>`).join(''):'<div class="empty">Nenhuma aferição encontrada para os filtros selecionados.</div>'}
+function viewAudit(id){let a=db.audits.find(x=>x.id===id);openModal('Detalhes da aferição',`<p><b>${esc(a.branchName)} • ${a.date.split('-').reverse().join('/')}</b><br><span class="muted">Aferidor: ${esc(a.auditor||'—')} | Lacre: ${esc(a.seal||'—')}</span></p><p>Selo Inmetro: ${esc(a.inmetro||'—')} • Painéis: ${esc(a.panels||'—')} • Rodilhas: ${esc(a.rodilhas||'—')}</p><div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>Bomba/Bico</th><th>Combustível</th>${criteria.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${a.results.map(r=>!isDone(r)?`<tr><td>${esc(r.pump)} / ${esc(r.nozzle)}</td><td>${esc(r.fuel)}</td><td colspan="${criteria.length}" style="text-align:center;color:var(--muted);font-weight:700">NÃO REALIZADO</td></tr>`:`<tr><td>${esc(r.pump)} / ${esc(r.nozzle)}</td><td>${esc(r.fuel)}</td>${r.checks.map((c,i)=>`<td>${esc(c||'—')}${r.notes&&r.notes[i]?`<br><small style="color:var(--red)">${esc(r.notes[i])}</small>`:''}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p><b>Observações:</b><br>${esc(a.observations||a.generalNotes||'—')}</p><div class="form-actions"><button class="btn-light" onclick="closeModal()">Fechar</button><button class="btn-light" onclick="exportOne('${a.id}')">Exportar CSV</button><button class="btn-primary" onclick="exportPDF('${a.id}')">⇩ Exportar PDF</button></div>`)}
+function csvEscape(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
+function download(name,content,type){let blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+function auditCSV(audits){let head=['Data','Filial','Código','Aferidor','Lacre geral','Selo Inmetro','Painéis','Rodilhas','Bomba','Bico','Combustível','Situação',...criteria,'Notas NC/OB','Observações'];let lines=[head.map(csvEscape).join(';')];audits.forEach(a=>a.results.forEach(r=>lines.push([a.date,a.branchName,a.branchCode,a.auditor,a.seal,a.inmetro,a.panels,a.rodilhas,r.pump,r.nozzle,r.fuel,isDone(r)?'Realizado':'Não realizado',...r.checks,noteText(r),a.observations].map(csvEscape).join(';'))));return '\ufeff'+lines.join('\n')}
+function exportAudits(){download('afericoes_nevoeiro.csv',auditCSV(db.audits),'text/csv;charset=utf-8')}
+function exportOne(id){let a=db.audits.find(x=>x.id===id);download(`afericao_${a.branchCode}_${a.date}.csv`,auditCSV([a]),'text/csv;charset=utf-8')}
+function exportAll(){download('dados_etm_nevoeiro.json',JSON.stringify(db,null,2),'application/json');toast('Exportação dos dados iniciada')}
+// ===== Importador de dados =====
+let pendingImport=null;
+const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function normDate(v){v=String(v||'').trim();let m=v.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[0];m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:''}
+function parseCSV(text){text=text.replace(/^\ufeff/,'');let first=text.split(/\r?\n/)[0]||'',d=[';',',','\t'].map(c=>[c,first.split(c).length]).sort((a,b)=>b[1]-a[1])[0][0],rows=[],row=[],cur='',q=false;for(let i=0;i<text.length;i++){let c=text[i];if(q){if(c==='"'){if(text[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}else if(c==='"')q=true;else if(c===d){row.push(cur);cur=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cur);rows.push(row);row=[];cur=''}else cur+=c}if(cur!==''||row.length){row.push(cur);rows.push(row)}return rows.filter(r=>r.some(x=>x.trim()!==''))}
+function cleanCheck(c,v){v=String(v??'').trim();if(scaleCriteria.has(c))return snapScale(v);if(numericCriteria.has(c))return v.replace(/\./g,',').replace(/[^0-9,]/g,'');v=v.toUpperCase();return['C','OB','NC','NA'].includes(v)?v:''}
+function csvToIncoming(rows){
+ let H=rows[0].map(norm),col=n=>H.indexOf(n),get=(r,n)=>{let i=col(n);return i<0?'':String(r[i]??'').trim()};
+ if(!(col('bomba')>=0&&(col('codigo')>=0||col('filial')>=0)))throw new Error('Colunas não reconhecidas. Use o modelo de estrutura ou um CSV exportado pelo Histórico.');
+ let isAudit=col('data')>=0&&col('lenta')>=0,out={branches:[],audits:[],skipped:0,kind:isAudit?'CSV de aferições':'CSV de estrutura'},bm={},am={};
+ rows.slice(1).forEach(r=>{
+  let name=get(r,'filial'),code=get(r,'codigo')||name,pn=get(r,'bomba'),nn=get(r,'bico');
+  if(!code||!pn){out.skipped++;return}
+  let k=code.toLowerCase(),b=bm[k];if(!b){b=bm[k]={id:crypto.randomUUID(),code,name:name||('Filial '+code),city:get(r,'cidade'),state:(get(r,'uf')||'RS').toUpperCase(),pumps:[]};out.branches.push(b)}
+  let p=b.pumps.find(x=>norm(x.number)===norm(pn));if(!p){p={number:pn,nozzles:[]};b.pumps.push(p)}
+  if(!nn){if(isAudit)out.skipped++;return}
+  let fuel=get(r,'combustivel')||'Gasolina comum';if(!p.nozzles.some(x=>norm(x.number)===norm(nn)))p.nozzles.push({number:nn,fuel});
+  if(!isAudit)return;
+  let date=normDate(get(r,'data'));if(!date){out.skipped++;return}
+  let ak=[date,k,get(r,'aferidor'),get(r,'lacregeral')].join('|'),a=am[ak];
+  if(!a){a=am[ak]={branchId:b.id,branchName:b.name,branchCode:b.code,date,auditor:get(r,'aferidor'),seal:get(r,'lacregeral'),inmetro:get(r,'seloinmetro'),panels:get(r,'paineis'),rodilhas:get(r,'rodilhas'),generalNotes:'',observations:get(r,'observacoes'),results:[]};out.audits.push(a)}
+  a.results.push({pump:pn,nozzle:nn,fuel,checks:criteria.map(c=>cleanCheck(c,get(r,norm(c)))),notes:[],done:!/^nao/.test(norm(get(r,'situacao')))});
+ });
+ return out}
+function parseImport(name,text){
+ let inc;
+ if(/\.json$/i.test(name)||/^\s*[\[{]/.test(text)){
+  let j=JSON.parse(text);if(!j||Array.isArray(j)||typeof j!=='object')throw new Error('JSON inválido.');
+  inc={kind:'Backup JSON',skipped:0,
+   branches:(Array.isArray(j.branches)?j.branches:[]).filter(b=>b&&(b.code||b.name)).map(b=>({id:b.id,code:String(b.code??b.name).trim(),name:b.name,city:b.city,state:b.state,pumps:(Array.isArray(b.pumps)?b.pumps:[]).filter(p=>p&&p.number!==undefined).map(p=>({number:p.number,nozzles:(Array.isArray(p.nozzles)?p.nozzles:[]).filter(n=>n&&n.number!==undefined)}))})),
+   audits:[]};
+  (Array.isArray(j.audits)?j.audits:[]).forEach(a=>{if(a&&normDate(a.date)&&Array.isArray(a.results))inc.audits.push(a);else inc.skipped++});
+ }else{let rows=parseCSV(text);if(rows.length<2)throw new Error('O arquivo está vazio ou sem linhas de dados.');inc=csvToIncoming(rows)}
+ if(!inc.branches.length&&!inc.audits.length)throw new Error('Nenhum dado reconhecido no arquivo.');
+ return inc}
+const auditSig=a=>[a.branchCode,a.date,a.auditor,a.seal,JSON.stringify((a.results||[]).map(r=>[r.pump,r.nozzle,r.checks]))].join('|');
+function mergeIncoming(inc){
+ let st={b:0,p:0,n:0,a:0,dup:0},idMap={},byCode=c=>db.branches.find(x=>String(x.code).trim().toLowerCase()===String(c).trim().toLowerCase());
+ inc.branches.forEach(ib=>{
+  let b=byCode(ib.code);if(!b){b={id:crypto.randomUUID(),code:String(ib.code).trim(),name:ib.name||('Filial '+ib.code),city:ib.city||'',state:ib.state||'RS',pumps:[]};db.branches.push(b);st.b++}
+  idMap[ib.id]=b.id;
+  ib.pumps.forEach(ip=>{let p=b.pumps.find(x=>norm(x.number)===norm(ip.number));if(!p){p={id:crypto.randomUUID(),number:String(ip.number).trim(),nozzles:[]};b.pumps.push(p);st.p++}
+   ip.nozzles.forEach(z=>{if(!p.nozzles.some(x=>norm(x.number)===norm(z.number))){p.nozzles.push({id:crypto.randomUUID(),number:String(z.number).trim(),fuel:z.fuel||'Gasolina comum'});st.n++}})})});
+ let sigs=new Set(db.audits.map(auditSig));
+ inc.audits.forEach(ia=>{
+  let b=db.branches.find(x=>x.id===idMap[ia.branchId])||byCode(ia.branchCode);
+  let a={id:crypto.randomUUID(),branchId:b?b.id:ia.branchId,branchName:ia.branchName||(b&&b.name)||'',branchCode:ia.branchCode||(b&&b.code)||'',date:normDate(ia.date),auditor:ia.auditor||'',seal:ia.seal||'',inmetro:ia.inmetro||'',panels:ia.panels||'',rodilhas:ia.rodilhas||'',generalNotes:ia.generalNotes||'',observations:ia.observations||'',
+   results:ia.results.map(r=>{let p=b&&b.pumps.find(x=>norm(x.number)===norm(r.pump)),z=p&&p.nozzles.find(x=>norm(x.number)===norm(r.nozzle));return{pumpId:p?p.id:'',nozzleId:z?z.id:'',pump:String(r.pump??''),nozzle:String(r.nozzle??''),fuel:String(r.fuel||(z&&z.fuel)||''),checks:criteria.map((_,i)=>String((r.checks||[])[i]??'')),notes:criteria.map((_,i)=>String((r.notes||[])[i]??'')),done:r.done!==false}})};
+  let sg=auditSig(a);if(sigs.has(sg)){st.dup++;return}sigs.add(sg);db.audits.push(a);st.a++});
+ db.audits.sort((x,y)=>y.date.localeCompare(x.date));
+ return st}
+function openImport(){pendingImport=null;openModal('Importar dados',`<p class="muted" style="margin-top:0">Aceita: <b>backup .json</b> (Exportar dados), <b>CSV de aferições</b> (Histórico) ou <b>CSV de estrutura</b> com filiais, bombas e bicos. Itens já existentes não são duplicados.</p><input type="file" id="import-file" accept=".json,.csv,.txt,application/json,text/csv" onchange="readImport(this.files[0])"><div id="import-preview" style="margin-top:14px"></div><div class="form-actions"><button class="btn-light" onclick="downloadTemplate()">⇩ Modelo CSV de estrutura</button><button class="btn-light" onclick="closeModal()">Fechar</button></div>`)}
+function downloadTemplate(){download('modelo_estrutura_nevoeiro.csv','\ufeff'+['Código;Filial;Cidade;UF;Bomba;Bico;Combustível','01;Posto Centro;Santa Cruz do Sul;RS;Bomba 01;01;Gasolina comum','01;Posto Centro;Santa Cruz do Sul;RS;Bomba 01;02;Etanol','01;Posto Centro;Santa Cruz do Sul;RS;Bomba 02;03;Diesel S10'].join('\n'),'text/csv;charset=utf-8')}
+function readImport(file){let box=document.getElementById('import-preview');pendingImport=null;if(!file){box.innerHTML='';return}
+ let fr=new FileReader();fr.onerror=()=>{box.innerHTML='<div class="empty">Não foi possível ler o arquivo.</div>'};
+ fr.onload=()=>{try{let inc=parseImport(file.name,String(fr.result)),n=inc.branches.reduce((s,b)=>s+b.pumps.reduce((z,p)=>z+p.nozzles.length,0),0),np=inc.branches.reduce((s,b)=>s+b.pumps.length,0);pendingImport=inc;
+  box.innerHTML=`<div class="code-box" style="margin-top:0"><strong>${esc(inc.kind)}</strong> • ${esc(file.name)}<div class="code-grid"><div><b>${inc.branches.length}</b> filial(is)</div><div><b>${np}</b> bomba(s)</div><div><b>${n}</b> bico(s)</div><div><b>${inc.audits.length}</b> aferição(ões)</div></div>${inc.skipped?`<div style="margin-top:8px;color:var(--orange)">${inc.skipped} linha(s) ignorada(s) por dados incompletos.</div>`:''}</div><div class="form-actions"><button class="btn-primary" onclick="confirmImport(false)">Importar e mesclar</button>${inc.kind==='Backup JSON'?'<button class="btn-danger" onclick="confirmImport(true)">Substituir tudo</button>':''}</div>`}
+  catch(e){box.innerHTML=`<div class="empty" style="color:var(--red)">${esc(e.message||'Arquivo inválido.')}</div>`}};
+ fr.readAsText(file,'UTF-8')}
+function confirmImport(replace){if(!pendingImport)return;if(replace&&!confirm('Isto apagará todas as filiais e aferições atuais e as substituirá pelo conteúdo do arquivo. Continuar?'))return;
+ if(replace){db.branches=[];db.audits=[]}let st=mergeIncoming(pendingImport);pendingImport=null;closeModal();persist();
+ toast(`Importado: ${st.b} filial(is), ${st.p} bomba(s), ${st.n} bico(s), ${st.a} aferição(ões)${st.dup?` • ${st.dup} duplicada(s) ignorada(s)`:''}`)}
+function renderAll(){document.getElementById('stat-filiais').textContent=db.branches.length;document.getElementById('stat-bombas').textContent=db.branches.reduce((s,b)=>s+b.pumps.length,0);document.getElementById('stat-bicos').textContent=db.branches.reduce((s,b)=>s+b.pumps.reduce((z,p)=>z+p.nozzles.length,0),0);document.getElementById('stat-audits').textContent=db.audits.length;document.getElementById('home-branches').innerHTML=db.branches.slice(0,5).map(b=>`<div class="branch-row"><div class="branch-info"><div class="branch-avatar">${esc(b.code)}</div><div><strong>${esc(b.name)}</strong><small>${b.pumps.length} bomba(s) • ${b.pumps.reduce((s,p)=>s+p.nozzles.length,0)} bico(s)</small></div></div><button class="btn-light btn-small" onclick="openBranchCard('${b.id}')">Abrir</button></div>`).join('')||'<div class="empty">Cadastre sua primeira filial.</div>';document.getElementById('home-audits').innerHTML=db.audits.slice(0,4).map(a=>`<div class="branch-row"><div><strong>${esc(a.branchName)}</strong><small class="muted" style="display:block">${a.date.split('-').reverse().join('/')} • ${a.results.length} bico(s)</small></div><span class="pill ${auditStatus(a)==='Conforme'?'green':auditStatus(a)==='Não conforme'?'red':'yellow'}">${auditStatus(a)}</span></div>`).join('')||'<div class="empty">As aferições salvas aparecerão aqui.</div>';renderBranches();renderHistory()}
+document.getElementById('audit-date').value=new Date().toISOString().slice(0,10);
+renderAll();
+</script>
+</body>
+</html>
