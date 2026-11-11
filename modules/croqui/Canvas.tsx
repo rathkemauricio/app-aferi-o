@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
-import { type LayoutChangeEvent, PanResponder, ScrollView, View } from 'react-native';
+import { type LayoutChangeEvent, PanResponder, ScrollView, Text, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { useBandeiras } from '../../lib/bandeiras';
 import { useCombustiveis } from '../../lib/combustiveis';
-import { clamp, croquiSvg, filhosDaIlha, hitTest, type Item, type Paleta, registrarCombustiveis, VH, VW } from './model';
+import { areaDasBombas, clamp, croquiSvg, filhosDaIlha, hitTest, type Item, type Paleta, registrarCombustiveis, resumo, VH, VW } from './model';
 
 /** Registra os catálogos (combustíveis e bandeiras) usados no desenho (chamar antes de desenhar ou resumir). */
 export function useCatalogoCroqui() {
@@ -34,24 +34,29 @@ type Props = {
   onDragChange?: (arrastando: boolean) => void;
   /** Modo visualização: toque em um item (ex.: abrir a bomba na aferição). */
   onTapItem?: (item: Item) => void;
+  /** Mostra só a área das bombas (pista), legível em telas pequenas; a legenda de combustíveis vai embaixo. */
+  enquadrar?: boolean;
 };
 
 /** Desenho do croqui. No modo editável, toque seleciona e arrastar move o item. */
-export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel = false, selecionado = null, zoom = 1, passo = 10, destaques, onSelect, onMove, onDragChange, onTapItem }: Props) {
+export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel = false, selecionado = null, zoom = 1, passo = 10, destaques, onSelect, onMove, onDragChange, onTapItem, enquadrar = false }: Props) {
   const catalogo = useCatalogoCroqui();
   const [base, setBase] = useState(0);
-  const w = base * zoom, h = w * (VH / VW);
+  const area = useMemo(() => (enquadrar && !editavel ? areaDasBombas(items) : null), [enquadrar, editavel, items]);
+  const vw = area?.w ?? VW, vh = area?.h ?? VH, ox = area?.x ?? 0, oy = area?.y ?? 0;
+  const w = base * zoom, h = w * (vh / vw);
   const sel = editavel ? items.find(i => i.id === selecionado) : undefined;
   const grupo = sel ? filhosDaIlha(items, sel).map(i => i.id) : undefined;
   const chaveGrupo = grupo?.join(',') ?? '';
   const xml = useMemo(
-    () => croquiSvg(items, { bandeira, mostrarNomes, selecionado: editavel ? selecionado : null, p: paleta, destaques, grupo }),
-    [items, bandeira, mostrarNomes, selecionado, editavel, paleta, destaques, chaveGrupo, catalogo], // eslint-disable-line react-hooks/exhaustive-deps
+    () => croquiSvg(items, { bandeira, mostrarNomes, selecionado: editavel ? selecionado : null, p: paleta, destaques, grupo, area }),
+    [items, bandeira, mostrarNomes, selecionado, editavel, paleta, destaques, chaveGrupo, catalogo, area], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const legenda = useMemo(() => (area ? resumo(items).porCombustivel : []), [area, items, catalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refs: o PanResponder é criado uma vez e precisa enxergar os valores atuais.
-  const live = useRef({ items, w, passo, editavel, onSelect, onMove, onDragChange, onTapItem });
-  live.current = { items, w, passo, editavel, onSelect, onMove, onDragChange, onTapItem };
+  const live = useRef({ items, w, vw, ox, oy, passo, editavel, onSelect, onMove, onDragChange, onTapItem });
+  live.current = { items, w, vw, ox, oy, passo, editavel, onSelect, onMove, onDragChange, onTapItem };
   type Arraste = { item: Item; movs: Movimento[]; filhos: Item[]; x: number; y: number; moveu: boolean };
   const arraste = useRef<Arraste | null>(null);
 
@@ -60,8 +65,8 @@ export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel =
     onStartShouldSetPanResponder: e => {
       const L = live.current;
       if (!L.w) return false;
-      const k = VW / L.w;
-      const hit = hitTest(L.items, e.nativeEvent.locationX * k, e.nativeEvent.locationY * k);
+      const k = L.vw / L.w; // unidades do desenho por pixel (considera o recorte)
+      const hit = hitTest(L.items, L.ox + e.nativeEvent.locationX * k, L.oy + e.nativeEvent.locationY * k);
       if (L.editavel) {
         if (!hit) { L.onSelect?.(null); return false; }
         arraste.current = { item: hit, movs: [], filhos: filhosDaIlha(L.items, hit), x: hit.x, y: hit.y, moveu: false };
@@ -78,7 +83,7 @@ export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel =
       if (!d || !L.w) return;
       if (!d.moveu && (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4)) { d.moveu = true; if (L.editavel) L.onDragChange?.(true); }
       if (!L.editavel || !d.moveu) return;
-      const k = VW / L.w, p = L.passo;
+      const k = L.vw / L.w, p = L.passo;
       const x = clamp(Math.round((d.item.x + g.dx * k) / p) * p, 0, VW), y = clamp(Math.round((d.item.y + g.dy * k) / p) * p, 0, VH);
       if (x === d.x && y === d.y) return;
       d.x = x; d.y = y;
@@ -108,10 +113,22 @@ export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel =
   );
 
   return (
-    <View onLayout={(e: LayoutChangeEvent) => setBase(e.nativeEvent.layout.width)} style={{ width: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: paleta.ground }}>
-      {base <= 0 ? <View style={{ aspectRatio: VW / VH }} />
-        : zoom > 1 ? <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>{desenho}</ScrollView>
-        : desenho}
+    <View style={{ width: '100%', gap: 6 }}>
+      <View onLayout={(e: LayoutChangeEvent) => setBase(e.nativeEvent.layout.width)} style={{ width: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: paleta.ground }}>
+        {base <= 0 ? <View style={{ aspectRatio: vw / vh }} />
+          : zoom > 1 ? <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>{desenho}</ScrollView>
+          : desenho}
+      </View>
+      {legenda.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 4 }}>
+          {legenda.map(c => (
+            <View key={c.tipo} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <View style={{ width: 11, height: 11, borderRadius: 3, backgroundColor: c.cor }} />
+              <Text style={{ fontSize: 12, color: paleta.text }}>{c.nome}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }

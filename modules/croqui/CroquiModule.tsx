@@ -1,23 +1,27 @@
 import * as Print from 'expo-print';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { bandeirasAtivas, nomeBandeira } from '../../lib/bandeiras';
-import { filiaisCol, saveFilialDoc, useFiliais, useFilialDoc } from '../../lib/data';
+import { docsCol, filiaisCol, saveFilialDoc, useFiliais, useFilialDoc } from '../../lib/data';
+import { isSyncEnabled, useCollection } from '../../lib/sync';
 import {
   ArrowClockwiseIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowsInIcon, ArrowsOutIcon, ArrowUpIcon, CheckIcon, CopySimpleIcon, DownloadSimpleIcon, DropIcon, FilePdfIcon,
-  GridFourIcon, MagnifyingGlassIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, PencilSimpleIcon, ResetIcon, StorefrontIcon, TrashIcon,
+  GasPumpIcon, GridFourIcon, MagnifyingGlassIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, PencilSimpleIcon, ResetIcon, StorefrontIcon, TrashIcon, WarningCircleIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { CroquiCanvas, IconeElemento, type Movimento, useCatalogoCroqui } from './Canvas';
 import {
-  clamp, croquiSvg, type CroquiDoc, elementosDoGrupo, filhosDaIlha, fuelOf, girarPonto, GRUPOS, iconSvg, type Item, lerCroquiAntigo, modeloBasico, nBicos, novoItem, novoItemId,
-  PALETA_CLARA, PALETA_ESCURA, resumo, T, tiposBomba, VH, VW,
+  type BombaCadastro, clamp, croquiSvg, type CroquiDoc, elementosDoGrupo, espelharBombas, filhosDaIlha, fuelOf, girarPonto, GRUPOS, iconSvg, type Item, lerCroquiAntigo, modeloBasico,
+  nBicos, novoItem, novoItemId, PALETA_CLARA, PALETA_ESCURA, resumo, T, tipoDoCombustivel, tiposBomba, VH, VW,
 } from './model';
+
+/** Bomba que vem do cadastro (Aferições → Filiais): no croqui só muda de posição. */
+const espelhada = (i: Item) => T[i.type]?.k === 'b' && !!i.ref;
 
 export default function CroquiModule() {
   const router = useRouter();
@@ -28,11 +32,18 @@ export default function CroquiModule() {
   const s = useMemo(() => createStyles(colors), [colors]);
   const paleta = useMemo(() => ({ ...(mode === 'dark' ? PALETA_ESCURA : PALETA_CLARA), accent: colors.accent }), [mode, colors.accent]);
 
-  const [, bandeiras] = useCatalogoCroqui(); // combustíveis (tipos de bomba) e bandeiras cadastrados
+  const [catalogo, bandeiras] = useCatalogoCroqui(); // combustíveis (tipos de bomba) e bandeiras cadastrados
   const { filiais } = useFiliais();
   const [filialId, setFilialId] = useState<string>(params.filial ?? '');
   const filial = filiais.find(f => f.id === filialId) ?? null;
   const { doc } = useFilialDoc<CroquiDoc>(filial?.id, 'croqui');
+  const { payload: equipamentos } = useFilialDoc<{ pumps: BombaCadastro[] }>(filial?.id, 'equipamentos');
+  const bombas = useMemo(() => equipamentos?.pumps ?? [], [equipamentos]);
+  const docsSnap = useCollection(docsCol);
+  // Só grava o espelho depois de sincronizar: num aparelho novo, o croqui do servidor ainda pode estar chegando.
+  const podeGravarEspelho = docsSnap.loaded && (!isSyncEnabled() || docsCol.pulledOnce);
+  const tipo = useCallback((nome: string) => tipoDoCombustivel(nome, catalogo), [catalogo]);
+  const espelho = useMemo(() => espelharBombas(doc?.payload?.items ?? [], bombas, tipo), [doc?.payload, bombas, tipo]);
 
   const [editando, setEditando] = useState(params.editar === '1');
   const [items, setItems] = useState<Item[]>([]);
@@ -49,8 +60,12 @@ export default function CroquiModule() {
   const arrastandoRef = useRef(false);
   arrastandoRef.current = arrastando;
 
-  // Carrega o croqui da filial (e atualizações vindas do servidor, exceto durante um arraste).
-  useEffect(() => { if (!arrastandoRef.current) setItems(doc?.payload?.items ?? []); }, [doc?.payload, filialId]);
+  // Carrega o croqui da filial já espelhando o cadastro de bombas (e atualizações do servidor, exceto durante um arraste).
+  useEffect(() => { if (!arrastandoRef.current) setItems(espelho.items); }, [espelho, filialId]);
+  // Cadastro mudou (bomba nova, bico novo, combustível trocado): grava o croqui atualizado.
+  useEffect(() => {
+    if (filial && espelho.mudou && podeGravarEspelho) saveFilialDoc<CroquiDoc>(filial.id, 'croqui', { items: espelho.items });
+  }, [espelho, filial, podeGravarEspelho]);
   useEffect(() => { setSel(null); }, [filialId]);
 
   const item = items.find(i => i.id === sel) ?? null;
@@ -76,17 +91,26 @@ export default function CroquiModule() {
     const ids = new Set([item.id, ...filhos.map(f => f.id)]);
     commit(items.map(i => (ids.has(i.id) ? { ...i, x: clamp(i.x + dx, 0, VW), y: clamp(i.y + dy, 0, VH) } : i)));
   };
+  // Bombas do cadastro não são excluídas nem duplicadas aqui: saem do croqui só quando saem do cadastro.
   const excluir = () => {
-    if (!item) return;
-    const remover = () => { const ids = new Set([item.id, ...filhos.map(f => f.id)]); commit(items.filter(i => !ids.has(i.id))); setSel(null); };
-    if (filhos.length) confirmAction('Excluir a ilha?', `As ${filhos.length} bomba(s) apoiadas nela também serão excluídas.`, 'Excluir', remover);
+    if (!item || espelhada(item)) return;
+    const levar = filhos.filter(f => !espelhada(f));
+    const ficam = filhos.length - levar.length;
+    const remover = () => { const ids = new Set([item.id, ...levar.map(f => f.id)]); commit(items.filter(i => !ids.has(i.id))); setSel(null); };
+    if (levar.length) confirmAction('Excluir a ilha?', `As ${levar.length} bomba(s) sem cadastro apoiadas nela também serão excluídas.${ficam ? ` As ${ficam} bomba(s) do cadastro continuam no desenho.` : ''}`, 'Excluir', remover);
     else remover();
   };
   const duplicar = () => {
-    if (!item) return;
+    if (!item || espelhada(item)) return;
     const c = { ...item, id: novoItemId(), x: item.x + 30, y: item.y + 30 };
-    const copias = filhos.map(f => ({ ...f, id: novoItemId(), x: f.x + 30, y: f.y + 30 }));
+    const copias = filhos.filter(f => !espelhada(f)).map(f => ({ ...f, id: novoItemId(), x: f.x + 30, y: f.y + 30 }));
     commit([...items, c, ...copias]); setSel(c.id);
+  };
+  const removerSemCadastro = () => {
+    const ids = new Set(espelho.semCadastro.map(i => i.id));
+    confirmAction('Remover bombas sem cadastro?', `${ids.size} bomba(s) do desenho não existem no cadastro desta filial e serão removidas do croqui.`, 'Remover', () => {
+      commit(items.filter(i => !ids.has(i.id))); if (sel && ids.has(sel)) setSel(null);
+    });
   };
   const aplicarMovimentos = (movs: Movimento[], final: boolean) => {
     const m = new Map(movs.map(v => [v.id, v]));
@@ -157,8 +181,20 @@ export default function CroquiModule() {
               : <Button title="Editar" icon={PencilSimpleIcon} size="sm" onPress={() => setEditando(true)} />}
           </View>
 
+          {espelho.semCadastro.length > 0 && (
+            <Card style={{ borderColor: colors.warning }}>
+              <View style={s.row}>
+                <WarningCircleIcon size={18} color={colors.warning} />
+                <Text style={[t.bodyStrong, s.flex]}>Bombas sem cadastro: {espelho.semCadastro.map(i => i.label || '?').join(', ')}</Text>
+              </View>
+              <Text style={t.caption}>Estas bombas estão no desenho, mas não no cadastro da filial (Aferições → Filiais), por isso não aparecem nas aferições. Cadastre-as lá com o mesmo número ou remova do croqui.</Text>
+              <Button title="Remover do croqui" icon={TrashIcon} variant="secondary" size="sm" style={{ alignSelf: 'flex-start' }} onPress={removerSemCadastro} />
+            </Card>
+          )}
+
           {!items.length && !editando ? (
-            <EmptyState icon={StorefrontIcon} title="Esta filial ainda não tem croqui" text="Entre no modo de edição para desenhar o terreno."
+            <EmptyState icon={StorefrontIcon} title="Esta filial ainda não tem croqui"
+              text="Cadastre as bombas e os bicos da filial em Aferições → Filiais: o croqui é montado com elas automaticamente. Ou entre no modo de edição para desenhar o terreno."
               action={{ label: 'Começar a desenhar', icon: PencilSimpleIcon, onPress: () => setEditando(true) }} />
           ) : (
             <CroquiCanvas items={items} bandeira={filial.bandeira} mostrarNomes={nomes} paleta={paleta} editavel={editando} selecionado={sel}
@@ -178,13 +214,30 @@ export default function CroquiModule() {
 
             {item ? (
               <Card>
-                <View style={s.row}><Text style={[t.section, s.flex]}>{T[item.type]?.n}</Text><IconButton icon={TrashIcon} tone="danger" label="Excluir item" onPress={excluir} /></View>
-                <Field label="Rótulo" value={item.label} onChangeText={v => patch(item.id, { label: v })} />
-                <View style={s.twoCol}>
-                  <Field estavel label="Largura" style={s.flex} keyboardType="numeric" value={String(item.w)} onChangeText={v => patch(item.id, { w: Math.max(10, Math.min(1000, Number(v) || 10)) })} />
-                  <Field estavel label="Altura" style={s.flex} keyboardType="numeric" value={String(item.h)} onChangeText={v => patch(item.id, { h: Math.max(10, Math.min(640, Number(v) || 10)) })} />
-                </View>
-                {T[item.type]?.k === 'b' && <>
+                {espelhada(item) ? <>
+                  <View style={s.row}>
+                    <GasPumpIcon size={18} color={colors.accentText} weight="duotone" />
+                    <Text style={[t.section, s.flex]}>Bomba {item.label}</Text>
+                    <StatusPill label="Do cadastro" tone="accent" />
+                  </View>
+                  {(item.bicosNum ?? []).map((n, i) => (
+                    <View key={i} style={s.row}>
+                      <View style={[s.swatch, { backgroundColor: T[fuelOf(item, i)]?.c }]} />
+                      <Text style={[t.body, s.flex]}>Bico {n}</Text>
+                      <Text style={t.caption}>{T[fuelOf(item, i)]?.n}</Text>
+                    </View>
+                  ))}
+                  {!item.bicosNum?.length ? <Text style={t.caption}>Nenhum bico cadastrado nesta bomba.</Text> : null}
+                  <Text style={t.caption}>Número, bicos e combustíveis vêm do cadastro (Aferições → Filiais). Aqui você só posiciona e gira a bomba.</Text>
+                </> : <>
+                  <View style={s.row}><Text style={[t.section, s.flex]}>{T[item.type]?.n}</Text><IconButton icon={TrashIcon} tone="danger" label="Excluir item" onPress={excluir} /></View>
+                  <Field label="Rótulo" value={item.label} onChangeText={v => patch(item.id, { label: v })} />
+                  <View style={s.twoCol}>
+                    <Field estavel label="Largura" style={s.flex} keyboardType="numeric" value={String(item.w)} onChangeText={v => patch(item.id, { w: Math.max(10, Math.min(1000, Number(v) || 10)) })} />
+                    <Field estavel label="Altura" style={s.flex} keyboardType="numeric" value={String(item.h)} onChangeText={v => patch(item.id, { h: Math.max(10, Math.min(640, Number(v) || 10)) })} />
+                  </View>
+                </>}
+                {T[item.type]?.k === 'b' && !espelhada(item) && <>
                   <View style={s.group}>
                     <Text style={t.label}>Bicos</Text>
                     <ChoiceChips value={String(nBicos(item))} options={['1', '2', '3', '4', '5', '6']} onChange={v => patch(item.id, { bicos: Number(v) })} />
@@ -222,13 +275,19 @@ export default function CroquiModule() {
                   <IconButton icon={ArrowDownIcon} label="Mover para baixo" onPress={() => mover(0, passo)} />
                   <IconButton icon={ArrowRightIcon} label="Mover para a direita" onPress={() => mover(passo, 0)} />
                   <View style={s.flex} />
-                  <Button title="Duplicar" icon={CopySimpleIcon} variant="secondary" size="sm" onPress={duplicar} />
+                  {!espelhada(item) && <Button title="Duplicar" icon={CopySimpleIcon} variant="secondary" size="sm" onPress={duplicar} />}
                 </View>
               </Card>
             ) : null}
 
             <SectionHeader title="Elementos" />
-            {GRUPOS.map(g => (
+            <View style={s.row}>
+              <GasPumpIcon size={16} color={colors.textMuted} />
+              <Text style={[t.caption, s.flex]}>
+                As bombas vêm do cadastro da filial (Aferições → Filiais), com número, bicos e combustíveis. {bombas.length ? `${bombas.length} bomba(s) cadastrada(s): arraste cada uma para o lugar certo.` : 'Esta filial ainda não tem bombas cadastradas.'}
+              </Text>
+            </View>
+            {GRUPOS.filter(g => g !== 'Bombas').map(g => (
               <View key={g} style={s.group}>
                 <Text style={t.label}>{g}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.palette}>
@@ -288,8 +347,8 @@ export default function CroquiModule() {
                 <Text style={[t.bodyStrong, s.flex]} numberOfLines={1}>{T[item.type]?.n}{item.label ? ` · ${item.label}` : ''}</Text>
                 <IconButton icon={ResetIcon} label="Girar 15° para a esquerda" onPress={() => girar(-15)} />
                 <IconButton icon={ArrowClockwiseIcon} label="Girar 15° para a direita" onPress={() => girar(15)} />
-                <IconButton icon={CopySimpleIcon} label="Duplicar" onPress={duplicar} />
-                <IconButton icon={TrashIcon} tone="danger" label="Excluir" onPress={excluir} />
+                {!espelhada(item) && <IconButton icon={CopySimpleIcon} label="Duplicar" onPress={duplicar} />}
+                {!espelhada(item) && <IconButton icon={TrashIcon} tone="danger" label="Excluir" onPress={excluir} />}
               </View>
             ) : null}
           </SafeAreaView>

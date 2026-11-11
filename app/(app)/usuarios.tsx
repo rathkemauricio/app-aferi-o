@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
+import { enviarEmail } from '../../lib/email';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
 import { ArrowLeftIcon, CheckIcon, LockSimpleIcon, MagnifyingGlassIcon, UserCircleIcon } from '../../ui/icons';
@@ -38,6 +39,11 @@ export default function UsuariosScreen() {
     if (error) { notify('Não foi possível salvar', error.message); return; }
     if (p.user_id === userId) void recarregarPerfil();
     void carregar();
+    // Liberou ou bloqueou: avisa o dono da conta por e-mail (o servidor lê o perfil já atualizado).
+    if (patch.ativo !== undefined && patch.ativo !== p.ativo) {
+      const r = await enviarEmail({ acao: 'conta_alterada', user_id: p.user_id });
+      if (!r.ok) notify('Aviso por e-mail não enviado', `A alteração foi salva, mas ${p.email} não foi avisado por e-mail. ${r.erro}`);
+    }
   };
 
   const lista = (perfis ?? []).filter(p => `${p.email} ${p.nome}`.toLowerCase().includes(busca.toLowerCase()));

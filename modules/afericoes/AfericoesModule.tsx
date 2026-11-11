@@ -4,16 +4,16 @@ import * as Sharing from 'expo-sharing';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeftIcon, CalendarBlankIcon, CheckCircleIcon, CheckIcon, ClipboardTextIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, DownloadSimpleIcon, DropIcon, FileCsvIcon, FilePdfIcon, GasPumpIcon, HouseIcon, type Icon, ListChecksIcon, MagnifyingGlassIcon, MinusIcon, PencilSimpleIcon, PlayIcon, PlusIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, XCircleIcon, XIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CalendarBlankIcon, CaretRightIcon, CheckCircleIcon, CheckIcon, ClipboardTextIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, DownloadSimpleIcon, DropIcon, EnvelopeIcon, FileCsvIcon, FilePdfIcon, GasPumpIcon, HouseIcon, type Icon, ListChecksIcon, MagnifyingGlassIcon, MinusIcon, PencilSimpleIcon, PlayIcon, PlusIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, XCircleIcon, XIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, IconTile, ListRow, notify, SectionHeader, Sheet, Skeleton, Stat, StatusPill, Steps, type Tone } from '../../ui/kit';
 import { createTypography, radius, space, ThemeContext, type ThemeColors, tint } from '../../ui/theme';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
-import { useFilialDoc } from '../../lib/data';
+import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { CroquiCanvas } from '../croqui/Canvas';
-import { type CroquiDoc, numeroBomba, PALETA_CLARA, PALETA_ESCURA, T as TIPOS_CROQUI } from '../croqui/model';
+import { bombaDoItem, type CroquiDoc, espelharBombas, type Item as ItemCroqui, PALETA_CLARA, PALETA_ESCURA, T as TIPOS_CROQUI, tipoDoCombustivel } from '../croqui/model';
 import { docId, docsCol, filiaisCol, ordenarFiliais, saveFilialDoc } from '../../lib/data';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { Collection, combinedStatus, isSyncEnabled, type SyncRow, useCollection } from '../../lib/sync';
@@ -55,7 +55,7 @@ function auditStatus(a: Audit) {
 const htmlEscape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
 
 export default function AfericoesModule() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, podeAcessar } = useAuth();
   const router = useRouter();
   // Combustíveis do catálogo único (Central → Cadastros → Combustíveis).
   const catalogoCombustiveis = useCombustiveis();
@@ -92,6 +92,9 @@ export default function AfericoesModule() {
   const [selectedNozzleId, setSelectedNozzleId] = useState('');
   const [auditMeta, setAuditMeta] = useState<Record<string, string>>({ date: today(), auditor: '', seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' });
   const [detailAudit, setDetailAudit] = useState<Audit | null>(null);
+  const [emailAudit, setEmailAudit] = useState<Audit | null>(null); // relatório sendo enviado por e-mail
+  const [emailPara, setEmailPara] = useState('');
+  const [enviandoEmail, setEnviandoEmail] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
   const [importText, setImportText] = useState('');
   const [flowStarted, setFlowStarted] = useState<number | null>(null);
@@ -102,8 +105,25 @@ export default function AfericoesModule() {
   const toneText: Record<Tone, string> = { success: colors.success, warning: colors.warning, danger: colors.danger, neutral: colors.textMuted, accent: colors.accentText };
   const insets = useSafeAreaInsets();
   const { mode } = useContext(ThemeContext);
-  const { payload: croquiDoc } = useFilialDoc<CroquiDoc>(draft.branchId || null, 'croqui');
   const [zoomCroqui, setZoomCroqui] = useState(1);
+  // Aba Filiais: um card aberto por vez; os bicos só aparecem ao abrir a bomba (lista leve, sem travar).
+  const [filialAberta, setFilialAberta] = useState<string | null>(null);
+  const [bombaAberta, setBombaAberta] = useState<string | null>(null);
+  const paletaCroqui = useMemo(() => ({ ...(mode === 'dark' ? PALETA_ESCURA : PALETA_CLARA), accent: colors.accent }), [mode, colors.accent]);
+  const tipoCroqui = useCallback((nome: string) => tipoDoCombustivel(nome, catalogoCombustiveis), [catalogoCombustiveis]);
+  /** Croqui da filial espelhando o cadastro de bombas (só para desenhar; quem grava é o módulo Croqui). */
+  const croquiDe = useCallback((b: Branch | undefined): ItemCroqui[] => {
+    if (!b) return [];
+    const doc = docsSnap.list.find(d => d.id === docId(b.id, 'croqui'))?.payload as CroquiDoc | undefined;
+    return espelharBombas(doc?.items ?? [], b.pumps, tipoCroqui).items;
+  }, [docsSnap.list, tipoCroqui]);
+  const croquiAuditoria = useMemo(() => croquiDe(data.branches.find(b => b.id === draft.branchId)), [croquiDe, data.branches, draft.branchId]);
+  const croquiAberta = useMemo(() => croquiDe(data.branches.find(b => b.id === filialAberta)), [croquiDe, data.branches, filialAberta]);
+  const destaquesAberta = useMemo(() => {
+    const b = data.branches.find(x => x.id === filialAberta);
+    const it = b && bombaAberta ? croquiAberta.find(x => bombaDoItem(x, b.pumps)?.id === bombaAberta) : undefined;
+    return it ? { [it.id]: colors.accent } : undefined;
+  }, [data.branches, filialAberta, bombaAberta, croquiAberta, colors.accent]);
   const sessionQueue = useRef<Promise<void>>(Promise.resolve());
   const sessionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionSnapshot = useMemo(() => JSON.stringify({ tab, branchSearch, historyBranch, historyFrom, historyTo, draft, auditStage, selectedPumpId, selectedNozzleId, auditMeta, formKind, form, editingId, formBranchId, formPumpId, flowStarted }), [tab, branchSearch, historyBranch, historyFrom, historyTo, draft, auditStage, selectedPumpId, selectedNozzleId, auditMeta, formKind, form, editingId, formBranchId, formPumpId, flowStarted]);
@@ -259,6 +279,30 @@ export default function AfericoesModule() {
       await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Relatório da aferição', UTI: 'com.adobe.pdf' });
     } catch { notify('Erro ao gerar PDF', 'Não foi possível criar o relatório desta aferição.'); }
   };
+  const emailsDigitados = separarEmails(emailPara);
+  const emailsInvalidos = emailsDigitados.filter(e => !emailValido(e));
+  const podeEnviarEmail = emailsDigitados.length > 0 && emailsDigitados.length <= 10 && !emailsInvalidos.length;
+  const enviarRelatorioEmail = async (audit: Audit) => {
+    if (!podeEnviarEmail) return;
+    setEnviandoEmail(true);
+    try {
+      const html = auditReportHtml(audit);
+      // No celular vai o PDF em anexo; na web (sem gerador de PDF) o relatório vai no corpo do e-mail.
+      const pdf = Platform.OS === 'web' ? undefined : (await Print.printToFileAsync({ html, width: 842, height: 595, base64: true })).base64;
+      const r = await enviarEmail({
+        acao: 'relatorio',
+        para: emailsDigitados,
+        titulo: `Relatório de aferição: ${audit.branchName} #${audit.branchCode} (${dateLabel(audit.date)})`,
+        html,
+        pdf_base64: pdf,
+        nome_arquivo: `afericao-${audit.branchCode}-${audit.date}`,
+      });
+      if (!r.ok) { notify('E-mail não enviado', r.erro); return; }
+      notify('Relatório enviado', `Enviado para ${emailsDigitados.join(', ')}.`);
+      setEmailAudit(null);
+    } catch { notify('Erro ao gerar o relatório', 'Não foi possível preparar o relatório desta aferição.'); }
+    finally { setEnviandoEmail(false); }
+  };
   const exportCsv = () => {
     const header = ['Filial', 'Código', 'Data', 'Aferidor', 'Bomba', 'Bico', 'Combustível', ...CRITERIA, 'Situação'];
     const rows = filteredAudits.flatMap(a => a.results.map(r => [a.branchName, a.branchCode, a.date, a.auditor, r.pump, r.nozzle, r.fuel, ...r.checks, r.done ? auditStatus(a) : 'Não realizado']));
@@ -278,43 +322,74 @@ export default function AfericoesModule() {
   const stageIndex = { branch: 0, equipment: 1, nozzle: 2, final: 3 }[auditStage];
   const openNozzle = (pumpId: string, nozzleId: string) => { setSelectedPumpId(pumpId); setSelectedNozzleId(nozzleId); setAuditStage('nozzle'); };
 
+  const abrirFilial = (id: string | null) => { setFilialAberta(id); setBombaAberta(null); };
+  const seta = (aberto: boolean) => <View style={{ transform: [{ rotate: aberto ? '90deg' : '0deg' }] }}><CaretRightIcon size={16} color={colors.textMuted} weight="bold" /></View>;
+
+  /** Card da filial: fechado mostra só o resumo; aberto mostra o croqui e as bombas (bicos só ao tocar na bomba). */
   const renderBranchCard = (b: Branch) => {
     const nozzles = b.pumps.reduce((sum, p) => sum + p.nozzles.length, 0);
+    const aberta = filialAberta === b.id;
     return (
-      <Card key={b.id}>
-        <View style={s.rowCenter}>
+      <Card>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: aberta }} accessibilityLabel={`${b.name}, ${b.pumps.length} bombas, ${nozzles} bicos`}
+          onPress={() => abrirFilial(aberta ? null : b.id)} style={({ pressed }) => [s.rowCenter, pressed && { opacity: 0.7 }]}>
           <CodeTile code={b.code} />
           <View style={s.flex}>
             <Text style={textStyles.bodyStrong} numberOfLines={1}>{b.name}</Text>
-            <Text style={textStyles.caption}>{[b.city, b.state].filter(Boolean).join(', ') || 'Cidade não informada'}</Text>
+            <Text style={textStyles.caption} numberOfLines={1}>{[[b.city, b.state].filter(Boolean).join(', ') || 'Cidade não informada', `${b.pumps.length} bomba(s), ${nozzles} bico(s)`].join(' · ')}</Text>
           </View>
-          <IconButton icon={PencilSimpleIcon} label="Dados da filial" onPress={() => router.push(`/filiais/${b.id}`)} />
-        </View>
-        <View style={s.pills}>
-          <StatusPill icon={GasPumpIcon} label={`${b.pumps.length} bomba(s)`} />
-          <StatusPill icon={DropIcon} label={`${nozzles} bico(s)`} />
-        </View>
-        {b.pumps.map(p => (
-          <View key={p.id} style={s.pump}>
+          {seta(aberta)}
+        </Pressable>
+        {aberta && <>
+          {croquiAberta.length ? <>
             <View style={s.rowCenter}>
-              <GasPumpIcon size={18} color={tint.indigo.fg} weight="duotone" />
-              <Text style={[textStyles.bodyStrong, s.flex]} numberOfLines={1}>{p.number}</Text>
-              <IconButton icon={PencilSimpleIcon} label="Editar bomba" onPress={() => openForm('pump', { number: p.number }, p.id, b.id)} />
-              <IconButton icon={TrashIcon} tone="danger" label="Excluir bomba" onPress={() => removePump(b.id, p.id)} />
+              <Text style={[textStyles.label, s.flex]}>Croqui da filial</Text>
+              <IconButton icon={MinusIcon} label="Diminuir zoom do croqui" onPress={() => setZoomCroqui(z => Math.max(1, z - 0.5))} />
+              <Text style={textStyles.caption}>{Math.round(zoomCroqui * 100)}%</Text>
+              <IconButton icon={PlusIcon} label="Aumentar zoom do croqui" onPress={() => setZoomCroqui(z => Math.min(3, z + 0.5))} />
             </View>
-            {p.nozzles.map(n => (
-              <View key={n.id} style={s.nozzle}>
-                <DropIcon size={15} color={tint.emerald.fg} weight="duotone" />
-                <Text style={textStyles.body}>Bico {n.number}</Text>
-                <View style={s.flex}><StatusPill label={n.fuel} /></View>
-                <IconButton icon={PencilSimpleIcon} label="Editar bico" onPress={() => openForm('nozzle', { number: n.number, fuel: n.fuel }, n.id, b.id, p.id)} />
-                <IconButton icon={XIcon} tone="danger" label="Excluir bico" onPress={() => removeNozzle(b.id, p.id, n.id)} />
-              </View>
-            ))}
-            <Button title="Adicionar bico" icon={PlusIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => openForm('nozzle', { number: '', fuel: FUELS[0] }, '', b.id, p.id)} />
+            <CroquiCanvas items={croquiAberta} bandeira={filiaisSnap.list.find(x => x.id === b.id)?.bandeira ?? 'branca'} mostrarNomes={false} paleta={paletaCroqui} enquadrar
+              zoom={zoomCroqui} destaques={destaquesAberta}
+              onTapItem={it => { const p = bombaDoItem(it, b.pumps); if (p) setBombaAberta(cur => (cur === p.id ? null : p.id)); }} />
+            <Text style={textStyles.caption}>Toque numa bomba do desenho para ver os bicos dela. O número dentro de cada bolinha é o bico.</Text>
+          </> : null}
+          <View style={s.pills}>
+            {podeAcessar('croqui') && b.pumps.length ? <Button title="Ajustar no croqui" icon={PencilSimpleIcon} variant="secondary" size="sm" onPress={() => router.push(`/croqui?filial=${encodeURIComponent(b.id)}&editar=1`)} /> : null}
+            {isAdmin ? <Button title="Dados da filial" icon={StorefrontIcon} variant="ghost" size="sm" onPress={() => router.push(`/filiais/${b.id}`)} /> : null}
           </View>
-        ))}
-        <Button title="Adicionar bomba" icon={PlusIcon} variant="secondary" size="sm" onPress={() => openForm('pump', { number: '' }, '', b.id)} />
+          {b.pumps.map(p => {
+            const pAberta = bombaAberta === p.id;
+            return (
+              <View key={p.id} style={[s.pump, pAberta && { borderTopColor: colors.accent, borderTopWidth: 2 }]}>
+                <View style={s.rowCenter}>
+                  <Pressable accessibilityRole="button" accessibilityState={{ expanded: pAberta }} accessibilityLabel={`${p.number}, ${p.nozzles.length} bicos`}
+                    onPress={() => setBombaAberta(pAberta ? null : p.id)} style={({ pressed }) => [s.rowCenter, s.flex, { minHeight: 40 }, pressed && { opacity: 0.7 }]}>
+                    <GasPumpIcon size={18} color={tint.indigo.fg} weight="duotone" />
+                    <Text style={[textStyles.bodyStrong, s.flex]} numberOfLines={1}>{p.number}</Text>
+                    <Text style={textStyles.caption}>{p.nozzles.length} bico(s)</Text>
+                    {seta(pAberta)}
+                  </Pressable>
+                  <IconButton icon={PencilSimpleIcon} label="Editar bomba" onPress={() => openForm('pump', { number: p.number }, p.id, b.id)} />
+                  <IconButton icon={TrashIcon} tone="danger" label="Excluir bomba" onPress={() => removePump(b.id, p.id)} />
+                </View>
+                {pAberta && <>
+                  {p.nozzles.map(n => (
+                    <View key={n.id} style={s.nozzle}>
+                      <DropIcon size={15} color={tint.emerald.fg} weight="duotone" />
+                      <Text style={textStyles.body}>Bico {n.number}</Text>
+                      <View style={s.flex}><StatusPill label={n.fuel} /></View>
+                      <IconButton icon={PencilSimpleIcon} label="Editar bico" onPress={() => openForm('nozzle', { number: n.number, fuel: n.fuel }, n.id, b.id, p.id)} />
+                      <IconButton icon={XIcon} tone="danger" label="Excluir bico" onPress={() => removeNozzle(b.id, p.id, n.id)} />
+                    </View>
+                  ))}
+                  {!p.nozzles.length ? <Text style={textStyles.caption}>Nenhum bico cadastrado nesta bomba.</Text> : null}
+                  <Button title="Adicionar bico" icon={PlusIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => openForm('nozzle', { number: '', fuel: FUELS[0] }, '', b.id, p.id)} />
+                </>}
+              </View>
+            );
+          })}
+          <Button title="Adicionar bomba" icon={PlusIcon} variant="secondary" size="sm" onPress={() => openForm('pump', { number: '' }, '', b.id)} />
+        </>}
       </Card>
     );
   };
@@ -338,14 +413,14 @@ export default function AfericoesModule() {
       return <>
         <Button title="Trocar filial" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => setAuditStage('branch')} />
         {(() => {
-          const itens = croquiDoc?.items ?? [];
+          // Croqui espelhando o cadastro: aparece mesmo que ninguém tenha desenhado o terreno ainda.
+          const itens = croquiAuditoria;
           if (!itens.length) return null;
-          // Bomba do croqui <-> bomba do Aferições pelo número ("1" <-> "Bomba 01").
-          const bombaDe = (label: string) => { const n = numeroBomba(label); return n === null ? undefined : branch.pumps.find(p => numeroBomba(p.number) === n); };
+          const bombaDe = (it: ItemCroqui) => bombaDoItem(it, branch.pumps);
           const destaques: Record<string, string> = {};
           itens.forEach(it => {
             if (TIPOS_CROQUI[it.type]?.k !== 'b') return;
-            const p = bombaDe(it.label);
+            const p = bombaDe(it);
             if (!p || !p.nozzles.length) return;
             const feitos = p.nozzles.filter(n => draft.data[n.id]);
             if (!feitos.length) return;
@@ -361,15 +436,15 @@ export default function AfericoesModule() {
                 <Text style={textStyles.caption}>{Math.round(zoomCroqui * 100)}%</Text>
                 <IconButton icon={PlusIcon} label="Aumentar zoom do croqui" onPress={() => setZoomCroqui(z => Math.min(3, z + 0.5))} />
               </View>
-              <CroquiCanvas items={itens} bandeira={filialCroqui?.bandeira ?? 'branca'} mostrarNomes paleta={{ ...(mode === 'dark' ? PALETA_ESCURA : PALETA_CLARA), accent: colors.accent }}
+              <CroquiCanvas items={itens} bandeira={filialCroqui?.bandeira ?? 'branca'} mostrarNomes={false} paleta={paletaCroqui} enquadrar
                 zoom={zoomCroqui} destaques={destaques}
                 onTapItem={it => {
-                  const p = TIPOS_CROQUI[it.type]?.k === 'b' ? bombaDe(it.label) : undefined;
+                  const p = bombaDe(it);
                   if (!p) { notify('Bomba sem correspondência', 'O número desta bomba no croqui não corresponde a nenhuma bomba cadastrada nesta filial.'); return; }
                   const n = p.nozzles.find(x => !draft.data[x.id]) ?? p.nozzles[0];
                   if (n) openNozzle(p.id, n.id); else notify('Bomba sem bicos cadastrados');
                 }} />
-              <Text style={textStyles.caption}>Toque numa bomba para aferir o próximo bico pendente. Verde: concluída · amarelo: em andamento · vermelho: com não conformidade.</Text>
+              <Text style={textStyles.caption}>Toque numa bomba para aferir o próximo bico pendente. O número dentro de cada bolinha é o bico. Verde: concluída · amarelo: em andamento · vermelho: com não conformidade.</Text>
             </Card>
           );
         })()}
@@ -544,6 +619,26 @@ export default function AfericoesModule() {
         ListEmptyComponent={<EmptyState icon={ClockCounterClockwiseIcon} title="Nenhuma aferição encontrada" text="Ajuste os filtros ou registre uma nova aferição." action={{ label: 'Nova aferição', icon: PlusIcon, onPress: beginAudit }} />}
         renderItem={({ item }) => <AuditRow audit={item} card onPress={() => setDetailAudit(item)} />}
       />
+    ) : tab === 'filiais' ? (
+      <FlatList
+        data={filteredBranches}
+        keyExtractor={b => b.id}
+        extraData={[filialAberta, bombaAberta, croquiAberta, destaquesAberta]}
+        contentContainerStyle={s.content}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={12}
+        windowSize={7}
+        ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
+        ListHeaderComponent={<View style={s.stack}>
+          {pageHead}
+          <Field icon={MagnifyingGlassIcon} value={branchSearch} onChangeText={setBranchSearch} placeholder="Pesquisar por nome ou código" />
+          <View style={{ height: space.xs }} />
+        </View>}
+        ListEmptyComponent={data.branches.length
+          ? <EmptyState icon={MagnifyingGlassIcon} title="Nenhuma filial encontrada" text="Confira o nome ou o código pesquisado." />
+          : <EmptyState icon={StorefrontIcon} title="Nenhuma filial cadastrada" text="Cadastre a unidade e depois as bombas e bicos." action={{ label: 'Cadastrar filial', icon: PlusIcon, onPress: newBranch }} />}
+        renderItem={({ item }) => renderBranchCard(item)}
+      />
     ) : (
       <ScrollView key={tab} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <View style={s.stack}>
@@ -575,7 +670,7 @@ export default function AfericoesModule() {
               <Card style={s.listCard}>
                 {data.branches.slice(0, 5).map((b, i) => (
                   <ListRow key={b.id} style={i > 0 && s.divided} icon={StorefrontIcon} tint="sky" title={b.name}
-                    subtitle={`#${b.code} · ${b.pumps.length} bomba(s), ${b.pumps.reduce((n, p) => n + p.nozzles.length, 0)} bico(s)`} onPress={() => setTab('filiais')} />
+                    subtitle={`#${b.code} · ${b.pumps.length} bomba(s), ${b.pumps.reduce((n, p) => n + p.nozzles.length, 0)} bico(s)`} onPress={() => { abrirFilial(b.id); setTab('filiais'); }} />
                 ))}
               </Card>
             ) : <EmptyState icon={StorefrontIcon} title="Cadastre a primeira filial" text="Depois adicione as bombas e os bicos de cada unidade." action={{ label: 'Cadastrar filial', icon: PlusIcon, onPress: newBranch }} />}
@@ -585,14 +680,6 @@ export default function AfericoesModule() {
               <ListRow icon={UploadSimpleIcon} tint="slate" title="Exportar backup" subtitle="Compartilhar filiais e aferições em JSON" onPress={() => void exportBackup()} />
               <ListRow style={s.divided} icon={DownloadSimpleIcon} tint="slate" title="Importar backup" subtitle="Mesclar ou substituir a partir de um JSON" onPress={() => setImportVisible(true)} />
             </Card>
-          </>}
-
-          {tab === 'filiais' && <>
-            <Field icon={MagnifyingGlassIcon} value={branchSearch} onChangeText={setBranchSearch} placeholder="Pesquisar por nome ou código" />
-            {filteredBranches.map(renderBranchCard)}
-            {!filteredBranches.length && (data.branches.length
-              ? <EmptyState icon={MagnifyingGlassIcon} title="Nenhuma filial encontrada" text="Confira o nome ou o código pesquisado." />
-              : <EmptyState icon={StorefrontIcon} title="Nenhuma filial cadastrada" text="Cadastre a unidade e depois as bombas e bicos." action={{ label: 'Cadastrar filial', icon: PlusIcon, onPress: newBranch }} />)}
           </>}
 
           {tab === 'auditoria' && <>
@@ -656,7 +743,10 @@ export default function AfericoesModule() {
       <Sheet
         title={`${detailAudit.branchName} #${detailAudit.branchCode}`}
         onClose={() => setDetailAudit(null)}
-        footer={<Button title="Exportar PDF" icon={FilePdfIcon} onPress={() => void exportPdf(detailAudit)} />}
+        footer={<>
+          <Button title="Exportar PDF" icon={FilePdfIcon} onPress={() => void exportPdf(detailAudit)} />
+          <Button title="Enviar por e-mail" icon={EnvelopeIcon} variant="secondary" onPress={() => { setEmailAudit(detailAudit); setDetailAudit(null); }} />
+        </>}
       >
         <AuditStatusPill audit={detailAudit} />
         <View style={s.metaGrid}>
@@ -690,6 +780,23 @@ export default function AfericoesModule() {
         ))}
         <SectionHeader title="Observações" />
         <Text style={textStyles.body}>{detailAudit.observations || detailAudit.generalNotes || 'Nenhuma observação registrada.'}</Text>
+      </Sheet>
+    )}
+
+    {emailAudit && (
+      <Sheet
+        title="Enviar relatório por e-mail"
+        onClose={() => { if (!enviandoEmail) setEmailAudit(null); }}
+        footer={<Button title={enviandoEmail ? 'Enviando…' : 'Enviar'} icon={EnvelopeIcon} disabled={enviandoEmail || !podeEnviarEmail} onPress={() => void enviarRelatorioEmail(emailAudit)} />}
+      >
+        <Text style={textStyles.bodyStrong}>{`${emailAudit.branchName} #${emailAudit.branchCode} · ${dateLabel(emailAudit.date)}`}</Text>
+        <Field label="Para" value={emailPara} onChangeText={setEmailPara} placeholder="email@exemplo.com, outro@exemplo.com"
+          autoCapitalize="none" autoCorrect={false} keyboardType="email-address" />
+        <Text style={[textStyles.caption, emailsInvalidos.length || emailsDigitados.length > 10 ? { color: colors.danger } : null]}>
+          {emailsInvalidos.length ? `E-mail inválido: ${emailsInvalidos.join(', ')}`
+            : emailsDigitados.length > 10 ? 'No máximo 10 e-mails por envio.'
+            : `Separe vários e-mails por vírgula (até 10). ${Platform.OS === 'web' ? 'O relatório vai no corpo do e-mail.' : 'O relatório vai em PDF, anexado ao e-mail.'}`}
+        </Text>
       </Sheet>
     )}
   </SafeAreaView>;

@@ -42,7 +42,14 @@ export const tiposBomba = () => bombasAtivas;
 /** Elementos da paleta de um grupo. */
 export const elementosDoGrupo = (g: string) => (g === 'Bombas' ? bombasAtivas : Object.keys(T).filter(k => T[k].g === g));
 
-export type Item = { id: string; type: string; x: number; y: number; w: number; h: number; rot: number; label: string; bicos?: number; fuels?: string[] };
+/**
+ * Elemento do croqui. Bombas espelhadas do cadastro (Aferições → Filiais) têm `ref` (id da bomba no cadastro)
+ * e `bicosNum` (número de cada bico); número, bicos e combustíveis vêm do cadastro, e o croqui só guarda a posição.
+ */
+export type Item = {
+  id: string; type: string; x: number; y: number; w: number; h: number; rot: number; label: string;
+  bicos?: number; fuels?: string[]; ref?: string; bicosNum?: string[];
+};
 export type CroquiDoc = { items: Item[] };
 export const VW = 1000, VH = 640;
 
@@ -75,19 +82,108 @@ export function novoItem(type: string, items: Item[], x = 500, y = 320): Item {
   };
 }
 
-/** Modelo inicial (o mesmo do HTML), oferecido quando a filial ainda não tem croqui. */
-export const modeloBasico = (): Item[] => [
-  { id: novoItemId(), type: 'rua', x: 500, y: 590, w: 960, h: 70, rot: 0, label: '' },
-  { id: novoItemId(), type: 'cobertura', x: 420, y: 300, w: 420, h: 240, rot: 0, label: '' },
-  { id: novoItemId(), type: 'ilha', x: 340, y: 300, w: 50, h: 170, rot: 0, label: 'Ilha 1' },
-  { id: novoItemId(), type: 'ilha', x: 500, y: 300, w: 50, h: 170, rot: 0, label: 'Ilha 2' },
-  { id: novoItemId(), type: 'bomba_gc', x: 340, y: 270, w: 30, h: 46, rot: 0, label: '1' },
-  { id: novoItemId(), type: 'bomba_ga', x: 340, y: 330, w: 30, h: 46, rot: 180, label: '2' },
-  { id: novoItemId(), type: 'bomba_et', x: 500, y: 270, w: 30, h: 46, rot: 0, label: '3' },
-  { id: novoItemId(), type: 'bomba_d', x: 500, y: 330, w: 30, h: 46, rot: 180, label: '4' },
-  { id: novoItemId(), type: 'loja', x: 800, y: 200, w: 170, h: 100, rot: 0, label: 'Loja' },
-  { id: novoItemId(), type: 'entrada', x: 90, y: 590, w: 60, h: 34, rot: 0, label: 'Entrada' },
-];
+/** Terreno básico (rua, cobertura, ilhas, loja, entrada e saída), sem bombas: elas vêm do cadastro. */
+export const modeloBasico = (): Item[] => layoutInicial([], () => 'bomba_gc');
+
+/* =====================================================================
+   Espelho do cadastro de bombas (Aferições → Filiais)
+   ===================================================================== */
+export type BombaCadastro = { id: string; number: string; nozzles: { id: string; number: string; fuel: string }[] };
+
+const semAcento = (s: string) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+/** Tipo de bomba do croqui (id do catálogo de combustíveis) para o nome de combustível usado no bico. */
+export function tipoDoCombustivel(nome: string, catalogo: { id: string; nome: string }[]): string {
+  const n = semAcento(nome);
+  const c = catalogo.find(x => semAcento(x.nome) === n);
+  if (c) return c.id;
+  return catalogo.find(x => x.id === 'bomba_outro')?.id ?? catalogo[0]?.id ?? 'bomba_gc';
+}
+
+/** Rótulo curto da bomba no desenho ("Bomba 01" → "1"). */
+export const rotuloBomba = (numero: string) => { const n = numeroBomba(numero); return n === null ? String(numero ?? '').trim().slice(0, 4) : String(n); };
+
+/** Bomba do cadastro que corresponde a um item do croqui: pelo vínculo (`ref`) ou, nos croquis antigos, pelo número. */
+export function bombaDoItem<B extends BombaCadastro>(it: Item, bombas: B[]): B | undefined {
+  if (T[it.type]?.k !== 'b') return undefined;
+  if (it.ref) { const b = bombas.find(x => x.id === it.ref); if (b) return b; }
+  const n = numeroBomba(it.label);
+  return n === null ? undefined : bombas.find(x => numeroBomba(x.number) === n);
+}
+
+function atributosDaBomba(b: BombaCadastro, tipo: (nome: string) => string) {
+  const bicos = b.nozzles.slice(0, 6); // o desenho comporta até 6 bicos por bomba
+  const fuels = bicos.map(n => tipo(n.fuel));
+  return {
+    ref: b.id,
+    label: rotuloBomba(b.number),
+    type: fuels[0] ?? tipo(''),
+    bicos: Math.max(1, bicos.length),
+    fuels: fuels.length ? fuels : undefined,
+    bicosNum: bicos.length ? bicos.map(n => String(n.number).trim()) : undefined,
+  };
+}
+const chaveEspelho = (it: Partial<Item>) => JSON.stringify([it.ref, it.label, it.type, it.bicos ?? 1, it.fuels ?? null, it.bicosNum ?? null]);
+
+// Bombas espelhadas são um pouco maiores que as da paleta, para caber o número de cada bico.
+const BOMBA_W = 36, BOMBA_H = 54;
+
+/**
+ * Faz as bombas do croqui espelharem o cadastro: cada bomba cadastrada tem um item (com número, bicos e
+ * combustíveis do cadastro); a posição continua sendo a do croqui. Bombas novas entram numa fila no topo
+ * do desenho (ou, com o croqui vazio, num layout inicial sobre ilhas). Nada é apagado: bombas do croqui
+ * sem correspondência no cadastro voltam em `semCadastro` para quem edita decidir.
+ */
+export function espelharBombas(items: Item[], bombas: BombaCadastro[], tipo: (nome: string) => string): { items: Item[]; mudou: boolean; semCadastro: Item[] } {
+  const usadas = new Set<string>();
+  const semCadastro: Item[] = [];
+  let mudou = false;
+  const out = items.map(it => {
+    if (T[it.type]?.k !== 'b') return it;
+    const b = bombaDoItem(it, bombas.filter(x => !usadas.has(x.id)));
+    if (!b) { semCadastro.push(it); return it; }
+    usadas.add(b.id);
+    const novo = { ...it, ...atributosDaBomba(b, tipo) };
+    if (chaveEspelho(novo) !== chaveEspelho(it)) mudou = true;
+    return novo;
+  });
+  const faltam = bombas.filter(b => !usadas.has(b.id));
+  if (!faltam.length) return { items: out, mudou, semCadastro };
+  if (!items.length) return { items: layoutInicial(faltam, tipo), mudou: true, semCadastro };
+  // Fila no topo, fora da legenda (esquerda) e da bandeira (direita): é só arrastar para o lugar certo.
+  faltam.forEach((b, i) => out.push({
+    id: novoItemId(), x: 240 + (i % 14) * 50, y: 90 + Math.floor(i / 14) * 64, w: BOMBA_W, h: BOMBA_H, rot: 0, ...atributosDaBomba(b, tipo),
+  }));
+  return { items: out, mudou: true, semCadastro };
+}
+
+/**
+ * Layout inicial: até 5 ilhas por fileira (2 fileiras), duas bombas por ilha (frente e verso),
+ * cobertura em volta, loja, rua, entrada e saída. Bombas além de 20 vão para a fila no topo.
+ */
+export function layoutInicial(bombas: BombaCadastro[], tipo: (nome: string) => string): Item[] {
+  const POR_FILA = 5, PASSO_X = 140, X0 = 160, Y_FILAS = [240, 450];
+  const nIlhas = Math.min(POR_FILA * Y_FILAS.length, Math.max(1, Math.ceil(bombas.length / 2)));
+  const out: Item[] = [{ id: novoItemId(), type: 'rua', x: 500, y: 600, w: 980, h: 70, rot: 0, label: '' }];
+  const ilhas: Item[] = [];
+  for (let i = 0; i < nIlhas; i++) {
+    const x = X0 + (i % POR_FILA) * PASSO_X, y = Y_FILAS[Math.floor(i / POR_FILA)];
+    ilhas.push({ id: novoItemId(), type: 'ilha', x, y, w: 50, h: 170, rot: 0, label: `Ilha ${i + 1}` });
+  }
+  const xs = ilhas.map(i => i.x), ys = ilhas.map(i => i.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  out.push({ id: novoItemId(), type: 'cobertura', x: (minX + maxX) / 2, y: (minY + maxY) / 2, w: maxX - minX + 130, h: maxY - minY + 210, rot: 0, label: '' });
+  out.push(...ilhas);
+  bombas.slice(0, nIlhas * 2).forEach((b, i) => {
+    const ilha = ilhas[Math.floor(i / 2)], frente = i % 2 === 0;
+    out.push({ id: novoItemId(), x: ilha.x, y: ilha.y + (frente ? -36 : 36), w: BOMBA_W, h: BOMBA_H, rot: frente ? 0 : 180, ...atributosDaBomba(b, tipo) });
+  });
+  bombas.slice(nIlhas * 2).forEach((b, i) => out.push({ id: novoItemId(), x: 240 + (i % 14) * 50, y: 90, w: BOMBA_W, h: BOMBA_H, rot: 0, ...atributosDaBomba(b, tipo) }));
+  out.push({ id: novoItemId(), type: 'loja', x: 880, y: 250, w: 170, h: 100, rot: 0, label: 'Loja' });
+  out.push({ id: novoItemId(), type: 'entrada', x: 90, y: 600, w: 60, h: 34, rot: 0, label: 'Entrada' });
+  out.push({ id: novoItemId(), type: 'saida', x: 910, y: 600, w: 60, h: 34, rot: 0, label: 'Saída' });
+  return out;
+}
 
 /** Item tocado no ponto (coordenadas do desenho), considerando rotação. O de cima tem prioridade. */
 /** Bombas apoiadas sobre a ilha (centro dentro da área da ilha, com folga): movem e giram junto com ela. */
@@ -130,12 +226,18 @@ export const PALETA_ESCURA: Paleta = { ground: '#262b27', grid: '#30362f', panel
 
 const esc = (s: string) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] ?? c));
 
+/** Bicos: bolinhas na cor do combustível. Bombas espelhadas do cadastro mostram o número do bico (sempre de pé). */
 function dots(it: Item) {
-  const n = nBicos(it), h = it.h;
+  const n = nBicos(it), h = it.h, comNumero = !!it.bicosNum?.length;
+  // Com número, a bolinha cresce com a largura da bomba (36 → raio 6,5 e fonte 8,5).
+  const raio = comNumero ? Math.max(5, it.w * 0.18) : 3.3, passoX = comNumero ? raio * 2.15 : 10, passoY = comNumero ? raio * 2.15 : 8, topo = comNumero ? 10 : 12;
+  const fonte = raio * 1.3;
   let d = '';
   for (let i = 0; i < n; i++) {
-    const r = Math.floor(i / 2), k = Math.min(2, n - r * 2), c = i % 2, dx = (c - (k - 1) / 2) * 10, dy = -h / 2 + h * 0.28 + 12 + r * 8;
-    d += `<circle cx="${dx}" cy="${dy}" r="3.3" fill="${T[fuelOf(it, i)].c}" stroke="#fff" stroke-width="1.4"/>`;
+    const r = Math.floor(i / 2), k = Math.min(2, n - r * 2), c = i % 2, dx = (c - (k - 1) / 2) * passoX, dy = -h / 2 + h * 0.28 + topo + r * passoY;
+    d += `<circle cx="${dx}" cy="${dy}" r="${raio}" fill="${T[fuelOf(it, i)].c}" stroke="#fff" stroke-width="1.4"/>`;
+    const num = it.bicosNum?.[i];
+    if (num) d += `<text x="${dx}" y="${dy}" transform="rotate(${-it.rot} ${dx} ${dy})" text-anchor="middle" dy="0.35em" font-size="${num.length > 2 ? fonte * 0.75 : fonte}" font-weight="800" fill="#fff">${esc(num)}</text>`;
   }
   return d;
 }
@@ -160,12 +262,43 @@ function shape(it: Item, bandeira: string) {
   }
 }
 
+/** Rótulo do item, sempre de pé. Na bomba vai no visor branco do topo, para não cobrir os bicos. */
+function rotulo(it: Item, t: TipoInfo, cor: string) {
+  if (t.k === 'b') {
+    const y = -it.h / 2 + 4 + it.h * 0.14;
+    return `<text x="0" y="${y}" transform="rotate(${-it.rot} 0 ${y})" text-anchor="middle" dy="0.35em" font-size="10.5" font-weight="800" fill="#1b1f24">${esc(it.label)}</text>`;
+  }
+  return `<text transform="rotate(${-it.rot})" text-anchor="middle" dy="0.35em" font-size="12" font-weight="600" fill="${cor}">${esc(it.label)}</text>`;
+}
+
 export function iconSvg(type: string) {
   const t = T[type], m = Math.max(t.w, t.h) + 12;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-m / 2} ${-m / 2} ${m} ${m}">${shape({ id: '', type, x: 0, y: 0, w: t.w, h: t.h, rot: 0, label: '' }, 'branca')}</svg>`;
 }
 
-export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes: boolean; selecionado?: string | null; p: Paleta; destaques?: Record<string, string>; grupo?: string[] }) {
+export type Area = { x: number; y: number; w: number; h: number };
+
+/**
+ * Área das bombas (bombas, ilhas e cobertura) com margem, para mostrar só a pista em telas pequenas.
+ * Garante tamanho mínimo e proporção de no máximo 1,2 (altura/largura). Sem bombas: null (desenho inteiro).
+ */
+export function areaDasBombas(items: Item[], margem = 24): Area | null {
+  const alvo = items.filter(i => T[i.type]?.k === 'b' || i.type === 'ilha' || i.type === 'cobertura');
+  if (!alvo.some(i => T[i.type]?.k === 'b')) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  alvo.forEach(i => {
+    const r = (i.rot * Math.PI) / 180, c = Math.abs(Math.cos(r)), s = Math.abs(Math.sin(r));
+    const hw = (c * i.w + s * i.h) / 2, hh = (s * i.w + c * i.h) / 2;
+    x0 = Math.min(x0, i.x - hw); x1 = Math.max(x1, i.x + hw); y0 = Math.min(y0, i.y - hh); y1 = Math.max(y1, i.y + hh);
+  });
+  let w = Math.max(240, x1 - x0 + margem * 2), h = Math.max(160, y1 - y0 + margem * 2);
+  if (h > w * 1.2) w = h / 1.2;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  w = Math.min(w, VW); h = Math.min(h, VH);
+  return { x: clamp(cx - w / 2, 0, VW - w), y: clamp(cy - h / 2, 0, VH - h), w, h };
+}
+
+export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes: boolean; selecionado?: string | null; p: Paleta; destaques?: Record<string, string>; grupo?: string[]; area?: Area | null }) {
   const { p } = opts;
   let h = `<rect x="0" y="0" width="${VW}" height="${VH}" fill="${p.ground}"/>`;
   for (let i = 0; i <= VW; i += 50) h += `<line x1="${i}" y1="0" x2="${i}" y2="${VH}" stroke="${p.grid}" stroke-width="1"/>`;
@@ -178,7 +311,7 @@ export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes:
       (destaque ? `<rect x="${-it.w / 2 - 9}" y="${-it.h / 2 - 9}" width="${it.w + 18}" height="${it.h + 18}" rx="10" fill="${destaque}" fill-opacity="0.22" stroke="${destaque}" stroke-width="4"/>` : '') +
       (noGrupo ? `<rect x="${-it.w / 2 - 3}" y="${-it.h / 2 - 3}" width="${it.w + 6}" height="${it.h + 6}" fill="none" stroke="${p.accent}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.8"/>` : '') +
       (on ? `<rect x="${-it.w / 2 - 4}" y="${-it.h / 2 - 4}" width="${it.w + 8}" height="${it.h + 8}" fill="none" stroke="${p.accent}" stroke-width="2.5" stroke-dasharray="5 3"/>` : '') +
-      (it.label ? `<text transform="rotate(${-it.rot})" text-anchor="middle" dy="0.35em" font-size="${t.k === 'b' ? 13 : 12}" font-weight="600" fill="${cor}">${esc(it.label)}</text>` : '') +
+      (it.label ? rotulo(it, t, cor) : '') +
       `</g>`;
   }
   if (opts.mostrarNomes) for (const it of ordem) {
@@ -187,6 +320,11 @@ export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes:
     const ls = fuelList(it), nm = ls.reduce((a, b) => (a.length > b.length ? a : b), ''), tw = nm.length * 5.4 + 10, ty = it.y + (Math.abs(Math.sin((it.rot * Math.PI) / 180)) * it.w + Math.abs(Math.cos((it.rot * Math.PI) / 180)) * it.h) / 2 + 4;
     h += `<g><rect x="${it.x - tw / 2}" y="${ty}" width="${tw}" height="${ls.length * 12 + 2}" rx="4" fill="${p.panel}" stroke="${t.c}" opacity="0.95"/>` +
       ls.map((l, j) => `<text x="${it.x}" y="${ty + 10 + j * 12}" text-anchor="middle" font-size="9.5" fill="${p.text}">${esc(l)}</text>`).join('') + `</g>`;
+  }
+  // Recorte (só a pista): sem legenda e sem bandeira, que ficam nos cantos do desenho inteiro.
+  if (opts.area) {
+    const a = opts.area;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${a.x} ${a.y} ${a.w} ${a.h}">${h}</svg>`;
   }
   const used: string[] = [];
   items.forEach(i => { if (T[i.type]?.k === 'b') for (let j = 0; j < nBicos(i); j++) { const f = fuelOf(i, j); if (!used.includes(f)) used.push(f); } });

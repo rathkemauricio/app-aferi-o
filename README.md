@@ -37,6 +37,25 @@ Tabelas: `profiles`, `filiais`, `filial_docs` (equipamentos, croqui e dimensiona
 - Em Minha conta (foto no topo da central): foto de perfil, nome, troca de e-mail (com confirmação), troca de senha, tema e sair.
 - No painel do Supabase, em Authentication → URL Configuration → Redirect URLs, cadastre os endereços usados nos links de e-mail: `postora://**` (app instalado), `exp://**` (Expo Go) e a URL do site/`http://localhost:8081/**` (web).
 
+## E-mails (Nodemailer)
+
+Os e-mails saem de uma conta Gmail, via Nodemailer, por duas Edge Functions do Supabase (`supabase/functions/`):
+
+- `send-email`: Send Email Hook do Supabase Auth. Confirmação de cadastro, redefinição de senha, troca de e-mail, códigos e avisos de segurança, com o visual do Postora.
+- `notificar`: chamada pelo app. Avisa os administradores quando uma conta nova confirma o e-mail (uma vez por conta), avisa o usuário quando a conta é liberada ou bloqueada, e envia o relatório de aferição (PDF anexado no celular; no corpo do e-mail na web).
+
+Configurar (uma vez):
+
+1. No Gmail que vai enviar: ligue a verificação em duas etapas e crie uma senha de app em https://myaccount.google.com/apppasswords.
+2. Copie `supabase/functions/.env.example` para `supabase/functions/.env` e preencha `SMTP_USER` e `SMTP_PASS` (opcionais: `MAIL_FROM_NAME`, `APP_URL`). Esse arquivo não vai para o git.
+3. `npx supabase login` e `npx supabase link --project-ref bwostlznulfidzknkmbs`.
+4. `npm run email:deploy` publica as duas funções.
+5. Painel do Supabase → Authentication → Hooks → Send Email hook → tipo HTTPS, URL `https://bwostlznulfidzknkmbs.supabase.co/functions/v1/send-email` → Generate secret. Copie o segredo (`v1,whsec_...`) para `SEND_EMAIL_HOOK_SECRET` no `.env`.
+6. `npm run email:secrets` envia as configurações. Só então ative o hook e salve.
+7. Authentication → Rate Limits: aumente o limite de e-mails por hora (o Gmail envia cerca de 500 por dia).
+
+Observações: as Edge Functions bloqueiam SMTP nas portas 25 e 587, por isso o padrão é a 465 (SSL). Com o hook ativo, uma falha de envio faz o cadastro e a redefinição de senha mostrarem erro; veja o motivo em Edge Functions → send-email → Logs.
+
 ## Executar
 
 1. Copie `.env.example` para `.env` e preencha `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Nunca coloque a chave `service_role` no app. `DATABASE_URL` e `DIRECT_URL` são usadas só pelo Prisma (migrações) e não vão para o app.

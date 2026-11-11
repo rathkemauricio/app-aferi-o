@@ -21,7 +21,9 @@ function parametros(url: string | null) {
 /** Tela aberta pelo link "Esqueci a senha": cria a sessão de recuperação e define a nova senha. */
 export default function RedefinirSenha() {
   const router = useRouter();
-  const urlNativa = Linking.useURL();
+  // useLinkingURL (e não useURL): já começa com o ÚLTIMO link recebido. Com o app aberto, o link do e-mail
+  // chega antes desta tela montar; o useURL só conhece o link que abriu o app e perdia os tokens.
+  const urlNativa = Linking.useLinkingURL();
   const [fase, setFase] = useState<Fase>('verificando');
   const [motivo, setMotivo] = useState('');
   const [senha, setSenha] = useState('');
@@ -34,6 +36,7 @@ export default function RedefinirSenha() {
     const client = supabase;
     const url = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.href : urlNativa;
     const p = parametros(url);
+    let atual = true; // ignora o resultado se chegar outro link enquanto este é verificado
     void (async () => {
       try {
         if (p.error_description || p.error) throw new Error(p.error_description || p.error);
@@ -46,15 +49,18 @@ export default function RedefinirSenha() {
         }
         const { data } = await client.auth.getSession();
         if (!data.session) throw new Error('sem-sessao');
+        if (!atual) return;
         // Remove os tokens da barra de endereço do navegador.
         if (Platform.OS === 'web' && typeof window !== 'undefined') window.history.replaceState(null, '', window.location.pathname);
         setFase('pronto');
       } catch (e) {
+        if (!atual) return;
         const m = e instanceof Error ? e.message : '';
         setMotivo(m === 'sem-sessao' || !m ? 'O link é inválido ou já foi usado. Peça um novo link em "Esqueci a senha".' : m.toLowerCase().includes('expired') ? 'O link expirou. Peça um novo link em "Esqueci a senha".' : traduzirErro({ message: m }));
         setFase('invalido');
       }
     })();
+    return () => { atual = false; };
   }, [urlNativa]);
 
   const pode = isStrongPassword(senha) && senha === confirma && !busy;

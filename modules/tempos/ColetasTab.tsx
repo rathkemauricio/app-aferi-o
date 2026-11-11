@@ -10,6 +10,7 @@ import {
   type Atendimento, type Atividade, type Coleta, DEMANDAS, dataBR, duracaoAtendimento, duracaoEtapa, etapaAberta, etapaPausada, fmtCrono, fmtDur, hoje,
   horaBR, pausaSeg, SEQUENCIA_PISTA, SETORES, TURNOS,
 } from './model';
+import { Deslizavel } from './Deslizavel';
 import { ops } from './ops';
 import type { ColetasView, TmData } from './store';
 import { ActivityPicker, useLook, useNow } from './ui';
@@ -92,7 +93,7 @@ export function ColetasHome({ data, nav, filialId, setFilialId }: { data: TmData
    Coleta: atendimentos e atividades individuais
    ===================================================================== */
 export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; coletaId: string }) {
-  const { s, t } = useLook();
+  const { s, t, colors } = useLook();
   const [form, setForm] = useState<ColetaForm | null>(null);
   const c = data.coletas.find(x => x.id === coletaId);
   const abertos = data.rascunhos.filter(a => a.coleta_id === coletaId);
@@ -119,17 +120,30 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
       {c.auditor ? <StatusPill label={`Auditor: ${c.auditor}`} /> : null}
     </View>
 
-    {abertos.map(a => (
-      <Card key={a.id} style={s.running}>
-        <View style={s.row}>
-          <View style={s.liveDot} />
-          <Text style={[t.bodyStrong, s.flex]}>{a.tipo === 'completo' ? 'Atendimento em andamento' : 'Atividade individual em andamento'}</Text>
-          <Text style={s.clockSmall}>{fmtCrono(duracaoAtendimento(a, now))}</Text>
-        </View>
-        <Text style={t.caption}>{[nomeVeiculo(data, a.veiculo), resumoEtapas(data, a)].filter(Boolean).join(' · ')}</Text>
-        <Button title="Continuar" icon={PlayIcon} onPress={() => nav.push({ name: 'atendimento', coletaId, atendimentoId: a.id })} />
-      </Card>
-    ))}
+    {abertos.map(a => {
+      const etapa = etapaAberta(a);
+      const pausado = !!etapa && etapaPausada(etapa);
+      const nome = a.tipo === 'completo' ? 'Atendimento' : 'Atividade individual';
+      return (
+        <Deslizavel key={a.id}
+          direita={{ rotulo: 'Encerrar e gravar', cor: colors.success, icone: FlagCheckeredIcon, habilitada: a.etapas.length > 0 }}
+          esquerda={{ rotulo: 'Descartar', cor: colors.danger, icone: TrashIcon }}
+          onDireita={() => ops.finalizar(a.id)}
+          onEsquerda={() => confirmAction(`Descartar ${nome.toLowerCase()}?`, 'As etapas cronometradas serão apagadas.', 'Descartar', () => ops.descartar(a.id))}
+          onBloqueada={() => notify('Nada para gravar', 'Inicie ao menos uma etapa antes de encerrar, ou deslize para a esquerda para descartar.')}>
+          <Card style={[s.running, pausado && { borderColor: colors.warning }]}>
+            <View style={s.row}>
+              <View style={[s.liveDot, pausado && { backgroundColor: colors.warning }]} />
+              <Text style={[t.bodyStrong, s.flex]}>{`${nome} ${pausado ? (a.tipo === 'completo' ? 'pausado' : 'pausada') : 'em andamento'}`}</Text>
+              <Text style={[s.clockSmall, pausado && { color: colors.warning }]}>{fmtCrono(duracaoAtendimento(a, now))}</Text>
+            </View>
+            <Text style={t.caption}>{[nomeVeiculo(data, a.veiculo), resumoEtapas(data, a)].filter(Boolean).join(' · ')}</Text>
+            <Button title="Continuar" icon={PlayIcon} onPress={() => nav.push({ name: 'atendimento', coletaId, atendimentoId: a.id })} />
+          </Card>
+        </Deslizavel>
+      );
+    })}
+    {abertos.length ? <Text style={t.caption}>Deslize o cartão para a direita para encerrar e gravar, ou para a esquerda para descartar.</Text> : null}
 
     <View style={s.twoCol}>
       <Button title="Atendimento completo" icon={PlayIcon} style={s.flex} onPress={() => iniciar('completo')} />

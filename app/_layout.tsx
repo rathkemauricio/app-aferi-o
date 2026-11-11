@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useContext } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { ThemeContext, ThemeProvider } from '../ui/theme';
@@ -50,11 +51,14 @@ function Shell() {
 }
 
 export default function RootLayout() {
+  // GestureHandlerRootView: necessário para os gestos (ex.: deslizar atividade em Tempos e Movimentos).
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <Shell />
-      </AuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AuthProvider>
+          <Shell />
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

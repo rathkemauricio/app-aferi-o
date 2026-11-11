@@ -5,3 +5,6 @@ dist/
 web-build/
 /android/
 /ios/
+supabase/functions/.env
+supabase/.temp/
+supabase/.branches/
