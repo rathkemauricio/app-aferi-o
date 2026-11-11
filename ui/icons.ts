@@ -62,3 +62,6 @@ export const CopySimpleIcon: Icon = require('phosphor-react-native/src/icons/Cop
 export const GridFourIcon: Icon = require('phosphor-react-native/src/icons/GridFour').GridFourIcon;
 export const MagnifyingGlassMinusIcon: Icon = require('phosphor-react-native/src/icons/MagnifyingGlassMinus').MagnifyingGlassMinusIcon;
 export const MagnifyingGlassPlusIcon: Icon = require('phosphor-react-native/src/icons/MagnifyingGlassPlus').MagnifyingGlassPlusIcon;
+export const CameraIcon: Icon = require('phosphor-react-native/src/icons/Camera').CameraIcon;
+export const ImagesIcon: Icon = require('phosphor-react-native/src/icons/Images').ImagesIcon;
+export const SealCheckIcon: Icon = require('phosphor-react-native/src/icons/SealCheck').SealCheckIcon;

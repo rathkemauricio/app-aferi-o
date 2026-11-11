@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 import { useTemposAviso } from './tempos/aviso';
-import { GasPumpIcon, HourglassIcon, type Icon, StorefrontIcon } from '../ui/icons';
+import { ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, StorefrontIcon } from '../ui/icons';
 import type { Tint } from '../ui/theme';
 
 // Catálogo de módulos exibido na tela inicial.
@@ -41,5 +41,13 @@ export const MODULES: AppModule[] = [
     icon: StorefrontIcon,
     tint: 'sky',
     route: '/croqui',
+  },
+  {
+    id: 'auditoria',
+    name: 'Auditoria',
+    description: 'Checklist de auditoria operacional por filial, com evidências, planos de ação e relatório.',
+    icon: ClipboardTextIcon,
+    tint: 'amber',
+    route: '/auditoria',
   },
 ];

@@ -2,8 +2,9 @@
 //
 //   { acao: 'conta_pendente' }                       conta nova (já com e-mail confirmado) avisa os administradores; só uma vez por conta
 //   { acao: 'conta_alterada', user_id }              administrador liberou ou bloqueou a conta → avisa o dono da conta
-//   { acao: 'relatorio', para, titulo, html, pdf_base64?, nome_arquivo? }
-//                                                    envia o relatório de aferição (PDF anexado; sem PDF, vai no corpo)
+//   { acao: 'relatorio', para, titulo, html, pdf_base64?, nome_arquivo?, modulo? }
+//                                                    envia um relatório (PDF anexado; sem PDF, vai no corpo).
+//                                                    modulo: 'afericoes' (padrão) ou 'auditoria'; exige acesso ao módulo
 //
 // Publicar: npx supabase functions deploy notificar --no-verify-jwt
 // O JWT do usuário é conferido aqui dentro (as chaves novas do Supabase não são JWT, por isso --no-verify-jwt).
@@ -25,7 +26,7 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 const APP_URL = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
 
 // Mesmos ids e nomes de modules/registry.ts.
-const MODULOS: Record<string, string> = { afericoes: 'Aferições', tempos: 'Tempos e Movimentos', croqui: 'Croqui' };
+const MODULOS: Record<string, string> = { afericoes: 'Aferições', tempos: 'Tempos e Movimentos', croqui: 'Croqui', auditoria: 'Auditoria' };
 
 type Perfil = { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[] | null };
 
@@ -109,8 +110,9 @@ async function contaAlterada(perfil: Perfil | null, body: Record<string, unknown
 }
 
 async function relatorio(user: User, perfil: Perfil | null, body: Record<string, unknown>) {
-  const pode = perfil?.ativo && (perfil.papel === 'admin' || (perfil.modulos ?? []).includes('afericoes'));
-  if (!pode) return json(403, { erro: 'Sua conta não tem acesso ao módulo Aferições.' });
+  const modulo = body.modulo === 'auditoria' ? 'auditoria' : 'afericoes';
+  const pode = perfil?.ativo && (perfil.papel === 'admin' || (perfil.modulos ?? []).includes(modulo));
+  if (!pode) return json(403, { erro: `Sua conta não tem acesso ao módulo ${MODULOS[modulo]}.` });
 
   const para = Array.isArray(body.para)
     ? [...new Set(body.para.map(e => String(e).trim().toLowerCase()).filter(Boolean))]
@@ -123,8 +125,9 @@ async function relatorio(user: User, perfil: Perfil | null, body: Record<string,
   const pdf = typeof body.pdf_base64 === 'string' ? body.pdf_base64 : '';
   if (pdf.length > 12_000_000) return json(413, { erro: 'O PDF é grande demais para enviar por e-mail.' });
 
-  const titulo = String(body.titulo ?? 'Relatório de aferição').replace(/\s+/g, ' ').trim().slice(0, 150) || 'Relatório de aferição';
-  const arquivo = String(body.nome_arquivo ?? 'relatorio-afericao').replace(/[^\w.-]+/g, '-').slice(0, 80) || 'relatorio-afericao';
+  const nomeRelatorio = modulo === 'auditoria' ? 'relatório de auditoria' : 'relatório de aferição';
+  const titulo = String(body.titulo ?? '').replace(/\s+/g, ' ').trim().slice(0, 150) || `Relatório de ${modulo === 'auditoria' ? 'auditoria' : 'aferição'}`;
+  const arquivo = String(body.nome_arquivo ?? 'relatorio').replace(/[^\w.-]+/g, '-').slice(0, 80) || 'relatorio';
   const remetente = perfil!.nome?.trim() ? `${perfil!.nome.trim()} (${user.email})` : String(user.email);
 
   if (pdf) {
@@ -134,7 +137,7 @@ async function relatorio(user: User, perfil: Perfil | null, body: Record<string,
       responderPara: user.email,
       html: layout({
         titulo,
-        paragrafos: [`<b>${esc(remetente)}</b> enviou o relatório de aferição pelo Postora. O PDF está em anexo.`],
+        paragrafos: [`<b>${esc(remetente)}</b> enviou o ${nomeRelatorio} pelo Postora. O PDF está em anexo.`],
         rodape: 'Para responder, use “Responder”: a resposta vai direto para quem enviou o relatório.',
       }),
       anexos: [{ filename: `${arquivo}.pdf`, content: pdf, encoding: 'base64', contentType: 'application/pdf' }],

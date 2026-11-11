@@ -5,6 +5,7 @@ Plataforma de módulos para gestão de postos de combustível, para celular (And
 - **Aferições**: inspeção de bombas e bicos por filial, com histórico, CSV e relatório em PDF.
 - **Tempos e Movimentos**: coletas por filial e data, com atendimentos completos (etapas cronometradas, pausas, etapas opcionais) e atividades individuais; painel, histórico, dimensionamento da equipe, plano de ação e cadastros.
 - **Croqui**: desenho do terreno de cada filial (bombas e combustíveis por bico, ilhas, cobertura, loja, tanques, vias, serviços), com visualização, edição e impressão.
+- **Auditoria**: checklist de auditoria operacional (Sistema de Gestão Integrada) por filial, com status por requisito (C, OB, OM, NC, PP, NA), observações, fotos como evidência (Storage, bucket privado `auditoria-fotos`), planos de ação e relatório em PDF ou por e-mail.
 
 O **cadastro de filiais é único** (Central → Cadastros → Filiais) e todos os módulos usam o mesmo registro.
 
@@ -27,7 +28,7 @@ Para integrar um módulo: crie `modules/<id>/`, a rota `app/<id>/index.tsx` e re
 - **Cronômetros nunca são gravados continuamente no servidor.** O atendimento em andamento fica no aparelho (sobrevive ao fechamento do app) e vai ao servidor uma única vez, ao finalizar.
 - Cada módulo guarda onde o usuário estava (aba, coleta, atendimento) e reabre no mesmo lugar.
 
-Tabelas: `profiles`, `filiais`, `filial_docs` (equipamentos, croqui e dimensionamento em JSONB, um documento por filial), `tm_coletas`, `tm_atendimentos` (etapas em JSONB), `tm_plano`, `app_config` e `service_records` (aferições).
+Tabelas: `profiles`, `filiais`, `filial_docs` (equipamentos, croqui e dimensionamento em JSONB, um documento por filial), `tm_coletas`, `tm_atendimentos` (etapas em JSONB), `tm_plano`, `app_config`, `service_records` (aferições) e `aud_auditorias` (auditorias, com os requisitos em JSONB; fotos no Storage).
 
 ## Login, contas e permissões
 

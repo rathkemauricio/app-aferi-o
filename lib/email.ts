@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 export type PedidoEmail =
   | { acao: 'conta_pendente' }
   | { acao: 'conta_alterada'; user_id: string }
-  | { acao: 'relatorio'; para: string[]; titulo: string; html: string; pdf_base64?: string; nome_arquivo?: string };
+  | { acao: 'relatorio'; modulo?: 'afericoes' | 'auditoria'; para: string[]; titulo: string; html: string; pdf_base64?: string; nome_arquivo?: string };
 
 export type ResultadoEmail = { ok: true } | { ok: false; erro: string };
 
