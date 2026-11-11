@@ -1,26 +1,52 @@
-# Nevoeiro Atendimentos (Expo)
+# Postora (Expo)
 
-Aplicativo móvel para registrar um atendimento por filial e data. O cronômetro de cada etapa usa horários reais, então continua contando corretamente se o app for minimizado ou fechado enquanto a etapa está ativa. Os dados ficam em cache no aparelho e sincronizam com Supabase quando conectado.
+Plataforma de módulos para gestão de postos de combustível, para celular (Android/iOS) e navegador. Depois do login, a central mostra os módulos liberados para a conta:
 
-## Executar no celular
+- **Aferições**: inspeção de bombas e bicos por filial, com histórico, CSV e relatório em PDF.
+- **Tempos e Movimentos**: coletas por filial e data, com atendimentos completos (etapas cronometradas, pausas, etapas opcionais) e atividades individuais; painel, histórico, dimensionamento da equipe, plano de ação e cadastros.
+- **Croqui**: desenho do terreno de cada filial (bombas e combustíveis por bico, ilhas, cobertura, loja, tanques, vias, serviços), com visualização, edição e impressão.
 
-1. Crie um projeto no [Supabase](https://supabase.com/) e execute [`supabase/schema.sql`](supabase/schema.sql) no SQL Editor do projeto.
-2. Em **Authentication → Settings → Password security**, defina mínimo de 8 caracteres e exija números, letras minúsculas e maiúsculas. Essas regras também são verificadas na tela de login. O Supabase aplica as regras do lado do servidor.
-3. Em **Authentication → Users**, crie ou convide os usuários que terão acesso ao app. O app exige login; o schema permite que os usuários autenticados do projeto compartilhem os registros desta filial. Não habilite cadastro público sem rever as políticas RLS.
-4. Copie `.env.example` para `.env` e preencha `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` no painel Supabase. Nunca coloque uma `service_role` key no app.
-5. Instale Node.js 22.13 ou mais recente e o app **Expo Go** no celular.
-6. No terminal, nesta pasta, execute `npm install`.
-7. Execute `npx expo start` e leia o QR code com o Expo Go. O computador e o celular precisam estar na mesma rede.
+O **cadastro de filiais é único** (Central → Cadastros → Filiais) e todos os módulos usam o mesmo registro.
 
-Para gerar um instalador Android/iOS de distribuição, configure uma conta Expo e EAS Build conforme o [guia oficial de builds](https://docs.expo.dev/build/setup/). O Expo Go serve para desenvolvimento e prévia.
+## Estrutura
 
-## Fluxo implementado
+| Pasta | Conteúdo |
+|---|---|
+| `app/` | Rotas (Expo Router): casca com login (`_layout.tsx`), central (`index.tsx`), `filiais/`, `usuarios.tsx` e uma rota por módulo |
+| `modules/` | Código de cada módulo e o catálogo (`registry.ts`) exibido na central |
+| `lib/` | Sessão e papéis (`auth.tsx`), sincronização local-first (`sync.ts`), dados compartilhados (`data.ts`) |
+| `ui/` | Tema, componentes e ícones compartilhados |
+| `prisma/` | Esquema e migrações do banco (Supabase/PostgreSQL) |
 
-- Informe o nome da filial e a data (formato `AAAA-MM-DD`) para abrir um atendimento. É possível registrar vários atendimentos na mesma filial e data.
-- Cronometre abordagem, abastecimento e pagamento; limpeza do para-brisa, calibragem dos pneus e verificação de água e óleo são opcionais.
-- Finalize cada etapa para gravar seu tempo e liberar a próxima.
-- Consulte registros abertos ou concluídos na aba Histórico. Um registro aberto da mesma filial e data é retomado para evitar criar dois ao mesmo tempo.
+Para integrar um módulo: crie `modules/<id>/`, a rota `app/<id>/index.tsx` e registre em `modules/registry.ts`.
 
-Os registros são sincronizados entre os aparelhos autenticados e atualizados via Supabase Realtime. Quando a conexão cai, as alterações ficam no cache local e são enviadas quando o app volta a sincronizar. Faça backup do projeto Supabase conforme a política de operação da empresa.
+## Dados e sincronização
 
-Supabase Auth valida as credenciais, guarda somente hashes bcrypt das senhas e emite os JWTs de sessão; o SDK renova e envia esses tokens nas chamadas ao banco. O app guarda os tokens de sessão no armazenamento seguro do aparelho, e não salva a senha digitada. [Detalhes sobre política e hashing de senhas](https://supabase.com/docs/guides/auth/password-security) e [sessões JWT](https://supabase.com/docs/guides/auth/sessions).
+- Tudo é gravado **primeiro no aparelho** e funciona sem internet. As alterações entram numa fila e são enviadas quando há conexão (só os registros alterados).
+- A leitura é **incremental**: o app busca apenas o que mudou desde a última sincronização (`updated_at`, definido pelo servidor). Exclusões são lógicas (`deleted_at`).
+- **Cronômetros nunca são gravados continuamente no servidor.** O atendimento em andamento fica no aparelho (sobrevive ao fechamento do app) e vai ao servidor uma única vez, ao finalizar.
+- Cada módulo guarda onde o usuário estava (aba, coleta, atendimento) e reabre no mesmo lugar.
+
+Tabelas: `profiles`, `filiais`, `filial_docs` (equipamentos, croqui e dimensionamento em JSONB, um documento por filial), `tm_coletas`, `tm_atendimentos` (etapas em JSONB), `tm_plano`, `app_config` e `service_records` (aferições).
+
+## Login, contas e permissões
+
+- Rotas: `/login` (entrar, criar conta, esqueci a senha), `/redefinir-senha` (link do e-mail e alteração de senha), `/aguardando` (conta ainda não aprovada) e a área logada `(app)`.
+- Toda conta criada no login nasce **bloqueada e sem módulos**. O administrador aprova em Minha conta → Usuários e permissões, escolhendo os módulos de cada conta. Administradores acessam todos os módulos.
+- As permissões valem também no banco (RLS por módulo): sem o módulo liberado, a conta não lê nem grava os dados dele.
+- Em Minha conta (foto no topo da central): foto de perfil, nome, troca de e-mail (com confirmação), troca de senha, tema e sair.
+- No painel do Supabase, em Authentication → URL Configuration → Redirect URLs, cadastre os endereços usados nos links de e-mail: `postora://**` (app instalado), `exp://**` (Expo Go) e a URL do site/`http://localhost:8081/**` (web).
+
+## Executar
+
+1. Copie `.env.example` para `.env` e preencha `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Nunca coloque a chave `service_role` no app. `DATABASE_URL` e `DIRECT_URL` são usadas só pelo Prisma (migrações) e não vão para o app.
+2. `npm install`
+3. Aplique as migrações: `npm run db:migrate` (ver `prisma/README.md`).
+4. `npx expo start` e abra no Expo Go, ou `npx expo start --web`.
+
+Sem as variáveis do Supabase, o app roda em modo local (somente neste aparelho, sem login).
+
+## Importar dados antigos
+
+- **ETM em HTML**: no HTML, Cadastros → Exportar JSON; no app, Tempos e Movimentos → Gestão → Cadastros → Importar do HTML antigo. As filiais são associadas pelo nome (é possível corrigir antes de importar). Importar o mesmo arquivo de novo não duplica.
+- **Croqui em HTML**: no navegador onde o HTML foi usado, console → `copy(localStorage.getItem('croqui-postos'))`; no app, Croqui → Editar → Importar do HTML antigo.

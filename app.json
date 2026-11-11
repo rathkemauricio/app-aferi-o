@@ -1,14 +1,55 @@
 {
   "expo": {
-    "name": "Nevoeiro Atendimentos",
-    "slug": "nevoeiro-atendimentos",
-    "scheme": "nevoeiro-atendimentos",
+    "name": "Postora",
+    "slug": "postora",
+    "scheme": "postora",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": { "supportsTablet": true },
-    "android": { "adaptiveIcon": { "backgroundColor": "#102b46" }, "edgeToEdgeEnabled": true },
-    "plugins": ["expo-router", "expo-secure-store"]
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#04142f"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.mobiletestemauricio.postora"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Postora usa suas fotos para definir a foto de perfil.",
+          "cameraPermission": "O Postora usa a câmera para tirar a foto de perfil."
+        }
+      ]
+    ],
+    "icon": "./assets/icon.png",
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "Postora",
+      "shortName": "Postora",
+      "themeColor": "#04142f",
+      "backgroundColor": "#f5f6f8"
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "2d77110f-dee3-4eaf-9221-68edcfd802e8"
+      }
+    }
   }
 }

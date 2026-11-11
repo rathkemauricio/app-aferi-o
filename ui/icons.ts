@@ -1,0 +1,64 @@
+// Ícones Phosphor carregados um a um (evita colocar os ~1500 ícones do pacote no bundle).
+// require() em vez de import: o TypeScript não tenta checar o código-fonte .tsx da biblioteca.
+/* eslint-disable @typescript-eslint/no-require-imports */
+import type { Icon } from 'phosphor-react-native';
+
+export type { Icon, IconProps } from 'phosphor-react-native';
+
+export const ResetIcon: Icon = require('phosphor-react-native/src/icons/ArrowCounterClockwise').ArrowCounterClockwiseIcon;
+export const ArrowLeftIcon: Icon = require('phosphor-react-native/src/icons/ArrowLeft').ArrowLeftIcon;
+export const CaretRightIcon: Icon = require('phosphor-react-native/src/icons/CaretRight').CaretRightIcon;
+export const CheckIcon: Icon = require('phosphor-react-native/src/icons/Check').CheckIcon;
+export const CheckCircleIcon: Icon = require('phosphor-react-native/src/icons/CheckCircle').CheckCircleIcon;
+export const ClipboardTextIcon: Icon = require('phosphor-react-native/src/icons/ClipboardText').ClipboardTextIcon;
+export const ClockCounterClockwiseIcon: Icon = require('phosphor-react-native/src/icons/ClockCounterClockwise').ClockCounterClockwiseIcon;
+export const CloudCheckIcon: Icon = require('phosphor-react-native/src/icons/CloudCheck').CloudCheckIcon;
+export const CloudSlashIcon: Icon = require('phosphor-react-native/src/icons/CloudSlash').CloudSlashIcon;
+export const DeviceMobileIcon: Icon = require('phosphor-react-native/src/icons/DeviceMobile').DeviceMobileIcon;
+export const DownloadSimpleIcon: Icon = require('phosphor-react-native/src/icons/DownloadSimple').DownloadSimpleIcon;
+export const DropIcon: Icon = require('phosphor-react-native/src/icons/Drop').DropIcon;
+export const EnvelopeIcon: Icon = require('phosphor-react-native/src/icons/Envelope').EnvelopeIcon;
+export const EyeIcon: Icon = require('phosphor-react-native/src/icons/Eye').EyeIcon;
+export const EyeSlashIcon: Icon = require('phosphor-react-native/src/icons/EyeSlash').EyeSlashIcon;
+export const FileCsvIcon: Icon = require('phosphor-react-native/src/icons/FileCsv').FileCsvIcon;
+export const FilePdfIcon: Icon = require('phosphor-react-native/src/icons/FilePdf').FilePdfIcon;
+export const GasPumpIcon: Icon = require('phosphor-react-native/src/icons/GasPump').GasPumpIcon;
+export const HouseIcon: Icon = require('phosphor-react-native/src/icons/House').HouseIcon;
+export const ListChecksIcon: Icon = require('phosphor-react-native/src/icons/ListChecks').ListChecksIcon;
+export const LockSimpleIcon: Icon = require('phosphor-react-native/src/icons/LockSimple').LockSimpleIcon;
+export const MagnifyingGlassIcon: Icon = require('phosphor-react-native/src/icons/MagnifyingGlass').MagnifyingGlassIcon;
+export const MinusIcon: Icon = require('phosphor-react-native/src/icons/Minus').MinusIcon;
+export const PencilSimpleIcon: Icon = require('phosphor-react-native/src/icons/PencilSimple').PencilSimpleIcon;
+export const PlayIcon: Icon = require('phosphor-react-native/src/icons/Play').PlayIcon;
+export const PlusIcon: Icon = require('phosphor-react-native/src/icons/Plus').PlusIcon;
+export const SignOutIcon: Icon = require('phosphor-react-native/src/icons/SignOut').SignOutIcon;
+export const StopIcon: Icon = require('phosphor-react-native/src/icons/Stop').StopIcon;
+export const StorefrontIcon: Icon = require('phosphor-react-native/src/icons/Storefront').StorefrontIcon;
+export const TimerIcon: Icon = require('phosphor-react-native/src/icons/Timer').TimerIcon;
+export const TrashIcon: Icon = require('phosphor-react-native/src/icons/Trash').TrashIcon;
+export const UploadSimpleIcon: Icon = require('phosphor-react-native/src/icons/UploadSimple').UploadSimpleIcon;
+export const WarningCircleIcon: Icon = require('phosphor-react-native/src/icons/WarningCircle').WarningCircleIcon;
+export const XIcon: Icon = require('phosphor-react-native/src/icons/X').XIcon;
+export const XCircleIcon: Icon = require('phosphor-react-native/src/icons/XCircle').XCircleIcon;
+export const CalendarBlankIcon: Icon = require('phosphor-react-native/src/icons/CalendarBlank').CalendarBlankIcon;
+export const ArrowRightIcon: Icon = require('phosphor-react-native/src/icons/ArrowRight').ArrowRightIcon;
+export const MoonIcon: Icon = require('phosphor-react-native/src/icons/Moon').MoonIcon;
+export const SquaresFourIcon: Icon = require('phosphor-react-native/src/icons/SquaresFour').SquaresFourIcon;
+export const SunIcon: Icon = require('phosphor-react-native/src/icons/Sun').SunIcon;
+export const UserCircleIcon: Icon = require('phosphor-react-native/src/icons/UserCircle').UserCircleIcon;
+export const ChartBarIcon: Icon = require('phosphor-react-native/src/icons/ChartBar').ChartBarIcon;
+export const ClockIcon: Icon = require('phosphor-react-native/src/icons/Clock').ClockIcon;
+export const FlagCheckeredIcon: Icon = require('phosphor-react-native/src/icons/FlagCheckered').FlagCheckeredIcon;
+export const GearIcon: Icon = require('phosphor-react-native/src/icons/Gear').GearIcon;
+export const HourglassIcon: Icon = require('phosphor-react-native/src/icons/Hourglass').HourglassIcon;
+export const ListBulletsIcon: Icon = require('phosphor-react-native/src/icons/ListBullets').ListBulletsIcon;
+export const QueueIcon: Icon = require('phosphor-react-native/src/icons/Queue').QueueIcon;
+export const ArrowClockwiseIcon: Icon = require('phosphor-react-native/src/icons/ArrowClockwise').ArrowClockwiseIcon;
+export const ArrowDownIcon: Icon = require('phosphor-react-native/src/icons/ArrowDown').ArrowDownIcon;
+export const ArrowUpIcon: Icon = require('phosphor-react-native/src/icons/ArrowUp').ArrowUpIcon;
+export const ArrowsInIcon: Icon = require('phosphor-react-native/src/icons/ArrowsIn').ArrowsInIcon;
+export const ArrowsOutIcon: Icon = require('phosphor-react-native/src/icons/ArrowsOut').ArrowsOutIcon;
+export const CopySimpleIcon: Icon = require('phosphor-react-native/src/icons/CopySimple').CopySimpleIcon;
+export const GridFourIcon: Icon = require('phosphor-react-native/src/icons/GridFour').GridFourIcon;
+export const MagnifyingGlassMinusIcon: Icon = require('phosphor-react-native/src/icons/MagnifyingGlassMinus').MagnifyingGlassMinusIcon;
+export const MagnifyingGlassPlusIcon: Icon = require('phosphor-react-native/src/icons/MagnifyingGlassPlus').MagnifyingGlassPlusIcon;

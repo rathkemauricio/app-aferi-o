@@ -1,3 +1,5 @@
+-- DESATUALIZADO: o esquema oficial está em prisma/migrations (aplique com `npm run db:migrate`).
+-- Este arquivo descreve apenas a primeira versão da tabela service_records e não deve ser executado.
 -- Execute no SQL Editor do seu projeto Supabase.
 create table if not exists public.service_records (
   id text primary key,

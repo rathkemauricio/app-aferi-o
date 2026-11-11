@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ServiceRecord {
+  id          String   @id
+  branch      String
+  serviceDate DateTime @map("service_date") @db.Date
+  status      String
+  payload     Json
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([branch, serviceDate(sort: Desc)], map: "service_records_branch_date_idx")
+  @@map("service_records")
+}
+
+
+// ---- Plataforma de módulos (migração 20261110120000_plataforma_modulos) ----
+// Regras de acesso (RLS), gatilhos e índices parciais estão no SQL da migração.
+
+model Profile {
+  userId    String   @id @map("user_id") @db.Uuid
+  email     String
+  nome      String   @default("")
+  papel     String   @default("usuario")
+  ativo     Boolean  @default(false)
+  modulos   String[] @default([])
+  avatar    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("profiles")
+}
+
+model Filial {
+  id        String    @id
+  codigo    String
+  nome      String
+  cidade    String    @default("")
+  uf        String    @default("RS")
+  bandeira  String    @default("branca")
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  docs    FilialDoc[]
+  coletas TmColeta[]
+  plano   TmPlano[]
+
+  @@map("filiais")
+}
+
+model FilialDoc {
+  id        String    @id
+  filialId  String    @map("filial_id")
+  tipo      String
+  payload   Json
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  filial    Filial    @relation(fields: [filialId], references: [id])
+
+  @@unique([filialId, tipo])
+  @@map("filial_docs")
+}
+
+model TmColeta {
+  id           String          @id
+  filialId     String          @map("filial_id")
+  data         DateTime        @db.Date
+  setor        String
+  funcao       String          @default("")
+  turno        String          @default("")
+  demanda      String          @default("")
+  auditor      String          @default("")
+  criadoPor    String?         @map("criado_por") @db.Uuid
+  updatedAt    DateTime        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?       @map("deleted_at") @db.Timestamptz(6)
+  filial       Filial          @relation(fields: [filialId], references: [id])
+  atendimentos TmAtendimento[]
+
+  @@index([filialId, data], map: "tm_coletas_filial_data_idx")
+  @@map("tm_coletas")
+}
+
+model TmAtendimento {
+  id            String    @id
+  coletaId      String    @map("coleta_id")
+  tipo          String
+  funcionario   String    @default("")
+  veiculo       String    @default("")
+  inicio        DateTime? @db.Timestamptz(6)
+  fim           DateTime? @db.Timestamptz(6)
+  duracaoS      Decimal   @default(0) @map("duracao_s") @db.Decimal(10, 1)
+  etapas        Json      @default("[]")
+  volume        Decimal?
+  deslocamentos Int?
+  obs           String    @default("")
+  origem        String    @default("app")
+  criadoPor     String?   @map("criado_por") @db.Uuid
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  coleta        TmColeta  @relation(fields: [coletaId], references: [id])
+
+  @@index([coletaId], map: "tm_atendimentos_coleta_idx")
+  @@index([updatedAt], map: "tm_atendimentos_updated_idx")
+  @@map("tm_atendimentos")
+}
+
+model TmPlano {
+  id          String    @id
+  filialId    String?   @map("filial_id")
+  problema    String
+  causa       String    @default("")
+  acao        String    @default("")
+  responsavel String    @default("")
+  prazo       DateTime? @db.Date
+  indicador   String    @default("")
+  beneficioH  Decimal   @default(0) @map("beneficio_h")
+  status      String    @default("Aberto")
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  filial      Filial?   @relation(fields: [filialId], references: [id])
+
+  @@map("tm_plano")
+}
+
+model AppConfig {
+  id        String    @id
+  valor     Json
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("app_config")
+}
