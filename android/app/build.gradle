@@ -89,6 +89,11 @@ android {
 
     namespace 'com.mobiletestemauricio.postora'
     defaultConfig {
+        externalNativeBuild {
+            cmake {
+                arguments "-DCMAKE_OBJECT_PATH_MAX=257"
+            }
+        }
         applicationId 'com.mobiletestemauricio.postora'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion

@@ -15,7 +15,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#04142f"
       },
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
@@ -31,7 +30,8 @@
           "photosPermission": "O Postora usa suas fotos para definir a foto de perfil.",
           "cameraPermission": "O Postora usa a câmera para tirar a foto de perfil."
         }
-      ]
+      ],
+      "./plugins/withCmakeObjectPathMax.js"
     ],
     "icon": "./assets/icon.png",
     "web": {

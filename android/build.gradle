@@ -21,5 +21,12 @@ allprojects {
   }
 }
 
+// Windows path-length workaround for native library builds (plugins/withCmakeObjectPathMax.js)
+subprojects { sub ->
+  sub.plugins.withId('com.android.library') {
+    sub.android.defaultConfig.externalNativeBuild.cmake.arguments('-DCMAKE_OBJECT_PATH_MAX=250')
+  }
+}
+
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
