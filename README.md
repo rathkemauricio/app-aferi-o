@@ -6,6 +6,8 @@ Plataforma de módulos para gestão de postos de combustível, para celular (And
 - **Tempos e Movimentos**: coletas por filial e data, com atendimentos completos (etapas cronometradas, pausas, etapas opcionais) e atividades individuais; painel, histórico, dimensionamento da equipe, plano de ação e cadastros.
 - **Croqui**: desenho do terreno de cada filial (bombas e combustíveis por bico, ilhas, cobertura, loja, tanques, vias, serviços), com visualização, edição e impressão.
 - **Auditoria**: checklist de auditoria operacional (Sistema de Gestão Integrada) por filial, com status por requisito (C, OB, OM, NC, PP, NA), observações, fotos como evidência (Storage, bucket privado `auditoria-fotos`), planos de ação e relatório em PDF ou por e-mail.
+- **Mapa de Risco** (Prevenção de Perdas): matriz de risco 1–5 por unidade (Produtos, Combustíveis, Caixa, Pessoas, Histórico), frequência e próxima visita calculadas, agenda com prioridade automática, produtividade da visita, planejamento em lote com checklist impresso, histórico de notas de auditoria e Programa Filial Destaque (pontuação 0–100, selos Ouro/Prata/Bronze, ranking e certificado em PDF). Evidências no Storage (bucket privado `riscos-evidencias`). Importa o backup JSON do HTML antigo.
+- **Inventários**: base histórica de inventários do sistema legado por unidade, com sobras, faltas, resultado por categoria, inativação de linhas, lançamento de inventários e categorias novos e exportação CSV.
 
 O **cadastro de filiais é único** (Central → Cadastros → Filiais) e todos os módulos usam o mesmo registro.
 
@@ -28,7 +30,9 @@ Para integrar um módulo: crie `modules/<id>/`, a rota `app/<id>/index.tsx` e re
 - **Cronômetros nunca são gravados continuamente no servidor.** O atendimento em andamento fica no aparelho (sobrevive ao fechamento do app) e vai ao servidor uma única vez, ao finalizar.
 - Cada módulo guarda onde o usuário estava (aba, coleta, atendimento) e reabre no mesmo lugar.
 
-Tabelas: `profiles`, `filiais`, `filial_docs` (equipamentos, croqui e dimensionamento em JSONB, um documento por filial), `tm_coletas`, `tm_atendimentos` (etapas em JSONB), `tm_plano`, `app_config`, `service_records` (aferições) e `aud_auditorias` (auditorias, com os requisitos em JSONB; fotos no Storage).
+Tabelas: `profiles`, `filiais`, `filial_docs` (equipamentos, croqui e dimensionamento em JSONB, um documento por filial), `tm_coletas`, `tm_atendimentos` (etapas em JSONB), `tm_plano`, `app_config`, `service_records` (aferições), `aud_auditorias` (auditorias, com os requisitos em JSONB; fotos no Storage), `rm_unidades`, `rm_pontuacoes`, `rm_atividades`, `rm_visitas` (Mapa de Risco) e `inv_inventarios`, `inv_categorias` (Inventários; as categorias são lidas do servidor ao abrir o inventário).
+- Unidades vindas dos sistemas antigos ("NEVOEIRO 01", "2 Pista (Santa Cruz)", "Filial 10") são ligadas à filial do cadastro pelo número; no Mapa de Risco também é possível escolher a filial na edição da unidade.
+- A leitura incremental usa cursor composto (`updated_at`, `id`), então importações grandes gravadas na mesma transação não perdem linhas entre páginas.
 
 ## Login, contas e permissões
 
@@ -65,6 +69,17 @@ Observações: as Edge Functions bloqueiam SMTP nas portas 25 e 587, por isso o 
 4. `npx expo start` e abra no Expo Go, ou `npx expo start --web`.
 
 Sem as variáveis do Supabase, o app roda em modo local (somente neste aparelho, sem login).
+
+## Publicar a versão web na Vercel
+
+O app web pode ser publicado como site estático. A configuração em `vercel.json` exporta o Expo para `dist` e encaminha rotas do app, como `/login` e `/redefinir-senha`, para a aplicação.
+
+1. Importe o repositório na Vercel. A configuração de build já está no projeto (`npm ci`, `npm run build:web`, saída `dist`).
+2. Em **Project Settings → Environment Variables**, cadastre `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` para Production e Preview. Use a URL do projeto Supabase e a chave publishable; nunca cadastre a chave `service_role` no app.
+3. Faça o deploy. Depois, em Supabase → **Authentication → URL Configuration**, defina a URL de produção da Vercel como **Site URL** e permita os endereços de callback do site (`https://SEU-DOMINIO/**`), além dos endereços locais que já usa. Isso permite que os links de confirmação e redefinição de senha retornem ao app web.
+4. Após cadastrar ou alterar variáveis na Vercel, faça um novo deploy para incorporá-las ao bundle web.
+
+As permissões dos dados continuam sendo controladas pela autenticação e pelas políticas RLS do Supabase; a chave publishable é pública por projeto.
 
 ## Importar dados antigos
 

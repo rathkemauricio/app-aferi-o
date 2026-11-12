@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useContext, useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
+import { DesktopShell } from '../../components/DesktopShell';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { flushAll, setSyncEnabled, syncAll } from '../../lib/sync';
 import { ThemeContext } from '../../ui/theme';
@@ -16,5 +17,6 @@ export default function AppLayout() {
     const timer = setInterval(() => { void flushAll(); }, 60_000);
     return () => { app.remove(); clearInterval(timer); void flushAll(); setSyncEnabled(false); };
   }, []);
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />;
+  const stack = <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />;
+  return Platform.OS === 'web' ? <DesktopShell>{stack}</DesktopShell> : stack;
 }

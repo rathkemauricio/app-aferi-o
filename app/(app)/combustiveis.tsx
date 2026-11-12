@@ -7,7 +7,7 @@ import { type Combustivel, CORES_COMBUSTIVEL, salvarCombustiveis, useCombustivei
 import { novoId } from '../../lib/data';
 import { ArrowLeftIcon, CheckIcon, DropIcon, PencilSimpleIcon, PlusIcon } from '../../ui/icons';
 import { Button, Card, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
-import { createTypography, space, ThemeContext } from '../../ui/theme';
+import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 
 type Form = { id: string | null; nome: string; cor: string };
 
@@ -57,7 +57,7 @@ export default function CombustiveisScreen() {
         </View>
         {isAdmin ? <Button title="Novo" icon={PlusIcon} size="sm" onPress={() => setForm({ id: null, nome: '', cor: CORES_COMBUSTIVEL[6] })} /> : null}
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: 640, alignSelf: 'center', paddingBottom: 56 }}>
+      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }}>
         <SectionHeader title={`Ativos (${ativos.length})`} />
         <Card style={{ padding: space.xs, gap: 0 }}>{ativos.map(linha)}</Card>
         {inativos.length ? <>

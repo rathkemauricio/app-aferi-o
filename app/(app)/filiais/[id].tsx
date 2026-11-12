@@ -8,7 +8,7 @@ import { CroquiCanvas, useCatalogoCroqui } from '../../../modules/croqui/Canvas'
 import { type CroquiDoc, PALETA_CLARA, PALETA_ESCURA, resumo } from '../../../modules/croqui/model';
 import { ArrowLeftIcon, CheckIcon, DropIcon, GasPumpIcon, PencilSimpleIcon, StorefrontIcon, TrashIcon } from '../../../ui/icons';
 import { Button, Card, confirmAction, EmptyState, IconButton, notify, SectionHeader, StatusPill } from '../../../ui/kit';
-import { createTypography, space, ThemeContext } from '../../../ui/theme';
+import { createTypography, pageMaxWidth, space, ThemeContext } from '../../../ui/theme';
 import { FilialFields, type FilialForm, validarFilial } from '../../../components/FilialForm';
 
 type Pump = { id: string; number: string; nozzles: { id: string; number: string; fuel: string }[] };
@@ -54,7 +54,7 @@ export default function FilialScreen() {
           <Text style={t.caption}>Cadastro da filial</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: 760, alignSelf: 'center', paddingBottom: 56 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center', paddingBottom: 56 }} keyboardShouldPersistTaps="handled">
         {!filial || !form ? (
           loaded ? <EmptyState icon={StorefrontIcon} title="Filial não encontrada" text="Ela pode ter sido excluída." action={{ label: 'Voltar', onPress: voltar }} /> : null
         ) : <>

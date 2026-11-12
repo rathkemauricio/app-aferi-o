@@ -6,7 +6,7 @@ import { AppState, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet,
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeftIcon, CalendarBlankIcon, CaretRightIcon, CheckCircleIcon, CheckIcon, ClipboardTextIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, DownloadSimpleIcon, DropIcon, EnvelopeIcon, FileCsvIcon, FilePdfIcon, GasPumpIcon, HouseIcon, type Icon, ListChecksIcon, MagnifyingGlassIcon, MinusIcon, PencilSimpleIcon, PlayIcon, PlusIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, XCircleIcon, XIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, IconTile, ListRow, notify, SectionHeader, Sheet, Skeleton, Stat, StatusPill, Steps, type Tone } from '../../ui/kit';
-import { createTypography, radius, space, ThemeContext, type ThemeColors, tint } from '../../ui/theme';
+import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors, tint } from '../../ui/theme';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
@@ -872,7 +872,7 @@ const createScreenStyles = (colors: ThemeColors) => StyleSheet.create({
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 10, backgroundColor: colors.warningSoft },
   bannerText: { flex: 1, fontSize: 12.5, color: colors.warning },
 
-  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: 720, alignSelf: 'center' },
+  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: pageMaxWidth(720), alignSelf: 'center' },
   pageHead: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md, marginBottom: space.xs },
 
   cta: { flexDirection: 'row', alignItems: 'center', gap: space.md },

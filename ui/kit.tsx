@@ -24,7 +24,7 @@ export function Button({ title, onPress, variant = 'primary', icon: IconCmp, dis
   title: string; onPress: () => void; variant?: ButtonVariant; icon?: Icon; disabled?: boolean; size?: 'md' | 'sm'; style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useContext(ThemeContext);
-  const fg = variant === 'primary' ? '#fff' : variant === 'danger' ? colors.danger : variant === 'ghost' ? colors.accentText : colors.text;
+  const fg = variant === 'primary' ? colors.primaryText : variant === 'danger' ? colors.danger : variant === 'ghost' ? colors.accentText : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
@@ -149,7 +149,8 @@ export function ChoiceChips({ value, options, onChange, toneFor }: { value: stri
     <View style={k.chips}>
       {options.map(option => {
         const active = value === option;
-        const c = toneColors[toneFor?.(option) ?? 'accent'];
+        const tone = toneFor?.(option) ?? 'accent';
+        const c = tone === 'accent' ? { bg: colors.accentSoft, fg: colors.accentText } : toneColors[tone];
         return (
           <Pressable key={option} onPress={() => onChange(option)} accessibilityRole="button" accessibilityState={{ selected: active }}
             style={({ pressed }) => [k.chip, { backgroundColor: colors.surface, borderColor: colors.borderStrong }, active && { backgroundColor: c.bg, borderColor: c.fg }, pressed && k.pressed]}>
@@ -261,7 +262,7 @@ const k = StyleSheet.create({
   pressed: { transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.45 },
 
-  btn: { minHeight: 46, paddingHorizontal: space.lg, borderRadius: radius.control, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
+  btn: { minHeight: 46, paddingHorizontal: space.lg, borderRadius: Platform.OS === 'web' ? radius.pill : radius.control, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
   btnSm: { minHeight: 36, paddingHorizontal: space.md },
   btn_primary: { backgroundColor: color.accent },
   btn_secondary: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.borderStrong },
@@ -304,7 +305,7 @@ const k = StyleSheet.create({
   stepText: { fontSize: 12, color: color.textFaint },
 
   backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(20, 25, 34, 0.42)', justifyContent: 'flex-end' },
-  sheet: { maxHeight: '90%', width: '100%', maxWidth: 640, alignSelf: 'center', backgroundColor: color.bg, borderTopLeftRadius: 22, borderTopRightRadius: 22, ...shadow.sheet },
+  sheet: { maxHeight: '90%', width: '100%', maxWidth: 640, alignSelf: 'center', backgroundColor: color.bg, borderTopLeftRadius: Platform.OS === 'web' ? radius.card : 22, borderTopRightRadius: Platform.OS === 'web' ? radius.card : 22, ...shadow.sheet },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: color.borderStrong, marginTop: 8 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs },
   sheetBody: { padding: space.lg, paddingTop: space.sm, gap: space.md },

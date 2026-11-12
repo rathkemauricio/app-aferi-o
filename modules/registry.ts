@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 import { useTemposAviso } from './tempos/aviso';
-import { ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, StorefrontIcon } from '../ui/icons';
+import { ArchiveIcon, ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, ShieldWarningIcon, StorefrontIcon } from '../ui/icons';
 import type { Tint } from '../ui/theme';
 
 // Catálogo de módulos exibido na tela inicial.
@@ -49,5 +49,21 @@ export const MODULES: AppModule[] = [
     icon: ClipboardTextIcon,
     tint: 'amber',
     route: '/auditoria',
+  },
+  {
+    id: 'riscos',
+    name: 'Mapa de Risco',
+    description: 'Prevenção de perdas: risco por unidade, agenda de visitas, produtividade, planejamento e Programa Filial Destaque.',
+    icon: ShieldWarningIcon,
+    tint: 'rose',
+    route: '/riscos',
+  },
+  {
+    id: 'inventarios',
+    name: 'Inventários',
+    description: 'Base histórica de inventários por unidade, com sobras, faltas e resultado por categoria.',
+    icon: ArchiveIcon,
+    tint: 'slate',
+    route: '/inventarios',
   },
 ];

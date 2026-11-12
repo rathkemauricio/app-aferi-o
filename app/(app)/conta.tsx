@@ -10,7 +10,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
 import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
-import { createTypography, space, ThemeContext } from '../../ui/theme';
+import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 
 /** Informações da conta: foto, nome, e-mail, senha, módulos liberados, tema e saída. */
 export default function ContaScreen() {
@@ -63,7 +63,7 @@ export default function ContaScreen() {
         <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
         <Text style={{ flex: 1, fontSize: 15.5, fontWeight: '800', color: colors.text }}>Minha conta</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: 640, alignSelf: 'center', paddingBottom: 56 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }} keyboardShouldPersistTaps="handled">
         <Card style={{ alignItems: 'center', gap: space.sm, paddingVertical: space.xl }}>
           <Pressable onPress={() => isSupabaseConfigured && setFoto(true)} accessibilityRole="button" accessibilityLabel="Alterar foto de perfil">
             <Avatar uri={avatar} nome={nome || userEmail} size={88} />

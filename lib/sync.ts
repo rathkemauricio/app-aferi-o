@@ -14,7 +14,7 @@ import { supabase } from './supabase';
 export type SyncRow = { id: string; updated_at?: string; deleted_at?: string | null };
 export type SyncStatus = 'local' | 'idle' | 'syncing' | 'ok' | 'error';
 
-type Persisted<T> = { items: T[]; cursor: string | null; outbox: T[] };
+type Persisted<T> = { items: T[]; cursor: string | null; cursorId?: string | null; outbox: T[] };
 type Options = {
   table: string;
   storageKey: string;
@@ -32,6 +32,8 @@ export class Collection<T extends SyncRow> {
   private items = new Map<string, T>();
   private outbox = new Map<string, T>();
   private cursor: string | null = null;
+  /** Desempate do cursor: várias linhas gravadas na mesma transação têm o mesmo updated_at. */
+  private cursorId: string | null = null;
   private listeners = new Set<() => void>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private pulling: Promise<void> | null = null;
@@ -68,6 +70,7 @@ export class Collection<T extends SyncRow> {
         p.items.forEach(i => this.items.set(i.id, i));
         p.outbox.forEach(i => this.outbox.set(i.id, i));
         this.cursor = p.cursor;
+        this.cursorId = p.cursorId ?? null;
       }
     } catch { /* cache corrompido: começa vazio e a leitura do servidor repõe */ }
     this.loaded = true;
@@ -75,7 +78,7 @@ export class Collection<T extends SyncRow> {
   }
   whenLoaded() { return this.loading; }
   private save() {
-    const p: Persisted<T> = { items: [...this.items.values()], cursor: this.cursor, outbox: [...this.outbox.values()] };
+    const p: Persisted<T> = { items: [...this.items.values()], cursor: this.cursor, cursorId: this.cursorId, outbox: [...this.outbox.values()] };
     void AsyncStorage.setItem(this.opts.storageKey, JSON.stringify(p)).catch(() => undefined);
   }
 
@@ -139,8 +142,10 @@ export class Collection<T extends SyncRow> {
     this.setStatus('syncing');
     try {
       for (;;) {
-        let q = supabase.from(this.opts.table).select('*').order('updated_at', { ascending: true }).limit(PAGE);
-        if (this.cursor) q = q.gt('updated_at', this.cursor);
+        // Ordem (updated_at, id) com cursor composto: nenhuma linha se perde entre páginas, mesmo com horários iguais.
+        let q = supabase.from(this.opts.table).select('*').order('updated_at', { ascending: true }).order('id', { ascending: true }).limit(PAGE);
+        if (this.cursor && this.cursorId) q = q.or(`updated_at.gt."${this.cursor}",and(updated_at.eq."${this.cursor}",id.gt."${this.cursorId}")`);
+        else if (this.cursor) q = q.gt('updated_at', this.cursor);
         if (this.opts.filter) q = this.opts.filter(q);
         const { data, error } = await q;
         if (error) throw error;
@@ -149,7 +154,7 @@ export class Collection<T extends SyncRow> {
           if (this.outbox.has(r.id)) return; // alteração local pendente tem prioridade
           if (r.deleted_at) this.items.delete(r.id); else this.items.set(r.id, r);
         });
-        if (rows.length) this.cursor = rows[rows.length - 1].updated_at ?? this.cursor;
+        if (rows.length) { const ult = rows[rows.length - 1]; this.cursor = ult.updated_at ?? this.cursor; this.cursorId = ult.id; }
         if (rows.length < PAGE) break;
       }
       this.pulledOnce = true;

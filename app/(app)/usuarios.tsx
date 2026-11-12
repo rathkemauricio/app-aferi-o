@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
 import { ArrowLeftIcon, CheckIcon, LockSimpleIcon, MagnifyingGlassIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, StatusPill } from '../../ui/kit';
-import { createTypography, radius, space, ThemeContext } from '../../ui/theme';
+import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 
 type Perfil = { user_id: string; email: string; nome: string; avatar: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; created_at: string };
 
@@ -113,7 +113,7 @@ export default function UsuariosScreen() {
           <Text style={t.caption}>Contas novas só acessam depois da sua aprovação</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: 760, alignSelf: 'center', paddingBottom: 56 }}
+      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center', paddingBottom: 56 }}
         refreshControl={<RefreshControl refreshing={atualizando} onRefresh={() => { setAtualizando(true); void carregar().finally(() => setAtualizando(false)); }} />}>
         {!isAdmin ? <EmptyState icon={LockSimpleIcon} title="Acesso restrito" text="Somente o administrador gerencia usuários." />
           : erro ? <EmptyState icon={UserCircleIcon} title="Sem conexão" text={erro} action={{ label: 'Tentar de novo', onPress: () => void carregar() }} />

@@ -14,7 +14,7 @@ import {
   ImagesIcon, MagnifyingGlassIcon, PlusIcon, ResetIcon, SealCheckIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill, type Tone } from '../../ui/kit';
-import { createTypography, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import {
   type Auditoria, contar, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, novosItens, PEDE_ACAO, relatorioHtml, ROTULO, ROTULO_CURTO, STATUS,
   type StatusReq, uid,
@@ -440,7 +440,7 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
   brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#c17a13', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text },
-  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: 900, alignSelf: 'center' },
+  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: pageMaxWidth(900), alignSelf: 'center' },
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   listBox: { borderWidth: 1, borderColor: c.border, borderRadius: radius.control, overflow: 'hidden', maxHeight: 260 },

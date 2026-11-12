@@ -7,7 +7,7 @@ import { type Bandeira, CORES_BANDEIRA, salvarBandeiras, useBandeiras } from '..
 import { novoId, useFiliais } from '../../lib/data';
 import { ArrowLeftIcon, CheckIcon, PencilSimpleIcon, PlusIcon } from '../../ui/icons';
 import { Button, Card, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
-import { createTypography, space, ThemeContext } from '../../ui/theme';
+import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 
 type Form = { id: string | null; nome: string; cor: string; corTexto: string };
 
@@ -64,7 +64,7 @@ export default function BandeirasScreen() {
         </View>
         {isAdmin ? <Button title="Nova" icon={PlusIcon} size="sm" onPress={() => setForm({ id: null, nome: '', cor: '#0891b2', corTexto: '#ffffff' })} /> : null}
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: 640, alignSelf: 'center', paddingBottom: 56 }}>
+      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }}>
         <SectionHeader title={`Bandeiras (${lista.length})`} />
         <Card style={{ padding: space.xs, gap: 0 }}>
           {lista.map((b, i) => (

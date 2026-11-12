@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { createTypography, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { type Atividade, num } from './model';
 
 /** Cores e estilos do tema atual, prontos para uso nas telas do módulo. */
@@ -80,7 +80,7 @@ export const createStyles = (c: ThemeColors) => StyleSheet.create({
   group: { gap: space.sm },
   alignStart: { alignSelf: 'flex-start', marginLeft: -space.sm },
   pressed: { transform: [{ scale: 0.98 }] },
-  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: 760, alignSelf: 'center', gap: space.md },
+  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center', gap: space.md },
   pageHead: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },
   listCard: { padding: space.xs, gap: 0 },
   divided: { borderTopWidth: 1, borderTopColor: c.border, borderRadius: 0 },

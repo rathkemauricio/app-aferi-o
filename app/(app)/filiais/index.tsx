@@ -9,7 +9,7 @@ import { useCollection } from '../../../lib/sync';
 import { ArrowLeftIcon, CheckIcon, MagnifyingGlassIcon, PlusIcon, StorefrontIcon } from '../../../ui/icons';
 import { FilialFields, type FilialForm, filialVazia, validarFilial } from '../../../components/FilialForm';
 import { Button, Card, EmptyState, Field, IconButton, ListRow, notify, Sheet, StatusPill } from '../../../ui/kit';
-import { createTypography, space, ThemeContext } from '../../../ui/theme';
+import { createTypography, pageMaxWidth, space, ThemeContext } from '../../../ui/theme';
 
 export default function FiliaisScreen() {
   const router = useRouter();
@@ -45,7 +45,7 @@ export default function FiliaisScreen() {
         </View>
         {isAdmin ? <Button title="Nova filial" icon={PlusIcon} size="sm" onPress={() => setNova(filialVazia())} /> : null}
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: 760, alignSelf: 'center', paddingBottom: 56 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center', paddingBottom: 56 }} keyboardShouldPersistTaps="handled">
         <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Código, nome ou cidade" />
         {lista.length ? (
           <Card style={{ padding: space.xs, gap: 0 }}>

@@ -13,7 +13,7 @@ import {
   GasPumpIcon, GridFourIcon, MagnifyingGlassIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, PencilSimpleIcon, ResetIcon, StorefrontIcon, TrashIcon, WarningCircleIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
-import { createTypography, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { CroquiCanvas, IconeElemento, type Movimento, useCatalogoCroqui } from './Canvas';
 import {
   type BombaCadastro, clamp, croquiSvg, type CroquiDoc, elementosDoGrupo, espelharBombas, filhosDaIlha, fuelOf, girarPonto, GRUPOS, iconSvg, type Item, lerCroquiAntigo, modeloBasico,
@@ -408,7 +408,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   group: { gap: space.sm },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
   title: { fontSize: 15.5, fontWeight: '800', color: c.text },
-  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: 1100, alignSelf: 'center', gap: space.md },
+  content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: pageMaxWidth(1100), alignSelf: 'center', gap: space.md },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
   listCard: { padding: space.xs, gap: 0 },
   divided: { borderTopWidth: 1, borderTopColor: c.border, borderRadius: 0 },
