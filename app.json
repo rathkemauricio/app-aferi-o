@@ -3,7 +3,7 @@
     "name": "Postora",
     "slug": "postora",
     "scheme": "postora",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -19,7 +19,7 @@
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.mobiletestemauricio.postora",
-      "versionCode": 2
+      "versionCode": 3
     },
     "plugins": [
       "expo-router",

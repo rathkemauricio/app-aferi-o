@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Animated,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -356,7 +355,7 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
-      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={s.flex}>
         <ScrollView contentContainerStyle={[s.scroll, wide && s.scrollWide]} keyboardShouldPersistTaps="handled">
           <View style={[s.card, wide ? s.cardWide : s.cardCompact]}>
             <View style={[s.artPanel, wide ? s.artPanelWide : s.artPanelCompact]}>
@@ -375,7 +374,7 @@ export default function AuthScreen() {
             {form}
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

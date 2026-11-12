@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthInput, C, isStrongPassword, PasswordStrength, traduzirErro } from '../components/AuthScreen';
 import { supabase } from '../lib/supabase';
@@ -75,7 +75,7 @@ export default function RedefinirSenha() {
 
   return (
     <SafeAreaView style={st.safe}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={st.scroll} keyboardShouldPersistTaps="handled">
           <View style={st.card}>
             <View style={st.icon}><LockSimpleIcon size={26} color={C.accent} weight="duotone" /></View>
@@ -109,7 +109,7 @@ export default function RedefinirSenha() {
             </>}
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

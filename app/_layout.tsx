@@ -1,10 +1,11 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useContext } from 'react';
-import { ActivityIndicator, Platform, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { SheetHost } from '../ui/kit';
 import { ThemeContext, ThemeProvider } from '../ui/theme';
 
 // Evita que o navegador trate a página como inglês e ofereça/aplique tradução automática.
@@ -52,11 +53,19 @@ function Shell() {
 
 export default function RootLayout() {
   // GestureHandlerRootView: necessário para os gestos (ex.: deslizar atividade em Tempos e Movimentos).
+  // KeyboardAvoidingView global: no Android (edge-to-edge, obrigatório no RN atual) a janela não encolhe sozinha
+  // quando o teclado abre. Aqui o app inteiro ganha um espaço do tamanho do teclado embaixo, então as telas encolhem,
+  // a rolagem continua funcionando e a ScrollView leva o campo em foco para cima do teclado.
+  // SheetHost: desenha as janelas (Sheet) dentro dessa área, para que elas também subam com o teclado.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <AuthProvider>
-          <Shell />
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+            <SheetHost>
+              <Shell />
+            </SheetHost>
+          </KeyboardAvoidingView>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

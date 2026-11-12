@@ -1,5 +1,5 @@
-import { type ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View, type ViewStyle, type StyleProp } from 'react-native';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View, type ViewStyle, type StyleProp } from 'react-native';
 import { CaretRightIcon, XIcon, type Icon } from './icons';
 import { color, radius, shadow, space, ThemeContext, tint as tints, type Tint, type as t } from './theme';
 
@@ -213,7 +213,58 @@ export function Steps({ steps, current }: { steps: string[]; current: number }) 
   );
 }
 
-export function Sheet({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+/*
+ * Sheet (janela que sobe de baixo).
+ * No celular ela NÃO usa <Modal>: no Android (edge-to-edge) o Modal é outra janela, que não encolhe com o teclado,
+ * então os campos ficavam escondidos atrás dele. Em vez disso, a janela é desenhada pelo <SheetHost> na raiz do app,
+ * dentro do KeyboardAvoidingView global — assim ela sobe junto com o teclado e a rolagem leva o campo em foco à vista.
+ * Na web continua usando Modal.
+ */
+type SheetProps = { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode };
+type SheetHostApi = { set: (id: string, node: ReactNode) => void; remove: (id: string) => void };
+const SheetHostContext = createContext<SheetHostApi | null>(null);
+
+export function SheetHost({ children }: { children: ReactNode }) {
+  const [sheets, setSheets] = useState<[string, ReactNode][]>([]);
+  const set = useCallback((id: string, node: ReactNode) => setSheets(list => {
+    const i = list.findIndex(([k]) => k === id);
+    if (i < 0) return [...list, [id, node]];
+    const next = list.slice(); next[i] = [id, node]; return next;
+  }), []);
+  const remove = useCallback((id: string) => setSheets(list => list.filter(([k]) => k !== id)), []);
+  const api = useMemo(() => ({ set, remove }), [set, remove]);
+  return (
+    <SheetHostContext.Provider value={api}>
+      {children}
+      {sheets.map(([id, node]) => <View key={id} style={StyleSheet.absoluteFill}>{node}</View>)}
+    </SheetHostContext.Provider>
+  );
+}
+
+export function Sheet(props: SheetProps) {
+  const host = useContext(SheetHostContext);
+  const id = useId();
+  const usarHost = Platform.OS !== 'web' && !!host;
+  // Atualiza o conteúdo desenhado no host a cada renderização (os campos continuam controlados pela tela).
+  useLayoutEffect(() => { if (usarHost) host!.set(id, <SheetView {...props} />); });
+  useLayoutEffect(() => (usarHost ? () => host!.remove(id) : undefined), [usarHost, host, id]);
+  // Botão "voltar" do Android fecha a janela (o Modal fazia isso via onRequestClose).
+  const onClose = useRef(props.onClose); onClose.current = props.onClose;
+  useEffect(() => {
+    if (!usarHost) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onClose.current(); return true; });
+    return () => sub.remove();
+  }, [usarHost]);
+  if (usarHost) return null;
+  // Modal garante que a janela cubra a tela inteira mesmo quando é declarada dentro de uma área com rolagem.
+  return (
+    <Modal transparent visible animationType="none" onRequestClose={props.onClose} statusBarTranslucent>
+      <SheetView {...props} />
+    </Modal>
+  );
+}
+
+function SheetView({ title, onClose, children, footer }: SheetProps) {
   const { colors } = useContext(ThemeContext);
   const y = useRef(new Animated.Value(40)).current;
   const o = useRef(new Animated.Value(0)).current;
@@ -223,9 +274,7 @@ export function Sheet({ title, onClose, children, footer }: { title: string; onC
       Animated.spring(y, { toValue: 0, damping: 22, stiffness: 260, useNativeDriver: Platform.OS !== 'web' }),
     ]).start();
   }, [o, y]);
-  // Modal garante que a janela cubra a tela inteira mesmo quando é declarada dentro de uma área com rolagem.
   return (
-    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
     <Animated.View style={[k.backdrop, { opacity: o }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar" />
       <Animated.View style={[k.sheet, { backgroundColor: colors.bg, transform: [{ translateY: y }] }]}>
@@ -234,11 +283,10 @@ export function Sheet({ title, onClose, children, footer }: { title: string; onC
           <Text style={[t.section, k.flex, { color: colors.text }]}>{title}</Text>
           <IconButton icon={XIcon} label="Fechar" onPress={onClose} />
         </View>
-        <ScrollView contentContainerStyle={k.sheetBody} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+        <ScrollView contentContainerStyle={k.sheetBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="none">{children}</ScrollView>
         {footer ? <View style={[k.sheetFooter, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>{footer}</View> : null}
       </Animated.View>
     </Animated.View>
-    </Modal>
   );
 }
 
