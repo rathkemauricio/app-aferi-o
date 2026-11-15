@@ -61,7 +61,7 @@ export function auditReportHtml(a: AuditRelatorio, marca = 'Postora') {
   const alturaTabela = 24 + a.results.reduce((h, r) => h + (comNota(r) ? 30 : 21), 0);
   const alturaRodape = 24 + Math.max(22 + Math.max(1, ocorrencias.length) * 20, 44 + 18 * Math.max(1, obs.length) + 64);
   const estimada = 46 + 92 + 30 + 24 + alturaTabela + alturaRodape + 22;
-  const UTIL = 700; // 210 mm de altura menos as margens, com folga
+  const UTIL = 680; // 210 mm de altura menos as margens, com folga (o ajuste fino abaixo mede a altura real)
   const zoom = Math.min(1, UTIL / estimada);
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Aferição ${esc(a.branchCode)} ${esc(a.date)}</title><style>
@@ -114,5 +114,15 @@ footer{margin-top:8px;text-align:right;color:#5b6b80;font-size:8px}
 <section class="ass"><div>Aferidor — ${vazio(a.auditor)}</div><div>Responsável pela filial</div></section></div>
 </section>
 <footer>Gerado em ${esc(agora)} • Códigos NC: NC00 erro fora do limite • NC01 lacre violado • NC02 selo vencido • NC03 vazamento</footer>
-</div></body></html>`;
+</div>
+<script>(function(){
+  /* Ajuste fino: mede a folha e reduz a escala até caber numa página A4 paisagem (194 mm úteis de 297 mm de largura). */
+  try {
+    var f = document.querySelector('.folha'); if (!f) return;
+    var util = document.documentElement.clientWidth * (194 / 297);
+    var z = parseFloat(f.style.zoom || getComputedStyle(f).zoom) || 1;
+    var h = f.getBoundingClientRect().height;
+    if (h > util) f.style.zoom = String(Math.max(0.4, z * util / h * 0.985));
+  } catch (e) {}
+})();</script></body></html>`;
 }

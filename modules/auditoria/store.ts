@@ -88,3 +88,47 @@ export function useLinksFotos(caminhos: string[]) {
   }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps
   return links;
 }
+
+/* ---------- Relatório final (fotos embutidas) ----------
+   Ao concluir, as fotos entram no relatório como imagens embutidas (data URI). O relatório é guardado
+   na pasta da auditoria e as fotos originais são apagadas: a evidência passa a ser o relatório. */
+function blobParaDataUri(b: Blob): Promise<string> {
+  return new Promise((ok, falha) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result));
+    r.onerror = () => falha(new Error('Não foi possível ler a foto.'));
+    r.readAsDataURL(b);
+  });
+}
+
+/** Baixa as fotos e devolve caminho → data URI (para embutir no relatório). */
+export async function fotosEmbutidas(caminhos: string[]): Promise<Record<string, string>> {
+  if (!caminhos.length) return {};
+  if (!supabase) throw new Error('Fotos precisam do servidor: o app está em modo local.');
+  const out: Record<string, string> = {};
+  for (const c of caminhos) {
+    const { data, error } = await supabase.storage.from(BUCKET_FOTOS).download(c);
+    if (error || !data) throw new Error('Não foi possível baixar as fotos. Confira a internet e tente de novo.');
+    out[c] = await blobParaDataUri(data);
+  }
+  return out;
+}
+
+/** Guarda o HTML do relatório final na pasta da auditoria e devolve o caminho. */
+export async function guardarRelatorio(auditoriaId: string, html: string): Promise<string> {
+  if (!supabase) throw new Error('O relatório final precisa do servidor: o app está em modo local.');
+  const caminho = `${auditoriaId}/relatorio-${Date.now().toString(36)}.html`;
+  const { error } = await supabase.storage.from(BUCKET_FOTOS).upload(caminho, new TextEncoder().encode(html), { contentType: 'text/html', upsert: false });
+  if (error) throw new Error(error.message.includes('fetch') ? 'Sem conexão com o servidor. Tente de novo com internet.' : error.message);
+  return caminho;
+}
+
+/** Lê o HTML de um relatório final guardado. */
+export async function lerRelatorio(caminho: string): Promise<string> {
+  if (!supabase) throw new Error('O relatório final está no servidor: o app está em modo local.');
+  const { data, error } = await supabase.storage.from(BUCKET_FOTOS).createSignedUrl(caminho, 300);
+  if (error || !data?.signedUrl) throw new Error('Não foi possível abrir o relatório final. Confira a internet.');
+  const r = await fetch(data.signedUrl);
+  if (!r.ok) throw new Error('Não foi possível baixar o relatório final.');
+  return r.text();
+}

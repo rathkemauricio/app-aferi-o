@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
-import { type LayoutChangeEvent, PanResponder, ScrollView, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, type LayoutChangeEvent, PanResponder, Platform, ScrollView, Text, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { useBandeiras } from '../../lib/bandeiras';
 import { useCombustiveis } from '../../lib/combustiveis';
-import { areaDasBombas, clamp, croquiSvg, filhosDaIlha, hitTest, type Item, type Paleta, registrarCombustiveis, resumo, VH, VW } from './model';
+import { areaDasBombas, clamp, croquiSvg, filhosDaIlha, hitBico, hitTest, type Item, type Paleta, pontoDoBico, registrarCombustiveis, resumo, VH, VW } from './model';
 
 /** Registra os catálogos (combustíveis e bandeiras) usados no desenho (chamar antes de desenhar ou resumir). */
 export function useCatalogoCroqui() {
@@ -36,10 +36,37 @@ type Props = {
   onTapItem?: (item: Item) => void;
   /** Mostra só a área das bombas (pista), legível em telas pequenas; a legenda de combustíveis vai embaixo. */
   enquadrar?: boolean;
+  /** Modo visualização: toque direto num bico numerado (ex.: abrir a aferição daquele bico). */
+  onTapBico?: (item: Item, indice: number) => void;
+  /** Bico em destaque (aferição em andamento): anéis no desenho e um pulso animado por cima. */
+  bicoAtivo?: { itemId: string; indice: number; cor: string } | null;
 };
 
+/** Pulso em volta do bico em aferição (anima só opacidade e escala; respeita "reduzir movimento"). */
+function PulsoBico({ x, y, r, cor }: { x: number; y: number; r: number; cor: string }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
+    let vivo = true;
+    void AccessibilityInfo.isReduceMotionEnabled().catch(() => false).then(reduzir => {
+      if (!vivo || reduzir) { v.setValue(0.35); return; }
+      loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1400, easing: Easing.out(Easing.quad), useNativeDriver: Platform.OS !== 'web' }));
+      loop.start();
+    });
+    return () => { vivo = false; loop?.stop(); };
+  }, [v]);
+  const d = r * 2;
+  return (
+    <Animated.View pointerEvents="none" style={{
+      position: 'absolute', left: x - r, top: y - r, width: d, height: d, borderRadius: r, borderWidth: 3, borderColor: cor, backgroundColor: cor + '33',
+      opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] }),
+      transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] }) }],
+    }} />
+  );
+}
+
 /** Desenho do croqui. No modo editável, toque seleciona e arrastar move o item. */
-export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel = false, selecionado = null, zoom = 1, passo = 10, destaques, onSelect, onMove, onDragChange, onTapItem, enquadrar = false }: Props) {
+export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel = false, selecionado = null, zoom = 1, passo = 10, destaques, onSelect, onMove, onDragChange, onTapItem, enquadrar = false, onTapBico, bicoAtivo }: Props) {
   const catalogo = useCatalogoCroqui();
   const [base, setBase] = useState(0);
   const area = useMemo(() => (enquadrar && !editavel ? areaDasBombas(items) : null), [enquadrar, editavel, items]);
@@ -49,15 +76,15 @@ export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel =
   const grupo = sel ? filhosDaIlha(items, sel).map(i => i.id) : undefined;
   const chaveGrupo = grupo?.join(',') ?? '';
   const xml = useMemo(
-    () => croquiSvg(items, { bandeira, mostrarNomes, selecionado: editavel ? selecionado : null, p: paleta, destaques, grupo, area }),
-    [items, bandeira, mostrarNomes, selecionado, editavel, paleta, destaques, chaveGrupo, catalogo, area], // eslint-disable-line react-hooks/exhaustive-deps
+    () => croquiSvg(items, { bandeira, mostrarNomes, selecionado: editavel ? selecionado : null, p: paleta, destaques, grupo, area, bicoAtivo }),
+    [items, bandeira, mostrarNomes, selecionado, editavel, paleta, destaques, chaveGrupo, catalogo, area, bicoAtivo?.itemId, bicoAtivo?.indice, bicoAtivo?.cor], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const legenda = useMemo(() => (area ? resumo(items).porCombustivel : []), [area, items, catalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refs: o PanResponder é criado uma vez e precisa enxergar os valores atuais.
-  const live = useRef({ items, w, vw, ox, oy, passo, editavel, onSelect, onMove, onDragChange, onTapItem });
-  live.current = { items, w, vw, ox, oy, passo, editavel, onSelect, onMove, onDragChange, onTapItem };
-  type Arraste = { item: Item; movs: Movimento[]; filhos: Item[]; x: number; y: number; moveu: boolean };
+  const live = useRef({ items, w, vw, ox, oy, passo, editavel, onSelect, onMove, onDragChange, onTapItem, onTapBico });
+  live.current = { items, w, vw, ox, oy, passo, editavel, onSelect, onMove, onDragChange, onTapItem, onTapBico };
+  type Arraste = { item: Item; movs: Movimento[]; filhos: Item[]; x: number; y: number; moveu: boolean; bico?: number };
   const arraste = useRef<Arraste | null>(null);
 
   const responder = useMemo(() => PanResponder.create({
@@ -73,6 +100,8 @@ export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel =
         L.onSelect?.(hit.id);
         return true;
       }
+      const bico = L.onTapBico ? hitBico(L.items, L.ox + e.nativeEvent.locationX * k, L.oy + e.nativeEvent.locationY * k) : null;
+      if (bico) { arraste.current = { item: bico.item, movs: [], filhos: [], x: bico.item.x, y: bico.item.y, moveu: false, bico: bico.indice }; return true; }
       if (hit && L.onTapItem) { arraste.current = { item: hit, movs: [], filhos: [], x: hit.x, y: hit.y, moveu: false }; return true; }
       return false;
     },
@@ -95,7 +124,7 @@ export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel =
       const d = arraste.current, L = live.current;
       arraste.current = null;
       if (!d) return;
-      if (!L.editavel) { if (!d.moveu) L.onTapItem?.(d.item); return; }
+      if (!L.editavel) { if (!d.moveu) { if (d.bico !== undefined) L.onTapBico?.(d.item, d.bico); else L.onTapItem?.(d.item); } return; }
       if (d.moveu) { if (d.movs.length) L.onMove?.(d.movs, true); L.onDragChange?.(false); }
     },
     onPanResponderTerminate: () => {
@@ -105,10 +134,16 @@ export function CroquiCanvas({ items, bandeira, mostrarNomes, paleta, editavel =
     },
   }), []);
 
+  // Posição do pulso em pixels (o desenho pode estar recortado na área das bombas e ampliado).
+  const itemAtivo = bicoAtivo ? items.find(i => i.id === bicoAtivo.itemId) : undefined;
+  const pAtivo = itemAtivo && bicoAtivo ? pontoDoBico(itemAtivo, bicoAtivo.indice) : null;
+  const esc = w && vw ? w / vw : 0;
+
   const desenho = (
     <View style={{ width: w, height: h }}>
       <SvgXml xml={xml} width={w} height={h} />
-      {editavel || onTapItem ? <View style={{ position: 'absolute', left: 0, top: 0, width: w, height: h }} {...responder.panHandlers} /> : null}
+      {pAtivo && bicoAtivo && esc ? <PulsoBico key={`${bicoAtivo.itemId}:${bicoAtivo.indice}`} x={(pAtivo.x - ox) * esc} y={(pAtivo.y - oy) * esc} r={Math.max(9, pAtivo.raio * esc * 1.25)} cor={bicoAtivo.cor} /> : null}
+      {editavel || onTapItem || onTapBico ? <View style={{ position: 'absolute', left: 0, top: 0, width: w, height: h }} {...responder.panHandlers} /> : null}
     </View>
   );
 

@@ -1,7 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { type ComponentRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeftIcon, CalendarBlankIcon, CaretRightIcon, CheckCircleIcon, CheckIcon, ClipboardTextIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, DownloadSimpleIcon, DropIcon, EnvelopeIcon, FileCsvIcon, FilePdfIcon, GasPumpIcon, HouseIcon, type Icon, ListChecksIcon, MagnifyingGlassIcon, MinusIcon, PencilSimpleIcon, PlayIcon, PlusIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, XCircleIcon, XIcon } from '../../ui/icons';
@@ -13,9 +11,11 @@ import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { CroquiCanvas } from '../croqui/Canvas';
+import { Bico3D, BicoFlutuante, Brilho } from './BicoEmFoco';
 import { bombaDoItem, type CroquiDoc, espelharBombas, type Item as ItemCroqui, PALETA_CLARA, PALETA_ESCURA, T as TIPOS_CROQUI, tipoDoCombustivel } from '../croqui/model';
 import { docId, docsCol, filiaisCol, ordenarFiliais, saveFilialDoc } from '../../lib/data';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { imprimirHtml, pdfBase64 } from '../../lib/util';
 import { Collection, combinedStatus, isSyncEnabled, type SyncRow, useCollection } from '../../lib/sync';
 
 type Nozzle = { id: string; number: string; fuel: string };
@@ -106,6 +106,7 @@ export default function AfericoesModule() {
   const insets = useSafeAreaInsets();
   const { mode } = useContext(ThemeContext);
   const [zoomCroqui, setZoomCroqui] = useState(1);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   // Aba Filiais: um card aberto por vez; os bicos só aparecem ao abrir a bomba (lista leve, sem travar).
   const [filialAberta, setFilialAberta] = useState<string | null>(null);
   const [bombaAberta, setBombaAberta] = useState<string | null>(null);
@@ -271,13 +272,8 @@ export default function AfericoesModule() {
     } catch { notify('Backup inválido', 'Cole um backup JSON exportado pelo aplicativo.'); }
   };
   const exportPdf = async (audit: Audit) => {
-    try {
-      const html = auditReportHtml(audit);
-      if (Platform.OS === 'web') { await Print.printAsync({ html }); return; }
-      const file = await Print.printToFileAsync({ html, width: 842, height: 595 }); // A4 paisagem (pontos)
-      if (!(await Sharing.isAvailableAsync())) { notify('Compartilhamento indisponível', 'O PDF foi gerado, mas este aparelho não oferece compartilhamento de arquivos.'); return; }
-      await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Relatório da aferição', UTI: 'com.adobe.pdf' });
-    } catch { notify('Erro ao gerar PDF', 'Não foi possível criar o relatório desta aferição.'); }
+    try { await imprimirHtml(auditReportHtml(audit), `Aferição ${audit.branchCode} ${dateLabel(audit.date)}`, true); } // A4 paisagem
+    catch (e) { notify('Erro ao gerar PDF', e instanceof Error ? e.message : 'Não foi possível criar o relatório desta aferição.'); }
   };
   const emailsDigitados = separarEmails(emailPara);
   const emailsInvalidos = emailsDigitados.filter(e => !emailValido(e));
@@ -288,7 +284,7 @@ export default function AfericoesModule() {
     try {
       const html = auditReportHtml(audit);
       // No celular vai o PDF em anexo; na web (sem gerador de PDF) o relatório vai no corpo do e-mail.
-      const pdf = Platform.OS === 'web' ? undefined : (await Print.printToFileAsync({ html, width: 842, height: 595, base64: true })).base64;
+      const pdf = await pdfBase64(html, true);
       const r = await enviarEmail({
         acao: 'relatorio',
         para: emailsDigitados,
@@ -320,7 +316,69 @@ export default function AfericoesModule() {
   };
   const newBranch = () => router.push('/filiais');
   const stageIndex = { branch: 0, equipment: 1, nozzle: 2, final: 3 }[auditStage];
-  const openNozzle = (pumpId: string, nozzleId: string) => { setSelectedPumpId(pumpId); setSelectedNozzleId(nozzleId); setAuditStage('nozzle'); };
+  const openNozzle = (pumpId: string, nozzleId: string) => {
+    if (nozzleId !== selectedNozzleId) setFlowStarted(null); // cronômetro é do bico anterior
+    setSelectedPumpId(pumpId); setSelectedNozzleId(nozzleId); setAuditStage('nozzle');
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+  const aferindo = auditStage === 'nozzle' && !!branch && !!currentPump && !!currentNozzle;
+  const corBicoAtual = currentNozzle ? TIPOS_CROQUI[tipoCroqui(currentNozzle.fuel)]?.c ?? colors.accent : colors.accent;
+
+  /** Croqui da aferição. Toque no bico abre a aferição dele; toque na bomba abre o próximo pendente.
+      Com `focado`, o cartão brilha e o bico em aferição pulsa no desenho. */
+  const croquiDaAfericao = (focado: boolean) => {
+    if (!branch) return null;
+    // Croqui espelhando o cadastro: aparece mesmo que ninguém tenha desenhado o terreno ainda.
+    const itens = croquiAuditoria;
+    if (!itens.length) return null;
+    const bombaDe = (it: ItemCroqui) => bombaDoItem(it, branch.pumps);
+    const destaques: Record<string, string> = {};
+    itens.forEach(it => {
+      if (TIPOS_CROQUI[it.type]?.k !== 'b') return;
+      const p = bombaDe(it);
+      if (!p || !p.nozzles.length) return;
+      const feitos = p.nozzles.filter(n => draft.data[n.id]);
+      if (!feitos.length) return;
+      const nc = feitos.some(n => draft.data[n.id].checks.includes('NC'));
+      destaques[it.id] = nc ? '#dc2626' : feitos.length === p.nozzles.length ? '#16a34a' : '#d97706';
+    });
+    const itemAtual = focado && currentPump ? itens.find(it => bombaDe(it)?.id === currentPump.id) : undefined;
+    const indiceAtual = itemAtual && currentPump ? currentPump.nozzles.slice(0, 6).findIndex(n => n.id === selectedNozzleId) : -1;
+    const bicoAtivo = itemAtual && indiceAtual >= 0 ? { itemId: itemAtual.id, indice: indiceAtual, cor: colors.accent } : null;
+    if (itemAtual) destaques[itemAtual.id] = colors.accent;
+    const filialCroqui = filiaisSnap.list.find(x => x.id === branch.id);
+    return (
+      <Brilho cor={colors.accent} ativo={focado}>
+        <Card>
+          <View style={s.rowCenter}>
+            <Text style={[textStyles.bodyStrong, s.flex]}>{focado ? 'Bico em aferição no croqui' : 'Croqui da filial'}</Text>
+            <IconButton icon={MinusIcon} label="Diminuir zoom do croqui" onPress={() => setZoomCroqui(z => Math.max(1, z - 0.5))} />
+            <Text style={textStyles.caption}>{Math.round(zoomCroqui * 100)}%</Text>
+            <IconButton icon={PlusIcon} label="Aumentar zoom do croqui" onPress={() => setZoomCroqui(z => Math.min(3, z + 0.5))} />
+          </View>
+          <CroquiCanvas items={itens} bandeira={filialCroqui?.bandeira ?? 'branca'} mostrarNomes={false} paleta={paletaCroqui} enquadrar
+            zoom={zoomCroqui} destaques={destaques} bicoAtivo={bicoAtivo}
+            onTapBico={(it, indice) => {
+              const p = bombaDe(it);
+              const n = p?.nozzles.slice(0, 6)[indice];
+              if (p && n) openNozzle(p.id, n.id);
+              else notify('Bico sem correspondência', 'Este bico do croqui não corresponde a nenhum bico cadastrado nesta bomba.');
+            }}
+            onTapItem={it => {
+              const p = bombaDe(it);
+              if (!p) { notify('Bomba sem correspondência', 'O número desta bomba no croqui não corresponde a nenhuma bomba cadastrada nesta filial.'); return; }
+              const n = p.nozzles.find(x => !draft.data[x.id]) ?? p.nozzles[0];
+              if (n) openNozzle(p.id, n.id); else notify('Bomba sem bicos cadastrados');
+            }} />
+          <Text style={textStyles.caption}>
+            {focado
+              ? 'O bico que pulsa é o que está sendo aferido. Toque em outro bico para ir direto à aferição dele.'
+              : 'Toque num bico para ir direto à aferição dele, ou na bomba para o próximo bico pendente. Verde: concluída · amarelo: em andamento · vermelho: com não conformidade.'}
+          </Text>
+        </Card>
+      </Brilho>
+    );
+  };
 
   const abrirFilial = (id: string | null) => { setFilialAberta(id); setBombaAberta(null); };
   const seta = (aberto: boolean) => <View style={{ transform: [{ rotate: aberto ? '90deg' : '0deg' }] }}><CaretRightIcon size={16} color={colors.textMuted} weight="bold" /></View>;
@@ -412,42 +470,7 @@ export default function AfericoesModule() {
       const filled = Object.keys(draft.data).length;
       return <>
         <Button title="Trocar filial" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => setAuditStage('branch')} />
-        {(() => {
-          // Croqui espelhando o cadastro: aparece mesmo que ninguém tenha desenhado o terreno ainda.
-          const itens = croquiAuditoria;
-          if (!itens.length) return null;
-          const bombaDe = (it: ItemCroqui) => bombaDoItem(it, branch.pumps);
-          const destaques: Record<string, string> = {};
-          itens.forEach(it => {
-            if (TIPOS_CROQUI[it.type]?.k !== 'b') return;
-            const p = bombaDe(it);
-            if (!p || !p.nozzles.length) return;
-            const feitos = p.nozzles.filter(n => draft.data[n.id]);
-            if (!feitos.length) return;
-            const nc = feitos.some(n => draft.data[n.id].checks.includes('NC'));
-            destaques[it.id] = nc ? '#dc2626' : feitos.length === p.nozzles.length ? '#16a34a' : '#d97706';
-          });
-          const filialCroqui = filiaisSnap.list.find(x => x.id === branch.id);
-          return (
-            <Card>
-              <View style={s.rowCenter}>
-                <Text style={[textStyles.bodyStrong, s.flex]}>Croqui da filial</Text>
-                <IconButton icon={MinusIcon} label="Diminuir zoom do croqui" onPress={() => setZoomCroqui(z => Math.max(1, z - 0.5))} />
-                <Text style={textStyles.caption}>{Math.round(zoomCroqui * 100)}%</Text>
-                <IconButton icon={PlusIcon} label="Aumentar zoom do croqui" onPress={() => setZoomCroqui(z => Math.min(3, z + 0.5))} />
-              </View>
-              <CroquiCanvas items={itens} bandeira={filialCroqui?.bandeira ?? 'branca'} mostrarNomes={false} paleta={paletaCroqui} enquadrar
-                zoom={zoomCroqui} destaques={destaques}
-                onTapItem={it => {
-                  const p = bombaDe(it);
-                  if (!p) { notify('Bomba sem correspondência', 'O número desta bomba no croqui não corresponde a nenhuma bomba cadastrada nesta filial.'); return; }
-                  const n = p.nozzles.find(x => !draft.data[x.id]) ?? p.nozzles[0];
-                  if (n) openNozzle(p.id, n.id); else notify('Bomba sem bicos cadastrados');
-                }} />
-              <Text style={textStyles.caption}>Toque numa bomba para aferir o próximo bico pendente. O número dentro de cada bolinha é o bico. Verde: concluída · amarelo: em andamento · vermelho: com não conformidade.</Text>
-            </Card>
-          );
-        })()}
+        {croquiDaAfericao(false)}
         <Text style={textStyles.caption}>Toque em cada bico para registrar a inspeção. Bicos sem registro entram como não realizados.</Text>
         {branch.pumps.map(p => (
           <Card key={p.id} style={s.listCard}>
@@ -473,12 +496,13 @@ export default function AfericoesModule() {
       return <>
         <Button title="Voltar aos bicos" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => { setAuditStage('equipment'); setFlowStarted(null); }} />
         <View style={s.rowCenter}>
-          <IconTile icon={DropIcon} tint="emerald" />
+          <Bico3D numero={String(currentNozzle.number)} cor={corBicoAtual} size={64} />
           <View style={s.flex}>
             <Text style={textStyles.section}>{currentPump?.number} · Bico {currentNozzle.number}</Text>
             <Text style={textStyles.caption}>{currentNozzle.fuel}</Text>
           </View>
         </View>
+        {croquiDaAfericao(true)}
         <View style={s.note}>
           <Text style={s.noteText}>Lenta, Rápida e Erro usam escala de -200 a +200 mL, em passos de 20. Em OB ou NC, descreva a observação ou o local do erro.</Text>
         </View>
@@ -640,7 +664,7 @@ export default function AfericoesModule() {
         renderItem={({ item }) => renderBranchCard(item)}
       />
     ) : (
-      <ScrollView key={tab} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} key={tab} contentContainerStyle={[s.content, aferindo && { paddingBottom: space.xxl * 2 + 72 }]} keyboardShouldPersistTaps="handled">
         <View style={s.stack}>
           {pageHead}
 
@@ -688,6 +712,14 @@ export default function AfericoesModule() {
           </>}
         </View>
       </ScrollView>
+    )}
+
+    {/* Bico em aferição: sempre visível sobre a tela (em qualquer rolagem e em qualquer aba). */}
+    {aferindo && currentPump && currentNozzle && (
+      <BicoFlutuante bomba={currentPump.number} numero={String(currentNozzle.number)} combustivel={currentNozzle.fuel} cor={corBicoAtual}
+        progresso={`${Object.keys(draft.data).length} de ${branch!.pumps.reduce((n, p) => n + p.nozzles.length, 0)} aferidos`}
+        bottom={Math.max(insets.bottom, 6) + 66}
+        onPress={() => { if (tab !== 'auditoria') setTab('auditoria'); else scrollRef.current?.scrollTo({ y: 0, animated: true }); }} />
     )}
 
     <View style={[s.nav, { paddingBottom: Math.max(insets.bottom, 6) }]}>

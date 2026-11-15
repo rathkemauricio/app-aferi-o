@@ -21,7 +21,10 @@ export type Auditoria = SyncRow & {
   escopo: string;
   status: 'rascunho' | 'concluida';
   itens: ItemAuditoria[];
+  /** Relatórios finais guardados (um por conclusão). As fotos ficam embutidas neles e são apagadas do Storage. */
+  relatorios?: RelatorioFinal[];
 };
+export type RelatorioFinal = { caminho: string; em: string; fotos: number };
 
 export const ESCOPO_PADRAO = 'Sistema de Gestão Integrada';
 

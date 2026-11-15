@@ -1,0 +1,159 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
+import { useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
+import { useFiliais } from '../../lib/data';
+import { supabase } from '../../lib/supabase';
+import { Collection, combinedStatus, useCollection } from '../../lib/sync';
+import { type Classe, type Coleta, type Contagem, horaAgora, type Inventario, type Produto, type Rodada } from './model';
+
+/* ---------- Coleções sincronizadas ---------- */
+export const inventariosCol = new Collection<Inventario>({ table: 'ce_inventarios', storageKey: 'nevoeiro.coleta.inventarios.v1' });
+export const contagensCol = new Collection<Contagem>({ table: 'ce_contagens', storageKey: 'nevoeiro.coleta.contagens.v1' });
+
+/** Leituras: uma coleção por inventário (só baixa as do inventário aberto). */
+const coletasPorInv = new Map<string, Collection<Coleta>>();
+export function coletasDe(inventarioId: string) {
+  let c = coletasPorInv.get(inventarioId);
+  if (!c) {
+    c = new Collection<Coleta>({ table: 'ce_coletas', storageKey: `nevoeiro.coleta.coletas.${inventarioId}`, filter: q => q.eq('inventario_id', inventarioId) });
+    coletasPorInv.set(inventarioId, c);
+  }
+  return c;
+}
+
+export function useColeta() {
+  const f = useFiliais();
+  const i = useCollection(inventariosCol);
+  const c = useCollection(contagensCol);
+  const inventarios = useMemo(() => [...i.list].sort((a, b) => (a.status === 'encerrado' ? 1 : 0) - (b.status === 'encerrado' ? 1 : 0) || b.codigo.localeCompare(a.codigo)), [i.list]);
+  return { filiais: f.filiais, inventarios, contagens: c.list, loaded: f.loaded && i.loaded && c.loaded, status: combinedStatus([f.status, i.status, c.status]) };
+}
+
+export function useColetas(inventarioId: string) {
+  const col = coletasDe(inventarioId);
+  const snap = useCollection(col);
+  useEffect(() => { void col.sync(); const t = setInterval(() => { void col.sync(); }, 20_000); return () => clearInterval(t); }, [col]);
+  return snap;
+}
+
+/* ---------- Aparelho (cada coletor grava só as próprias linhas) ---------- */
+let dispositivo: string | null = null;
+const DISP_KEY = 'nevoeiro.coleta.dispositivo';
+export async function idDispositivo() {
+  if (dispositivo) return dispositivo;
+  dispositivo = (await AsyncStorage.getItem(DISP_KEY).catch(() => null)) ?? `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  void AsyncStorage.setItem(DISP_KEY, dispositivo).catch(() => undefined);
+  return dispositivo;
+}
+void idDispositivo();
+
+/** Soma `qtd` à leitura deste aparelho para o item na rodada (negativo corrige). */
+export async function registrarLeitura(c: Contagem, r: Rodada, codigo: string, qtd: number) {
+  const disp = await idDispositivo();
+  const col = coletasDe(c.inventario_id);
+  const id = `${c.id}:${r}:${codigo}:${disp}`;
+  const atual = col.get(id);
+  col.put({
+    id, inventario_id: c.inventario_id, contagem_id: c.id, rodada: r, codigo, dispositivo: disp,
+    qtd: Math.max(0, (atual?.qtd ?? 0) + qtd), hist: ([[horaAgora(), qtd], ...(atual?.hist ?? [])] as [string, number][]).slice(0, 60),
+  });
+}
+
+/* ---------- Produtos do inventário (congelados do ERP; ficam no aparelho para contar sem internet) ---------- */
+type Compacto = [string, string[], string, string, 0 | 1, number]; // codigo, eans, nome, categoria, pista?, saldo
+const BLOCO = 2500;
+const chaveProd = (inv: string) => `nevoeiro.coleta.produtos.${inv}`;
+const memoria = new Map<string, Produto[]>();
+const deCompacto = (x: Compacto): Produto => ({ codigo: x[0], eans: x[1], nome: x[2], categoria: x[3], classe: x[4] ? 'pista' : 'conveniencia', saldo: x[5] });
+
+async function lerCache(inv: string): Promise<Produto[] | null> {
+  const n = Number(await AsyncStorage.getItem(`${chaveProd(inv)}.n`).catch(() => null));
+  if (!n) return null;
+  const partes = await Promise.all(Array.from({ length: n }, (_, i) => AsyncStorage.getItem(`${chaveProd(inv)}.${i}`)));
+  if (partes.some(p => p === null)) return null;
+  return partes.flatMap(p => (JSON.parse(p!) as Compacto[]).map(deCompacto));
+}
+async function gravarCache(inv: string, lista: Produto[]) {
+  const comp: Compacto[] = lista.map(p => [p.codigo, p.eans, p.nome, p.categoria, p.classe === 'pista' ? 1 : 0, p.saldo]);
+  const blocos = Array.from({ length: Math.ceil(comp.length / BLOCO) }, (_, i) => comp.slice(i * BLOCO, (i + 1) * BLOCO));
+  await Promise.all(blocos.map((b, i) => AsyncStorage.setItem(`${chaveProd(inv)}.${i}`, JSON.stringify(b))));
+  await AsyncStorage.setItem(`${chaveProd(inv)}.n`, String(blocos.length));
+}
+
+async function baixarProdutos(inv: string): Promise<Produto[]> {
+  if (!supabase) return [];
+  const out: Produto[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase.from('ce_produtos').select('codigo,eans,nome,categoria,classe,saldo').eq('inventario_id', inv).order('codigo').range(de, de + 999);
+    if (error) throw new Error('Não foi possível baixar os produtos do inventário. Confira a internet.');
+    out.push(...(data ?? []).map(d => ({ codigo: String(d.codigo), eans: (d.eans as string[]) ?? [], nome: String(d.nome), categoria: String(d.categoria), classe: d.classe as Classe, saldo: Number(d.saldo) })));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+/** Produtos do inventário: memória → aparelho → servidor. */
+export function useProdutos(inv: Inventario | undefined) {
+  const [lista, setLista] = useState<Produto[] | null>(inv ? memoria.get(inv.id) ?? null : null);
+  const [erro, setErro] = useState<string | null>(null);
+  const chave = inv ? `${inv.id}:${inv.itens_total}:${inv.erp_em ?? ''}` : '';
+  useEffect(() => {
+    if (!inv || inv.status === 'carregando') { setLista(null); return; }
+    let vivo = true;
+    void (async () => {
+      try {
+        let l = memoria.get(inv.id) ?? null;
+        if (!l || l.length !== inv.itens_total) l = await lerCache(inv.id);
+        if (!l || l.length !== inv.itens_total) { l = await baixarProdutos(inv.id); await gravarCache(inv.id, l).catch(() => undefined); }
+        memoria.set(inv.id, l);
+        if (vivo) { setLista(l); setErro(null); }
+      } catch (e) { if (vivo) setErro(e instanceof Error ? e.message : String(e)); }
+    })();
+    return () => { vivo = false; };
+  }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { produtos: lista, erro };
+}
+
+/** Índice de leitura: EAN ou código interno → produto. */
+export function indiceLeitura(produtos: Produto[]) {
+  const m = new Map<string, Produto>();
+  produtos.forEach(p => { m.set(p.codigo, p); p.eans.forEach(e => m.set(e, p)); });
+  return m;
+}
+
+/* ---------- ERP (Edge Function "coleta-erp") ---------- */
+export type CargaErp = { itens: number; categorias: number; avisos: string[] };
+
+async function chamar<T>(body: Record<string, unknown>): Promise<T> {
+  if (!supabase) throw new Error('O app está em modo local: a carga do ERP precisa do servidor.');
+  const { data, error } = await supabase.functions.invoke('coleta-erp', { body });
+  if (!error) return data as T;
+  let erro = 'Não foi possível falar com o servidor. Verifique a conexão.';
+  try { const r = (error as { context?: Response }).context; const c = r ? await r.json() : null; if (c?.erro) erro = String(c.erro); } catch { /* sem JSON */ }
+  throw new Error(erro);
+}
+
+/** Situação da integração com o Petros (API configurada no servidor ou não). */
+export const statusErp = () => chamar<{ petros: boolean }>({ acao: 'status' });
+
+/** Escolhe o arquivo exportado pelo ERP (PDF do Petros ou CSV) e devolve nome + base64. */
+export async function escolherArquivoErp(): Promise<{ nome: string; base64: string } | null> {
+  const r = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'text/csv', 'text/plain', 'text/comma-separated-values', '*/*'], copyToCacheDirectory: true, multiple: false });
+  if (r.canceled || !r.assets?.length) return null;
+  const a = r.assets[0];
+  const blob: Blob = Platform.OS === 'web' && a.file ? a.file : await (await fetch(a.uri)).blob();
+  if (blob.size > 15 * 1024 * 1024) throw new Error('Arquivo muito grande (limite de 15 MB).');
+  const dataUri = await new Promise<string>((ok, falha) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.onerror = () => falha(new Error('Não foi possível ler o arquivo.')); fr.readAsDataURL(blob); });
+  return { nome: a.name, base64: dataUri.slice(dataUri.indexOf(',') + 1) };
+}
+
+/** Carrega produtos e saldos da filial no inventário (arquivo exportado ou API do Petros). */
+export function carregarErp(inventarioId: string, fonte: 'arquivo' | 'petros', arquivo?: { nome: string; base64: string }) {
+  return chamar<CargaErp>({ acao: 'carregar', inventario_id: inventarioId, fonte, arquivo });
+}
+
+/** Envia o resultado ao Petros pela API (quando configurada). */
+export function enviarResultadoErp(inventarioId: string, linhas: { codigo: string; saldo: number; contado: number }[]) {
+  return chamar<{ ok: boolean; enviados: number }>({ acao: 'enviar_resultado', inventario_id: inventarioId, linhas });
+}

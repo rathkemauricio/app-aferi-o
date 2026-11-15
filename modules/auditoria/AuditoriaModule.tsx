@@ -1,7 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,21 +7,25 @@ import { useAuth } from '../../lib/auth';
 import type { Filial } from '../../lib/data';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { imprimirHtml, pdfBase64 } from '../../lib/util';
 import {
-  ArrowLeftIcon, CalendarBlankIcon, CameraIcon, CheckIcon, ClipboardTextIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, EnvelopeIcon, FilePdfIcon,
+  ArrowLeftIcon, CalendarBlankIcon, EyeIcon, CameraIcon, CheckIcon, ClipboardTextIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, EnvelopeIcon, FilePdfIcon,
   ImagesIcon, MagnifyingGlassIcon, PlusIcon, ResetIcon, SealCheckIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill, type Tone } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import {
-  type Auditoria, contar, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, novosItens, PEDE_ACAO, relatorioHtml, ROTULO, ROTULO_CURTO, STATUS,
+  type Auditoria, contar, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, novosItens, PEDE_ACAO, type RelatorioFinal, relatorioHtml, ROTULO, ROTULO_CURTO, STATUS,
   type StatusReq, uid,
 } from './model';
-import { apagarFoto, auditoriasCol, enviarFoto, escolherFotos, linksDasFotos, useAuditorias, useLinksFotos } from './store';
+import { apagarFoto, auditoriasCol, enviarFoto, escolherFotos, fotosEmbutidas, guardarRelatorio, lerRelatorio, linksDasFotos, useAuditorias, useLinksFotos } from './store';
 
 const SESSAO = 'nevoeiro.auditoria.sessao.v1';
 const TOM: Record<StatusReq, Tone> = { C: 'success', OB: 'neutral', OM: 'warning', NC: 'danger', PP: 'accent', NA: 'neutral' };
 type Filtro = 'todos' | 'pendentes' | StatusReq;
+/** Concluída abre em lista (resumo); os detalhes só em "Visualizar completa" (leitura) ou ao reabrir (edição). */
+type Modo = 'edicao' | 'resumo' | 'completa';
+const dataHoraBR = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
 
 const nomeFilial = (filiais: Filial[], id: string) => { const f = filiais.find(x => x.id === id); return f ? `${f.codigo} · ${f.nome}` : 'Filial removida'; };
 
@@ -188,8 +190,12 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
   const [busca, setBusca] = useState('');
   const [enviando, setEnviando] = useState<Record<number, boolean>>({});
   const [emailAberto, setEmailAberto] = useState(false);
+  const [finalizando, setFinalizando] = useState(false);
   const filial = nomeFilial(filiais, auditoria.filial_id);
   const concluida = auditoria.status === 'concluida';
+  const [modo, setModo] = useState<Modo>(concluida ? 'resumo' : 'edicao');
+  const relatorios = auditoria.relatorios ?? [];
+  const ultimoRelatorio: RelatorioFinal | undefined = relatorios[relatorios.length - 1];
 
   // Edição local e gravação com atraso curto (a cada letra só a tela muda; o registro grava logo depois).
   const pendente = useRef<Auditoria | null>(null);
@@ -243,31 +249,63 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
   const q = busca.trim().toLowerCase();
   const visiveis = itens.filter(i => (filtro === 'todos' || (filtro === 'pendentes' ? !i.status : i.status === filtro)) && (!q || `${i.id} ${i.titulo} ${i.obs}`.toLowerCase().includes(q)));
 
-  const gerarHtml = async () => {
+  /** Concluída com relatório final guardado: usa o arquivo guardado (é ele que tem as fotos). Senão, monta na hora. */
+  const gerarHtml = async (caminho = concluida ? ultimoRelatorio?.caminho : undefined) => {
+    if (caminho) return lerRelatorio(caminho);
     const links2 = await linksDasFotos(itensRef.current.flatMap(i => i.fotos)).catch(() => ({} as Record<string, string>));
     const atual = { ...auditoria, ...cab, itens: itensRef.current };
     return relatorioHtml(atual, filial, p => links2[p]);
   };
-  const exportarPdf = async () => {
+  const exportarPdf = async (caminho?: string) => {
+    try { await imprimirHtml(await gerarHtml(caminho), `Auditoria ${filial.split(' · ')[0]} ${dataBR(cab.data)}`); }
+    catch (e) { notify('Erro ao gerar o relatório', e instanceof Error ? e.message : 'Não foi possível criar o PDF desta auditoria.'); }
+  };
+
+  /** Concluir: gera o relatório final com as fotos embutidas, guarda no servidor e só então apaga as fotos. */
+  const finalizar = async () => {
+    const fotos = itensRef.current.flatMap(i => i.fotos);
+    const base: Auditoria = { ...auditoria, ...cab, escopo: cab.escopo || ESCOPO_PADRAO, itens: itensRef.current, status: 'concluida' };
+    setFinalizando(true);
     try {
-      const html = await gerarHtml();
-      if (Platform.OS === 'web') { await Print.printAsync({ html }); return; }
-      const file = await Print.printToFileAsync({ html });
-      if (!(await Sharing.isAvailableAsync())) { notify('Compartilhamento indisponível', 'O PDF foi gerado, mas este aparelho não oferece compartilhamento de arquivos.'); return; }
-      await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Relatório de auditoria', UTI: 'com.adobe.pdf' });
-    } catch { notify('Erro ao gerar o relatório', 'Não foi possível criar o PDF desta auditoria.'); }
+      let lista = relatorios;
+      if (isSupabaseConfigured) {
+        try {
+          const embutidas = await fotosEmbutidas(fotos);
+          const caminho = await guardarRelatorio(auditoria.id, relatorioHtml(base, filial, p => embutidas[p]));
+          lista = [...relatorios, { caminho, em: new Date().toISOString(), fotos: fotos.length }];
+        } catch (e) {
+          // Sem fotos e sem relatório anterior dá para concluir sem guardar: o PDF é montado a partir do checklist.
+          if (fotos.length || relatorios.length) throw e;
+        }
+      }
+      const guardou = lista !== relatorios;
+      const itensFinais = guardou ? itensRef.current.map(i => (i.fotos.length ? { ...i, fotos: [] } : i)) : itensRef.current;
+      itensRef.current = itensFinais;
+      setItens(itensFinais);
+      gravar({ ...base, itens: itensFinais, relatorios: lista }, true);
+      // As fotos só são apagadas depois que o relatório com elas embutidas foi guardado.
+      if (guardou) fotos.forEach(f => void apagarFoto(f).catch(() => undefined));
+      setModo('resumo');
+    } catch (e) {
+      notify('Auditoria não concluída', e instanceof Error ? e.message : 'Não foi possível guardar o relatório final. Tente de novo com internet.');
+    } finally { setFinalizando(false); }
   };
   const concluir = () => {
-    if (concluida) { gravar({ status: 'rascunho' }, true); return; }
-    const fim = () => gravar({ status: 'concluida', ...cab, escopo: cab.escopo || ESCOPO_PADRAO, itens: itensRef.current }, true);
-    if (c.pendentes) confirmAction('Concluir com itens pendentes?', `${c.pendentes} requisito(s) ainda não foram avaliados e aparecerão como "não avaliados" no relatório.`, 'Concluir', fim);
-    else fim();
+    const nFotos = itensRef.current.reduce((n, i) => n + i.fotos.length, 0);
+    const avisos = [
+      c.pendentes ? `${c.pendentes} requisito(s) ainda não foram avaliados e aparecerão como "não avaliados" no relatório.` : '',
+      nFotos ? `As ${nFotos} foto(s) vão para o relatório final (PDF) e depois são apagadas do app automaticamente.` : '',
+    ].filter(Boolean);
+    confirmAction('Concluir auditoria?', avisos.join('\n\n') || 'A auditoria passa a aparecer em lista, só para consulta.', 'Concluir', () => void finalizar());
   };
-  const excluir = () => confirmAction('Excluir auditoria?', 'O checklist, as observações e as fotos desta auditoria serão apagados.', 'Excluir', () => {
-    const fotos = itensRef.current.flatMap(i => i.fotos);
+  const reabrir = () => confirmAction('Reabrir auditoria?',
+    relatorios.length ? 'As fotos já estão no relatório final guardado, que continua disponível. Ao concluir de novo, um novo relatório é gerado.' : 'A auditoria volta para edição.',
+    'Reabrir', () => { gravar({ status: 'rascunho' }, true); setModo('edicao'); });
+  const excluir = () => confirmAction('Excluir auditoria?', 'O checklist, as observações, as fotos e os relatórios finais desta auditoria serão apagados.', 'Excluir', () => {
+    const arquivos = [...itensRef.current.flatMap(i => i.fotos), ...relatorios.map(r => r.caminho)];
     pendente.current = null;
     auditoriasCol.remove(auditoria.id);
-    fotos.forEach(f => void apagarFoto(f).catch(() => undefined));
+    arquivos.forEach(f => void apagarFoto(f).catch(() => undefined));
     onVoltar();
   });
 
@@ -276,6 +314,23 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
     { id: 'pendentes', rotulo: 'Pendentes', n: c.pendentes, tom: 'accent' },
     ...STATUS.map(st => ({ id: st as Filtro, rotulo: ROTULO_CURTO[st], n: c[st], tom: TOM[st] })),
   ];
+  const filtrosView = (
+    <>
+      <View style={s.filtros}>
+        {filtros.map(f => {
+          const on = filtro === f.id;
+          return (
+            <Pressable key={f.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setFiltro(on && f.id !== 'todos' ? 'todos' : f.id)}
+              style={[s.filtro, on && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}>
+              <Text style={[s.filtroNum, { color: f.tom === 'danger' ? colors.danger : f.tom === 'warning' ? colors.warning : f.tom === 'success' ? colors.success : f.tom === 'accent' ? colors.accentText : colors.text }]}>{f.n}</Text>
+              <Text style={[t.caption, on && { color: colors.accentText, fontWeight: '700' }]} numberOfLines={1}>{f.rotulo}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar requisito ou observação" />
+    </>
+  );
 
   const cabecalho = (
     <View style={s.stack}>
@@ -293,32 +348,88 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
         <Field label="Auditor(es)" value={cab.auditores} onChangeText={v => mudarCab('auditores', v)} placeholder="Nome de quem audita" />
         <Field label="Processo / escopo" value={cab.escopo} onChangeText={v => mudarCab('escopo', v)} />
       </Card>
-      <View style={s.filtros}>
-        {filtros.map(f => {
-          const on = filtro === f.id;
-          return (
-            <Pressable key={f.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setFiltro(on && f.id !== 'todos' ? 'todos' : f.id)}
-              style={[s.filtro, on && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}>
-              <Text style={[s.filtroNum, { color: f.tom === 'danger' ? colors.danger : f.tom === 'warning' ? colors.warning : f.tom === 'success' ? colors.success : f.tom === 'accent' ? colors.accentText : colors.text }]}>{f.n}</Text>
-              <Text style={[t.caption, on && { color: colors.accentText, fontWeight: '700' }]} numberOfLines={1}>{f.rotulo}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar requisito ou observação" />
+      {filtrosView}
       <View style={{ height: space.xs }} />
     </View>
   );
 
-  const rodape = (
-    <View style={[s.stack, { marginTop: space.md }]}>
+  const blocoRelatorio = (
+    <>
       <SectionHeader title="Relatório" />
       <Card>
-        <Text style={t.caption}>{c.NC} não conforme(s), {c.OM} oportunidade(s) de melhoria e {c.OB} observação(ões) entram em "Constatações e planos de ação". As fotos vão como evidências.</Text>
+        <Text style={t.caption}>
+          {concluida && ultimoRelatorio
+            ? `Relatório final guardado em ${dataHoraBR(ultimoRelatorio.em)}${ultimoRelatorio.fotos ? `, com ${ultimoRelatorio.fotos} foto(s) embutida(s)` : ''}.`
+            : `${c.NC} não conforme(s), ${c.OM} oportunidade(s) de melhoria e ${c.OB} observação(ões) entram em "Constatações e planos de ação". As fotos vão como evidências e, ao concluir, ficam só no relatório final.`}
+        </Text>
         <Button title="Gerar relatório (PDF)" icon={FilePdfIcon} onPress={() => void exportarPdf()} />
         <Button title="Enviar relatório por e-mail" icon={EnvelopeIcon} variant="secondary" onPress={() => setEmailAberto(true)} />
+        {relatorios.length > 1 && <>
+          <Text style={t.label}>Versões anteriores do relatório final</Text>
+          {relatorios.slice(0, -1).reverse().map(r => (
+            <Button key={r.caminho} title={`Relatório de ${dataHoraBR(r.em)}`} icon={FilePdfIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => void exportarPdf(r.caminho)} />
+          ))}
+        </>}
       </Card>
-      <Button title={concluida ? 'Reabrir auditoria' : 'Concluir auditoria'} icon={concluida ? ResetIcon : SealCheckIcon} variant={concluida ? 'secondary' : 'primary'} onPress={concluir} />
+    </>
+  );
+
+  const email = emailAberto
+    ? <EmailRelatorio titulo={`Relatório de auditoria: ${filial} (${dataBR(cab.data)})`} arquivo={`auditoria-${filial.split(' · ')[0]}-${cab.data}`} gerarHtml={() => gerarHtml()} onClose={() => setEmailAberto(false)} />
+    : null;
+
+  /* ---------- Concluída: lista (resumo) ou visualização completa, ambas só leitura ---------- */
+  if (concluida && modo !== 'edicao') {
+    const completa = modo === 'completa';
+    const topo = (
+      <View style={s.stack}>
+        <Button title={completa ? 'Voltar à lista' : 'Auditorias'} icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={completa ? () => setModo('resumo') : onVoltar} />
+        <View style={s.pageHead}>
+          <View style={s.flex}>
+            <Text style={t.title} numberOfLines={1}>{filial}</Text>
+            <Text style={t.caption}>{dataBR(cab.data)}{cab.auditores ? ` · ${cab.auditores}` : ''} · {cab.escopo || ESCOPO_PADRAO}</Text>
+          </View>
+          <StatusPill label="Concluída" tone="success" icon={SealCheckIcon} />
+        </View>
+        {!completa && <View style={s.twoCol}>
+          <Button title="Visualizar completa" icon={EyeIcon} style={s.flex} onPress={() => setModo('completa')} />
+          <Button title="Reabrir auditoria" icon={ResetIcon} variant="secondary" style={s.flex} onPress={reabrir} />
+        </View>}
+        {filtrosView}
+        <View style={{ height: space.xs }} />
+      </View>
+    );
+    return (
+      <>
+        <FlatList
+          key={modo}
+          data={visiveis}
+          keyExtractor={i => String(i.id)}
+          contentContainerStyle={s.content}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={completa ? 6 : 20}
+          windowSize={7}
+          ItemSeparatorComponent={completa ? () => <View style={{ height: space.sm }} /> : undefined}
+          ListHeaderComponent={topo}
+          ListFooterComponent={<View style={[s.stack, { marginTop: space.md }]}>
+            {blocoRelatorio}
+            {completa && <Button title="Reabrir auditoria" icon={ResetIcon} variant="secondary" onPress={reabrir} />}
+            <Button title="Excluir auditoria" icon={TrashIcon} variant="danger" size="sm" style={s.alignStart} onPress={excluir} />
+          </View>}
+          ListEmptyComponent={<EmptyState icon={MagnifyingGlassIcon} title="Nenhum requisito neste filtro" text="Troque o filtro ou a busca." />}
+          renderItem={({ item, index }) => completa
+            ? <ItemCard item={item} links={links} enviando={false} somenteLeitura onMudar={mudarItem} onFoto={adicionarFotos} onRemoverFoto={removerFoto} />
+            : <LinhaResumo item={item} primeira={index === 0} ultima={index === visiveis.length - 1} />}
+        />
+        {email}
+      </>
+    );
+  }
+
+  const rodape = (
+    <View style={[s.stack, { marginTop: space.md }]}>
+      {blocoRelatorio}
+      <Button title={finalizando ? 'Gerando relatório final…' : 'Concluir auditoria'} icon={SealCheckIcon} disabled={finalizando} onPress={concluir} />
       <Button title="Excluir auditoria" icon={TrashIcon} variant="danger" size="sm" style={s.alignStart} onPress={excluir} />
     </View>
   );
@@ -340,26 +451,66 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
           <ItemCard item={item} links={links} enviando={!!enviando[item.id]} onMudar={mudarItem} onFoto={adicionarFotos} onRemoverFoto={removerFoto} />
         )}
       />
-      {emailAberto && <EmailRelatorio titulo={`Relatório de auditoria: ${filial} (${dataBR(cab.data)})`} arquivo={`auditoria-${filial.split(' · ')[0]}-${cab.data}`} gerarHtml={gerarHtml} onClose={() => setEmailAberto(false)} />}
+      {email}
     </>
   );
 }
+
+/* ---------- Linha da lista (auditoria concluída): só número, requisito e status ---------- */
+const LinhaResumo = memo(function LinhaResumo({ item, primeira, ultima }: { item: ItemAuditoria; primeira: boolean; ultima: boolean }) {
+  const { colors } = useContext(ThemeContext);
+  const t = useMemo(() => createTypography(colors), [colors]);
+  const s = useMemo(() => estilos(colors), [colors]);
+  const st = item.status;
+  return (
+    <View style={[s.linha, primeira && s.linhaPrimeira, ultima && s.linhaUltima, !primeira && s.divided]}>
+      <View style={s.num}><Text style={s.numTxt}>{item.id}</Text></View>
+      <Text style={[t.body, s.flex]} numberOfLines={2}>{item.titulo}</Text>
+      {st ? <StatusPill label={ROTULO_CURTO[st]} tone={TOM[st]} /> : <StatusPill label="Não avaliado" />}
+    </View>
+  );
+});
 
 /* ---------- Requisito ---------- */
 type ItemProps = {
   item: ItemAuditoria;
   links: Record<string, string>;
   enviando: boolean;
+  /** Visualização completa de auditoria concluída: mostra tudo, sem editar. */
+  somenteLeitura?: boolean;
   onMudar: (id: number, patch: Partial<ItemAuditoria>, imediato?: boolean) => void;
   onFoto: (id: number, origem: 'camera' | 'galeria') => Promise<void>;
   onRemoverFoto: (id: number, caminho: string) => void;
 };
-const ItemCard = memo(function ItemCard({ item, links, enviando, onMudar, onFoto, onRemoverFoto }: ItemProps) {
+const ItemCard = memo(function ItemCard({ item, links, enviando, somenteLeitura = false, onMudar, onFoto, onRemoverFoto }: ItemProps) {
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const s = useMemo(() => estilos(colors), [colors]);
   const st = item.status;
   const pedeAcao = !!st && PEDE_ACAO.includes(st);
+  if (somenteLeitura) {
+    const temAcao = item.acao.tarefa || item.acao.responsavel || item.acao.prazo;
+    return (
+      <Card style={st === 'NC' ? { borderColor: colors.danger } : st === 'OM' ? { borderColor: colors.warning } : undefined}>
+        <View style={s.itemTopo}>
+          <View style={s.num}><Text style={s.numTxt}>{item.id}</Text></View>
+          <Text style={[t.bodyStrong, s.flex]}>{item.titulo}</Text>
+        </View>
+        <View style={s.pills}>{st ? <StatusPill label={ROTULO[st]} tone={TOM[st]} /> : <StatusPill label="Não avaliado" />}</View>
+        <Text style={t.body}>{item.obs || 'Sem observação registrada.'}</Text>
+        {item.fotos.length ? <View style={s.fotosLinha}>
+          {item.fotos.map(f => links[f] ? <Image key={f} source={{ uri: links[f] }} style={s.thumbImg} accessibilityLabel={`Evidência do item ${item.id}`} /> : <View key={f} style={[s.thumbImg, { backgroundColor: colors.surfaceMuted }]} />)}
+        </View> : null}
+        {pedeAcao && temAcao ? (
+          <View style={s.acaoBox}>
+            <Text style={s.acaoLabel}>PLANO DE AÇÃO / TRATATIVA</Text>
+            <Text style={t.body}>{item.acao.tarefa || 'A definir'}</Text>
+            <Text style={t.caption}>Responsável: {item.acao.responsavel || 'a definir'} · Prazo: {item.acao.prazo ? dataBR(item.acao.prazo) : 'a definir'}</Text>
+          </View>
+        ) : null}
+      </Card>
+    );
+  }
   return (
     <Card style={st === 'NC' ? { borderColor: colors.danger } : st === 'OM' ? { borderColor: colors.warning } : undefined}>
       <View style={s.itemTopo}>
@@ -407,7 +558,7 @@ function EmailRelatorio({ titulo, arquivo, gerarHtml, onClose }: { titulo: strin
     setEnviando(true);
     try {
       const html = await gerarHtml();
-      const pdf = Platform.OS === 'web' ? undefined : (await Print.printToFileAsync({ html, base64: true })).base64;
+      const pdf = await pdfBase64(html);
       const r = await enviarEmail({ acao: 'relatorio', modulo: 'auditoria', para: emails, titulo, html, pdf_base64: pdf, nome_arquivo: arquivo });
       if (!r.ok) { notify('E-mail não enviado', r.erro); return; }
       notify('Relatório enviado', `Enviado para ${emails.join(', ')}.`);
@@ -450,6 +601,9 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   filtro: { minWidth: 84, flexGrow: 1, paddingVertical: 8, paddingHorizontal: 10, borderRadius: radius.control, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
   filtroNum: { fontSize: 19, fontWeight: '800' },
   itemTopo: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  linha: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10, backgroundColor: c.surface, borderLeftWidth: 1, borderRightWidth: 1, borderColor: c.border },
+  linhaPrimeira: { borderTopWidth: 1, borderTopLeftRadius: radius.control, borderTopRightRadius: radius.control },
+  linhaUltima: { borderBottomWidth: 1, borderBottomLeftRadius: radius.control, borderBottomRightRadius: radius.control },
   num: { width: 30, height: 30, borderRadius: 9, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   numTxt: { color: c.accentText, fontWeight: '800' },
   fotosLinha: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },

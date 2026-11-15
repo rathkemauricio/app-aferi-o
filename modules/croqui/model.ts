@@ -226,15 +226,40 @@ export const PALETA_ESCURA: Paleta = { ground: '#262b27', grid: '#30362f', panel
 
 const esc = (s: string) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] ?? c));
 
-/** Bicos: bolinhas na cor do combustível. Bombas espelhadas do cadastro mostram o número do bico (sempre de pé). */
-function dots(it: Item) {
+/** Posição de cada bico no desenho da bomba (coordenadas locais, antes da rotação) e raio da bolinha. */
+export function bicosLocais(it: Item): { dx: number; dy: number; raio: number }[] {
   const n = nBicos(it), h = it.h, comNumero = !!it.bicosNum?.length;
   // Com número, a bolinha cresce com a largura da bomba (36 → raio 6,5 e fonte 8,5).
   const raio = comNumero ? Math.max(5, it.w * 0.18) : 3.3, passoX = comNumero ? raio * 2.15 : 10, passoY = comNumero ? raio * 2.15 : 8, topo = comNumero ? 10 : 12;
-  const fonte = raio * 1.3;
+  return Array.from({ length: n }, (_, i) => {
+    const r = Math.floor(i / 2), k = Math.min(2, n - r * 2), c = i % 2;
+    return { dx: (c - (k - 1) / 2) * passoX, dy: -h / 2 + h * 0.28 + topo + r * passoY, raio };
+  });
+}
+
+/** Ponto do bico `i` no desenho inteiro (já com a rotação da bomba). */
+export function pontoDoBico(it: Item, i: number) {
+  const b = bicosLocais(it)[i];
+  if (!b) return null;
+  return { ...girarPonto(it.x + b.dx, it.y + b.dy, it.x, it.y, it.rot), raio: b.raio };
+}
+
+/** Bico tocado: o mais próximo do toque dentro da bomba (com folga, porque a bolinha é pequena na tela). */
+export function hitBico(items: Item[], px: number, py: number): { item: Item; indice: number } | null {
+  const it = hitTest(items, px, py);
+  if (!it || T[it.type]?.k !== 'b' || !it.bicosNum?.length) return null;
+  let melhor = -1, dist = Infinity;
+  bicosLocais(it).forEach((_, i) => { const p = pontoDoBico(it, i)!; const d = Math.hypot(px - p.x, py - p.y); if (d < dist) { dist = d; melhor = i; } });
+  if (melhor < 0) return null;
+  return dist <= Math.max(bicosLocais(it)[melhor].raio * 2.2, 12) ? { item: it, indice: melhor } : null;
+}
+
+/** Bicos: bolinhas na cor do combustível. Bombas espelhadas do cadastro mostram o número do bico (sempre de pé). */
+function dots(it: Item) {
+  const pos = bicosLocais(it);
   let d = '';
-  for (let i = 0; i < n; i++) {
-    const r = Math.floor(i / 2), k = Math.min(2, n - r * 2), c = i % 2, dx = (c - (k - 1) / 2) * passoX, dy = -h / 2 + h * 0.28 + topo + r * passoY;
+  for (let i = 0; i < pos.length; i++) {
+    const { dx, dy, raio } = pos[i], fonte = raio * 1.3;
     d += `<circle cx="${dx}" cy="${dy}" r="${raio}" fill="${T[fuelOf(it, i)].c}" stroke="#fff" stroke-width="1.4"/>`;
     const num = it.bicosNum?.[i];
     if (num) d += `<text x="${dx}" y="${dy}" transform="rotate(${-it.rot} ${dx} ${dy})" text-anchor="middle" dy="0.35em" font-size="${num.length > 2 ? fonte * 0.75 : fonte}" font-weight="800" fill="#fff">${esc(num)}</text>`;
@@ -298,7 +323,15 @@ export function areaDasBombas(items: Item[], margem = 24): Area | null {
   return { x: clamp(cx - w / 2, 0, VW - w), y: clamp(cy - h / 2, 0, VH - h), w, h };
 }
 
-export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes: boolean; selecionado?: string | null; p: Paleta; destaques?: Record<string, string>; grupo?: string[]; area?: Area | null }) {
+/** Anéis em volta do bico em aferição (coordenadas locais do item). */
+function aneisBico(it: Item, indice: number, cor: string) {
+  const b = bicosLocais(it)[indice];
+  if (!b) return '';
+  return `<circle cx="${b.dx}" cy="${b.dy}" r="${b.raio + 2.6}" fill="none" stroke="${cor}" stroke-width="2.6"/>` +
+    `<circle cx="${b.dx}" cy="${b.dy}" r="${b.raio + 6.5}" fill="none" stroke="${cor}" stroke-width="1.4" stroke-opacity="0.55"/>`;
+}
+
+export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes: boolean; selecionado?: string | null; p: Paleta; destaques?: Record<string, string>; grupo?: string[]; area?: Area | null; bicoAtivo?: { itemId: string; indice: number; cor: string } | null }) {
   const { p } = opts;
   let h = `<rect x="0" y="0" width="${VW}" height="${VH}" fill="${p.ground}"/>`;
   for (let i = 0; i <= VW; i += 50) h += `<line x1="${i}" y1="0" x2="${i}" y2="${VH}" stroke="${p.grid}" stroke-width="1"/>`;
@@ -312,6 +345,7 @@ export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes:
       (noGrupo ? `<rect x="${-it.w / 2 - 3}" y="${-it.h / 2 - 3}" width="${it.w + 6}" height="${it.h + 6}" fill="none" stroke="${p.accent}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.8"/>` : '') +
       (on ? `<rect x="${-it.w / 2 - 4}" y="${-it.h / 2 - 4}" width="${it.w + 8}" height="${it.h + 8}" fill="none" stroke="${p.accent}" stroke-width="2.5" stroke-dasharray="5 3"/>` : '') +
       (it.label ? rotulo(it, t, cor) : '') +
+      (opts.bicoAtivo?.itemId === it.id ? aneisBico(it, opts.bicoAtivo.indice, opts.bicoAtivo.cor) : '') +
       `</g>`;
   }
   if (opts.mostrarNomes) for (const it of ordem) {

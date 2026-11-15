@@ -1,6 +1,4 @@
-import * as Print from 'expo-print';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +6,7 @@ import { useAuth } from '../../lib/auth';
 import { bandeirasAtivas, nomeBandeira } from '../../lib/bandeiras';
 import { docsCol, filiaisCol, saveFilialDoc, useFiliais, useFilialDoc } from '../../lib/data';
 import { isSyncEnabled, useCollection } from '../../lib/sync';
+import { imprimirHtml } from '../../lib/util';
 import {
   ArrowClockwiseIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowsInIcon, ArrowsOutIcon, ArrowUpIcon, CheckIcon, CopySimpleIcon, DownloadSimpleIcon, DropIcon, FilePdfIcon,
   GasPumpIcon, GridFourIcon, MagnifyingGlassIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, PencilSimpleIcon, ResetIcon, StorefrontIcon, TrashIcon, WarningCircleIcon,
@@ -142,11 +141,8 @@ export default function CroquiModule() {
     if (!filial) return;
     const svg = croquiSvg(items, { bandeira: filial.bandeira, mostrarNomes: nomes, p: PALETA_CLARA });
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Croqui ${filial.nome}</title><style>@page{size:A4 landscape;margin:10mm}body{font:12px Arial,sans-serif;margin:0}h1{font-size:16px;margin:0 0 8px}svg{width:100%;height:auto}</style></head><body><h1>Croqui · ${filial.codigo} ${filial.nome}</h1>${svg}</body></html>`;
-    try {
-      if (Platform.OS === 'web') { await Print.printAsync({ html }); return; }
-      const file = await Print.printToFileAsync({ html, width: 842, height: 595 });
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
-    } catch { notify('Não foi possível gerar o PDF'); }
+    try { await imprimirHtml(html, `Croqui ${filial.codigo} ${filial.nome}`, true); }
+    catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
 
   const voltar = () => { if (router.canGoBack()) router.back(); else router.replace('/'); };

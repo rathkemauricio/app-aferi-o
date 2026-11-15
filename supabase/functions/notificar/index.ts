@@ -26,7 +26,7 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 const APP_URL = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
 
 // Mesmos ids e nomes de modules/registry.ts.
-const MODULOS: Record<string, string> = { afericoes: 'Aferições', tempos: 'Tempos e Movimentos', croqui: 'Croqui', auditoria: 'Auditoria' };
+const MODULOS: Record<string, string> = { afericoes: 'Aferições', tempos: 'Tempos e Movimentos', croqui: 'Croqui', auditoria: 'Auditoria', riscos: 'Mapa de Risco', inventarios: 'Inventários', agenda: 'Agenda', coleta: 'Coleta' };
 
 type Perfil = { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[] | null };
 

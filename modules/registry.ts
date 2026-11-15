@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 import { useTemposAviso } from './tempos/aviso';
-import { ArchiveIcon, ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, ShieldWarningIcon, StorefrontIcon } from '../ui/icons';
+import { ArchiveIcon, BarcodeIcon, CalendarDotsIcon, ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, ShieldWarningIcon, StorefrontIcon } from '../ui/icons';
 import type { Tint } from '../ui/theme';
 
 // Catálogo de módulos exibido na tela inicial.
@@ -65,5 +65,21 @@ export const MODULES: AppModule[] = [
     icon: ArchiveIcon,
     tint: 'slate',
     route: '/inventarios',
+  },
+  {
+    id: 'agenda',
+    name: 'Agenda',
+    description: 'Visitas, auditorias e reuniões por dia, sincronizadas com o seu Google Agenda.',
+    icon: CalendarDotsIcon,
+    tint: 'sky',
+    route: '/agenda',
+  },
+  {
+    id: 'coleta',
+    name: 'Coleta',
+    description: 'Contagem de estoque por filial com coletor: saldos do ERP, até 3 contagens e relatório de divergências.',
+    icon: BarcodeIcon,
+    tint: 'amber',
+    route: '/coleta',
   },
 ];
