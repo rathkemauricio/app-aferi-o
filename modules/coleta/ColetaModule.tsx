@@ -1070,76 +1070,83 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
 
   // Layout completo (o anterior): escolhido em Configurações → Coleta.
   if (layoutColeta === 'completo') {
+  // Layout completo (compacto): leitura numa linha, cartão do item com Saldo · Coletado · Diferença e quantidade com Salvar ao lado.
   const corAviso = aviso ? (aviso.tom === 'ok' ? c.success : c.danger) : c.textMuted;
+  const dif = p && ja !== null ? ja - p.saldo : null;
+  const mini = (rotulo: string, valor: string, cor?: string) => (
+    <View style={[k.cMini, { backgroundColor: c.bg }]}>
+      <Text style={[k.cMiniRot, { color: c.textMuted }]}>{rotulo}</Text>
+      <Text style={[k.cMiniVal, { color: cor ?? c.text }]} numberOfLines={1}>{valor}</Text>
+    </View>
+  );
+  const icone = (rotulo: string, Icone: typeof CheckIcon, onPress: () => void, opc: { cor?: string; fundo?: string; ativo?: boolean } = {}) => (
+    <Pressable accessibilityRole="button" accessibilityLabel={rotulo} onPress={onPress} style={({ pressed }) => [k.cIcone, { backgroundColor: opc.fundo ?? c.surface, borderColor: c.borderStrong }, pressed && { opacity: 0.75 }]}>
+      <Icone size={20} color={opc.cor ?? c.text} weight={opc.ativo ? 'bold' : 'regular'} />
+    </Pressable>
+  );
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={k.coleta} keyboardShouldPersistTaps="always">
         {rodadas}
-        {/* Leitura: código + teclado + borracha */}
-        <View style={k.linha}>
+        {/* Leitura: código + (buscar) + teclado + borracha, tudo numa linha */}
+        <View style={[k.linha, { gap: 6 }]}>
           <TextInput ref={campo} autoFocus={!pendente} value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
             placeholder={pendente ? 'Ler outro código' : 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado} keyboardType="number-pad" returnKeyType="search"
-            style={[k.codigo, { color: c.text, backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : AMBER }]} accessibilityLabel="Código de barras" />
-          <Pressable accessibilityRole="switch" accessibilityLabel={teclado ? 'Esconder teclado' : 'Mostrar teclado para digitar o código'} accessibilityState={{ checked: teclado }}
-            onPress={() => { setTeclado(v => !v); focar('codigo'); }} style={[k.icone, { backgroundColor: teclado ? NAVY : c.surface, borderColor: c.borderStrong }]}>
-            <KeyboardIcon size={24} color={teclado ? '#fff' : c.text} />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Apagar tudo e ler outro item" onPress={apagar} style={[k.icone, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
-            <EraserIcon size={24} color={c.danger} weight="bold" />
-          </Pressable>
+            style={[k.cCodigo, { color: c.text, backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : AMBER }]} accessibilityLabel="Código de barras" />
+          {codigo.trim() ? icone('Buscar item', MagnifyingGlassIcon, () => ler(codigo), { fundo: AMBER, cor: AMBER_TXT, ativo: true }) : null}
+          {icone(teclado ? 'Esconder teclado' : 'Mostrar teclado para digitar o código', KeyboardIcon, () => { setTeclado(v => !v); focar('codigo'); }, { fundo: teclado ? NAVY : undefined, cor: teclado ? '#fff' : undefined })}
+          {icone('Apagar tudo e ler outro item', EraserIcon, apagar, { cor: c.danger, ativo: true })}
         </View>
-        {codigo.trim() ? <Botao titulo="Buscar item" tipo="s" icone={MagnifyingGlassIcon} onPress={() => ler(codigo)} /> : null}
         <Text style={[k.cap, { color: corAviso }]} numberOfLines={2}>{aviso?.txt ?? (pendente ? 'Confira o item e informe a quantidade.' : 'Leia o código: o item aparece aqui e depois você informa a quantidade.')}</Text>
 
         {/* Item identificado: arrastar para a direita corrige, para a esquerda zera */}
         {p ? (
-          <Deslizavel key={p.codigo} raio={14} direita={{ ...ARRASTE_CORRIGIR, habilitada: ja !== null }} esquerda={{ ...ARRASTE_ZERAR, habilitada: !!ja }}
+          <Deslizavel key={p.codigo} raio={12} direita={{ ...ARRASTE_CORRIGIR, habilitada: ja !== null }} esquerda={{ ...ARRASTE_ZERAR, habilitada: !!ja }}
             onDireita={abrirCorrecao} onEsquerda={() => zerarItem(ct, r, p, ja ?? 0, meu, feito)}
             onBloqueada={() => setAviso({ txt: 'Nada coletado deste item ainda: não há o que corrigir.', tom: 'erro' })}>
-          <View style={[k.itemCol, { backgroundColor: c.surface, borderColor: pendente ? AMBER : c.border }]}>
-            <View style={k.linha}>
-              <Text style={[k.cap, k.b, { color: c.textMuted }]}>CÓD. INTERNO</Text>
-              <Text style={[k.monoG, { color: c.text, flex: 1, fontSize: 22 }]} numberOfLines={1}>{p.codigo}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Histórico de coletas do item" hitSlop={8} onPress={() => setVerHist(true)} style={[k.linha, { gap: 4 }]}>
-                <ClockCounterClockwiseIcon size={20} color={c.accentText} />
-                <Text style={[k.cap, k.b, { color: c.accentText }]}>{hist.length}</Text>
-              </Pressable>
-            </View>
-            <Text style={[k.cTit, { color: c.text, fontSize: 19 }]} numberOfLines={2}>{p.nome}</Text>
-            <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{lido && lido !== p.codigo ? `Lido ${lido} · ` : ''}{p.categoria}</Text>
-            <View style={k.linha}>
-              <Text style={[k.cap, { color: c.textMuted }]}>Saldo ERP</Text>
-              <Text style={[k.monoM, k.b, { color: c.text, fontSize: 20, flex: 1 }]}>{fmtQ(p.saldo)}{zerado(p) ? <Text style={[k.cap, { color: c.textMuted }]}>  zerado no arquivo</Text> : null}</Text>
-              {ja !== null ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Corrigir a coleta de ${p.nome} (ou arraste o item para o lado)`} onPress={abrirCorrecao} hitSlop={6}>
-                  <Text style={[k.cap, { color: c.textMuted }]}>⇆ arraste p/ corrigir</Text>
+            <View style={[k.cItem, { backgroundColor: c.surface, borderColor: pendente ? AMBER : c.border }]}>
+              <View style={[k.linha, { gap: 10 }]}>
+                <Text style={[k.mono, { color: c.textMuted, flex: 1 }]} numberOfLines={1}>Cód. <Text style={[k.b, { color: c.text }]}>{p.codigo}</Text>{lido && lido !== p.codigo ? `  ·  lido ${lido}` : ''}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Histórico de coletas do item" hitSlop={8} onPress={() => setVerHist(true)} style={[k.linha, { gap: 3 }]}>
+                  <ClockCounterClockwiseIcon size={17} color={c.accentText} />
+                  <Text style={[k.cap, k.b, { color: c.accentText }]}>{hist.length}</Text>
                 </Pressable>
-              ) : null}
+                {ja !== null ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Corrigir a coleta de ${p.nome} (ou arraste o item para o lado)`} hitSlop={8} onPress={abrirCorrecao}>
+                    <PencilSimpleIcon size={17} color={c.accentText} />
+                  </Pressable>
+                ) : null}
+              </View>
+              <Text style={[k.cNome, { color: c.text }]} numberOfLines={2}>{p.nome}</Text>
+              <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{p.categoria}{zerado(p) ? '  ·  zerado no ERP' : ''}</Text>
+              <View style={[k.linha, { gap: 6 }]}>
+                {mini('Saldo ERP', fmtQ(p.saldo))}
+                {mini('Coletado', fmtQ(ja ?? 0))}
+                {mini('Diferença', dif === null ? '—' : `${dif > 0 ? '+' : ''}${fmtQ(dif)}`, dif ? (dif < 0 ? c.danger : c.warning) : dif === 0 ? c.success : undefined)}
+              </View>
             </View>
-          </View>
           </Deslizavel>
-        ) : <EmptyState icon={BarcodeIcon} title="Aguardando leitura" text={`${lista.length.toLocaleString('pt-BR')} itens nesta contagem.`} />}
+        ) : (
+          <View style={[k.cVazio, { borderColor: c.border }]}>
+            <BarcodeIcon size={22} color={c.textMuted} />
+            <Text style={[k.cTxt, { color: c.textMuted, flex: 1 }]}>Aguardando leitura · {lista.length.toLocaleString('pt-BR')} itens nesta contagem</Text>
+          </View>
+        )}
 
         {/* Quantidade: só depois de identificar o item */}
         {pendente && p ? (
-          <View style={k.linha}>
+          <View style={[k.linha, { gap: 6 }]}>
             <TextInput ref={campoQtd} autoFocus value={qtd} onChangeText={setQtd} onSubmitEditing={e => registrar(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
               placeholder="Quantidade" placeholderTextColor={c.textFaint} keyboardType="decimal-pad" returnKeyType="done" selectTextOnFocus
-              style={[k.codigo, { color: c.text, backgroundColor: c.surface, borderColor: AMBER, textAlign: 'center', fontSize: 26 }]} accessibilityLabel={`Quantidade contada de ${p.nome}`} />
+              style={[k.cQtd, { color: c.text, backgroundColor: c.surface, borderColor: AMBER }]} accessibilityLabel={`Quantidade contada de ${p.nome}`} />
             <Pressable accessibilityRole="button" accessibilityLabel="Salvar quantidade" accessibilityState={{ disabled: !qtd.trim() }} disabled={!qtd.trim()} onPress={() => registrar(qtd)}
-              style={({ pressed }) => [k.salvar, !qtd.trim() && { opacity: 0.45 }, pressed && { opacity: 0.85 }]}>
-              <CheckIcon size={22} color={AMBER_TXT} weight="bold" />
-              <Text style={[k.botaoTxt, { color: AMBER_TXT }]}>Salvar</Text>
+              style={({ pressed }) => [k.cSalvar, !qtd.trim() && { opacity: 0.45 }, pressed && { opacity: 0.85 }]}>
+              <CheckIcon size={18} color={AMBER_TXT} weight="bold" />
+              <Text style={[k.b, { color: AMBER_TXT, fontSize: 15 }]}>Salvar</Text>
             </Pressable>
           </View>
         ) : null}
       </ScrollView>
-      {p ? (
-        <View style={[k.total, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Text style={k.totalTxt}>Total coletado do item</Text>
-          <Text style={k.totalN}>{fmtQ(ja ?? 0)}</Text>
-        </View>
-      ) : null}
       {janelas}
     </View>
   );
@@ -1486,6 +1493,16 @@ const k = StyleSheet.create({
   codigo: { flex: 1, minHeight: 54, borderWidth: 2, borderRadius: 12, paddingHorizontal: 14, fontSize: 19, fontFamily: 'monospace' },
   kpi: { flex: 1, borderRadius: 10, padding: 12, gap: 2 },
   coleta: { padding: space.md, gap: space.sm, width: '100%', maxWidth: 720, alignSelf: 'center' },
+  cCodigo: { flex: 1, minHeight: 46, borderWidth: 2, borderRadius: 10, paddingHorizontal: 12, fontSize: 17, fontFamily: 'monospace' },
+  cIcone: { width: 46, height: 46, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  cItem: { borderWidth: 2, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, gap: 4 },
+  cNome: { fontSize: 16, fontWeight: '800', lineHeight: 21 },
+  cMini: { flex: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8, gap: 1 },
+  cMiniRot: { fontSize: 11, fontWeight: '700' },
+  cMiniVal: { fontSize: 18, fontWeight: '800', fontFamily: 'monospace' },
+  cVazio: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 14 },
+  cQtd: { flex: 1, minHeight: 48, borderWidth: 2, borderRadius: 10, paddingHorizontal: 12, fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  cSalvar: { minHeight: 48, paddingHorizontal: 16, borderRadius: 10, backgroundColor: AMBER, flexDirection: 'row', alignItems: 'center', gap: 6 },
   leitura: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderRadius: 12, overflow: 'hidden' },
   leituraCampo: { flex: 1, minHeight: 58, paddingHorizontal: 14, fontSize: 22, textAlign: 'center', fontFamily: 'monospace' },
   leituraIr: { width: 64, alignSelf: 'stretch', backgroundColor: VERDE, alignItems: 'center', justifyContent: 'center' },
@@ -1506,7 +1523,7 @@ const k = StyleSheet.create({
   icone: { width: 54, height: 54, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   itemCol: { borderWidth: 2, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
   salvar: { minHeight: 54, paddingHorizontal: 18, borderRadius: 12, backgroundColor: AMBER, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  chip: { flex: 1, borderWidth: 1.5, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 8, alignItems: 'center' },
+  chip: { flex: 1, borderWidth: 1.5, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 8, alignItems: 'center' },
   kpiN: { fontFamily: 'monospace', fontSize: 30, fontWeight: '700' },
   total: { backgroundColor: NAVY, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xl, paddingTop: 14 },
   totalTxt: { color: '#c9d4e2', fontSize: 16, flex: 1 },
