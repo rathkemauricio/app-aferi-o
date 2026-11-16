@@ -6,6 +6,7 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../lib/auth';
+import { preferencias } from '../../lib/preferencias';
 import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -269,8 +270,9 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
 
 function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const c = useCores();
-  const [filialId, setFilialId] = useState('');
-  const [tipo, setTipo] = useState<'completo' | 'parcial'>('completo');
+  // Padrões deste aparelho (Configurações): filial e tipo já escolhidos.
+  const [filialId, setFilialId] = useState(() => { const f = preferencias().filialPadrao; return f && dados.filiais.some(x => x.id === f) ? f : ''; });
+  const [tipo, setTipo] = useState<'completo' | 'parcial'>(() => preferencias().tipoPadrao);
   const [escolher, setEscolher] = useState(false);
   const [busca, setBusca] = useState('');
   const [petros, setPetros] = useState(false);
@@ -956,7 +958,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   /** Item identificado e aguardando a quantidade (2º passo). */
   const [pendente, setPendente] = useState(false);
   const [aviso, setAviso] = useState<{ txt: string; tom: 'ok' | 'erro' } | null>(null);
-  const [teclado, setTeclado] = useState(false); // coletor não precisa do teclado na tela; no celular comum, liga aqui
+  const [teclado, setTeclado] = useState(() => preferencias().tecladoColeta); // coletor não precisa do teclado na tela; padrão em Configurações
   const [verHist, setVerHist] = useState(false);
   const [corrigindo, setCorrigindo] = useState(false);
   const minhas = useMinhasColetas(ct, r);
@@ -1022,10 +1024,16 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); // 1,5 ou 1.5
     if (!t || !Number.isFinite(n) || n <= 0) { tocar('barrado'); setAviso({ txt: 'Informe a quantidade contada deste item.', tom: 'erro' }); focar('qtd'); return; }
     if (n > 99999) { tocar('barrado'); setAviso({ txt: `Quantidade ${t} muito alta: confira o número digitado.`, tom: 'erro' }); setQtd(''); focar('qtd'); return; }
-    void registrarLeitura(ct, r, p.codigo, n);
-    tocar('salvo');
-    setAviso({ txt: `Salvo: +${fmtQ(n)} · ${p.nome}`, tom: 'ok' });
-    setPendente(false); setQtd(''); focar('codigo');
+    const gravar = () => {
+      void registrarLeitura(ct, r, p.codigo, n);
+      tocar('salvo');
+      setAviso({ txt: `Salvo: +${fmtQ(n)} · ${p.nome}`, tom: 'ok' });
+      setPendente(false); setQtd(''); focar('codigo');
+    };
+    // Confirmação de quantidade grande (limite em Configurações; 0 = nunca pedir).
+    const limite = preferencias().confirmarAcima;
+    if (limite > 0 && n > limite) { confirmAction(`Salvar ${fmtQ(n)}?`, `${p.nome}\n\nQuantidade acima de ${fmtQ(limite)}: confira se está certa.`, 'Salvar', gravar); return; }
+    gravar();
   };
   /** Borracha: limpa a tela inteira e volta para a leitura, sem item. */
   const apagar = () => { setCodigo(''); setQtd(''); setLido(null); setSel(null); setPendente(false); setAviso(null); focar('codigo'); };

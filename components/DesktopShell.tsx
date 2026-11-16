@@ -7,7 +7,7 @@ import { Avatar } from './Avatar';
 import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
-import { DropIcon, HouseIcon, MoonIcon, SidebarSimpleIcon, SignOutIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
+import { DropIcon, GearIcon, HouseIcon, MoonIcon, SidebarSimpleIcon, SignOutIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
 import { IconButton, confirmAction } from '../ui/kit';
 import { radius, ThemeContext, type ThemeColors } from '../ui/theme';
 
@@ -61,6 +61,8 @@ export function DesktopShell({ children }: { children: ReactNode }) {
           <NavItem item={{ label: 'Combustíveis', route: '/combustiveis', icon: DropIcon }} />
           <NavItem item={{ label: 'Bandeiras', route: '/bandeiras', icon: StorefrontIcon }} />
           {isAdmin ? <><Text style={styles.groupLabel}>{compact ? '·' : 'ADMINISTRAÇÃO'}</Text><NavItem item={{ label: 'Usuários e permissões', route: '/usuarios', icon: UserCircleIcon }} /></> : null}
+          <Text style={styles.groupLabel}>{compact ? '·' : 'PREFERÊNCIAS'}</Text>
+          <NavItem item={{ label: 'Configurações', route: '/configuracoes', icon: GearIcon }} />
         </ScrollView>
 
         <View style={styles.sidebarFooter}>

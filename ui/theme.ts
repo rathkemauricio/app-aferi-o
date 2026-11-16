@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { createContext, createElement, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
 // Tokens visuais do app. Um único acento (índigo), neutros frios e cores semânticas só para status.
@@ -80,31 +80,34 @@ const webColor: ThemeColors = {
 const webDarkColor: ThemeColors = {
   ...darkColor, accent: '#e5e250', accentPressed: '#cfcf40', accentSoft: '#3c3b26', accentText: '#f2ef57', primaryText: '#25261f',
 };
-export const ThemeContext = createContext<{ mode: ThemeMode; colors: ThemeColors; toggleTheme: () => void; escala: number; setEscala: (e: number) => void }>({
-  mode: 'light', colors: color, toggleTheme: () => undefined, escala: 1, setEscala: () => undefined,
+/** Preferência de tema do aparelho: claro, escuro ou automático (segue o tema do celular/computador). */
+export type PreferenciaTema = ThemeMode | 'auto';
+export const ThemeContext = createContext<{
+  mode: ThemeMode; colors: ThemeColors; toggleTheme: () => void; escala: number; setEscala: (e: number) => void;
+  preferenciaTema: PreferenciaTema; setPreferenciaTema: (p: PreferenciaTema) => void;
+}>({
+  mode: 'light', colors: color, toggleTheme: () => undefined, escala: 1, setEscala: () => undefined, preferenciaTema: 'light', setPreferenciaTema: () => undefined,
 });
 const THEME_KEY = 'nevoeiro.display-theme.v1';
 const ESCALA_KEY = 'nevoeiro.display-escala.v1';
-/** Tamanhos de fontes e ícones oferecidos em Minha conta (o app inteiro é ampliado por igual). */
+/** Tamanhos de fontes e ícones oferecidos em Configurações (o app inteiro é ampliado por igual). */
 export const ESCALAS = [0.85, 1, 1.15, 1.3, 1.5] as const;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>('light');
+  const sistema = useColorScheme();
+  const [preferenciaTema, setPref] = useState<PreferenciaTema>('light');
   const [escala, setEscalaState] = useState(1);
-  useEffect(() => { void AsyncStorage.getItem(THEME_KEY).then(saved => { if (saved === 'dark' || saved === 'light') setMode(saved); }).catch(() => undefined); }, []);
+  useEffect(() => { void AsyncStorage.getItem(THEME_KEY).then(saved => { if (saved === 'dark' || saved === 'light' || saved === 'auto') setPref(saved); }).catch(() => undefined); }, []);
   useEffect(() => { void AsyncStorage.getItem(ESCALA_KEY).then(v => { const n = Number(v); if (v && (ESCALAS as readonly number[]).includes(n)) setEscalaState(n); }).catch(() => undefined); }, []);
   const setEscala = useCallback((e: number) => { setEscalaState(e); void AsyncStorage.setItem(ESCALA_KEY, String(e)).catch(() => undefined); }, []);
-  const toggleTheme = useCallback(() => {
-    setMode(current => {
-      const next = current === 'light' ? 'dark' : 'light';
-      void AsyncStorage.setItem(THEME_KEY, next).catch(() => undefined);
-      return next;
-    });
-  }, []);
+  const setPreferenciaTema = useCallback((p: PreferenciaTema) => { setPref(p); void AsyncStorage.setItem(THEME_KEY, p).catch(() => undefined); }, []);
+  const mode: ThemeMode = preferenciaTema === 'auto' ? (sistema === 'dark' ? 'dark' : 'light') : preferenciaTema;
+  // Atalho (ícone de sol/lua): fixa o tema oposto ao que está na tela.
+  const toggleTheme = useCallback(() => setPreferenciaTema(mode === 'light' ? 'dark' : 'light'), [mode, setPreferenciaTema]);
   const colors = Platform.OS === 'web'
     ? mode === 'dark' ? webDarkColor : webColor
     : mode === 'dark' ? darkColor : color;
-  const value = useMemo(() => ({ mode, colors, toggleTheme, escala, setEscala }), [mode, colors, toggleTheme, escala, setEscala]);
+  const value = useMemo(() => ({ mode, colors, toggleTheme, escala, setEscala, preferenciaTema, setPreferenciaTema }), [mode, colors, toggleTheme, escala, setEscala, preferenciaTema, setPreferenciaTema]);
   return createElement(ThemeContext.Provider, { value }, children);
 }
 

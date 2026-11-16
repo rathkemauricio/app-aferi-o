@@ -1,4 +1,5 @@
 import { type AudioPlayer, createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { preferencias } from './preferencias';
 
 // Sons curtos da coleta:
 //   correto: item reconhecido e liberado para coletar;  salvo: quantidade gravada;
@@ -15,6 +16,7 @@ const players = new Map<Som, AudioPlayer>();
 let modo = false;
 
 export function tocar(som: Som) {
+  if (!preferencias().sons) return; // desligados em Configurações
   try {
     if (!modo) { modo = true; void setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'mixWithOthers' }).catch(() => undefined); }
     let p = players.get(som);
