@@ -6,10 +6,15 @@
 //        lê os produtos e saldos da filial (PDF/CSV exportado do Petros ou API), grava em ce_produtos
 //        (só itens com saldo diferente de zero) e abre o inventário.
 //   { acao: 'enviar_resultado', inventario_id, linhas: [{ codigo, saldo, contado }] } → envia ao Petros pela API
+//   { acao: 'gravar_barras', filial_id, arquivo, itens: [{ codigo, nome, categoria, eans }] }
+//        substitui a base fixa de códigos de barra da filial (o PDF é lido no navegador: é pesado demais aqui).
+//        A carga de saldos exige essa base e liga os EANs aos itens pelo código interno.
+//   { acao: 'extrair_pdf', caminho: 'barras/<arquivo>.pdf', de, ate } → { total, paginas: [[x, y, texto]][] }
+//        textos de um lote de páginas do PDF enviado ao bucket coleta-arquivos (importação pelo celular).
 //
 // Publicar: npx supabase functions deploy coleta-erp --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
-import { lerArquivo } from './arquivo.ts';
+import { lerArquivo, textosDasPaginas } from './arquivo.ts';
 import { enviarPetros, type LinhaResultado, petrosConfigurado, type ProdutoErp, saldosPetros } from './petros.ts';
 
 const cors = {
@@ -32,14 +37,71 @@ async function inventario(id: string) {
   return { ...data, filialCodigo: String((data as any).filiais?.codigo ?? '') };
 }
 
+type ItemBarras = { codigo: string; nome: string; categoria: string; eans: string[] };
+
+/** Base fixa de códigos de barra da filial (código interno → EANs). */
+async function baseBarras(filialId: string) {
+  const base = new Map<string, ItemBarras>();
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await admin.from('ce_barras').select('codigo,nome,categoria,eans').eq('filial_id', filialId).order('codigo').range(de, de + 999);
+    if (error) throw new Error(`Falha ao ler a base de códigos de barra: ${error.message}`);
+    (data ?? []).forEach(d => base.set(String(d.codigo), { codigo: String(d.codigo), nome: String(d.nome), categoria: String(d.categoria), eans: (d.eans as string[]) ?? [] }));
+    if (!data || data.length < 1000) break;
+  }
+  return base;
+}
+
+/** Grava (substitui) a base de códigos de barra da filial, lida no navegador a partir do PDF do ERP. */
+async function gravarBarras(body: { filial_id: string; arquivo: string; itens: ItemBarras[] }) {
+  const { data: f } = await admin.from('filiais').select('id').eq('id', body.filial_id).maybeSingle();
+  if (!f) return json(400, { erro: 'Filial não encontrada no servidor.' });
+  const porCodigo = new Map<string, ItemBarras>();
+  (body.itens ?? []).forEach(i => {
+    const codigo = String(i?.codigo ?? '').trim();
+    if (!/^\d{1,14}$/.test(codigo)) return;
+    const eans = [...new Set((i.eans ?? []).map(e => String(e).trim()).filter(e => /^\d{8,14}$/.test(e)))];
+    const ja = porCodigo.get(codigo);
+    if (ja) ja.eans = [...new Set([...ja.eans, ...eans])];
+    else porCodigo.set(codigo, { codigo, nome: String(i.nome ?? '').slice(0, 200), categoria: String(i.categoria ?? '').slice(0, 120), eans });
+  });
+  const linhas = [...porCodigo.values()].map(i => ({ filial_id: body.filial_id, ...i }));
+  if (!linhas.length) return json(400, { erro: 'Nenhum produto reconhecido na relação de códigos de barra.' });
+
+  const { error: e1 } = await admin.from('ce_barras').delete().eq('filial_id', body.filial_id);
+  if (e1) throw new Error(`Falha ao limpar a base anterior: ${e1.message}`);
+  for (let i = 0; i < linhas.length; i += 1000) {
+    const { error } = await admin.from('ce_barras').insert(linhas.slice(i, i + 1000));
+    if (error) throw new Error(`Falha ao gravar a base de códigos de barra: ${error.message}`);
+  }
+  const eans = linhas.reduce((n, l) => n + l.eans.length, 0);
+  const { error: e2 } = await admin.from('ce_bases').upsert({ id: body.filial_id, arquivo: String(body.arquivo ?? '').slice(0, 200), itens: linhas.length, eans, importado_em: new Date().toISOString(), deleted_at: null });
+  if (e2) throw new Error(`Falha ao registrar a base: ${e2.message}`);
+  return json(200, { ok: true, itens: linhas.length, eans, semEan: linhas.filter(l => !l.eans.length).length });
+}
+
+/** Lote de páginas de um PDF enviado ao bucket coleta-arquivos (o app monta a base a partir dos textos). */
+const BUCKET = 'coleta-arquivos';
+async function extrairPdf(body: { caminho: string; de: number; ate: number }) {
+  const caminho = String(body.caminho ?? '');
+  if (!/^barras\/[\w.-]+\.pdf$/.test(caminho)) return json(400, { erro: 'Arquivo inválido.' });
+  const { data, error } = await admin.storage.from(BUCKET).download(caminho);
+  if (error || !data) return json(400, { erro: 'O PDF enviado não foi encontrado no servidor. Tente importar de novo.' });
+  const de = Math.max(1, Math.floor(Number(body.de) || 1));
+  const ate = Math.min(de + 199, Math.floor(Number(body.ate) || de));
+  return json(200, { ok: true, ...(await textosDasPaginas(new Uint8Array(await data.arrayBuffer()), de, ate)) });
+}
+
 async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petros'; arquivo?: { nome: string; base64: string } }) {
   const inv = await inventario(body.inventario_id);
   if (inv.status === 'encerrado') return json(400, { erro: 'Este inventário já foi encerrado.' });
-  let produtos: ProdutoErp[], ignoradas = 0;
+  // Os códigos de barra vêm da base fixa da filial; sem ela o coletor não reconhece os EANs.
+  const base = await baseBarras(inv.filial_id);
+  if (!base.size) return json(400, { erro: `A filial ${inv.filialCodigo} ainda não tem a relação de códigos de barra importada. Importe-a em "Bases de códigos de barra" e carregue os saldos de novo.` });
+  let produtos: ProdutoErp[], ignoradas = 0, saldoEm: string | null = null;
   if (body.fonte === 'petros') produtos = await saldosPetros(inv.filialCodigo);
   else {
     if (!body.arquivo?.base64) return json(400, { erro: 'Envie o arquivo exportado pelo ERP.' });
-    ({ produtos, ignoradas } = await lerArquivo(body.arquivo.nome, body.arquivo.base64));
+    ({ produtos, ignoradas, saldoEm } = await lerArquivo(body.arquivo.nome, body.arquivo.base64));
   }
   // Um registro por código (linhas repetidas somam o saldo); só itens com saldo diferente de zero.
   const porCodigo = new Map<string, ProdutoErp>();
@@ -47,9 +109,15 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
     const ja = porCodigo.get(p.codigo);
     if (ja) { ja.saldo += p.saldo; ja.eans = [...new Set([...ja.eans, ...p.eans])]; } else porCodigo.set(p.codigo, { ...p });
   });
-  const linhas = [...porCodigo.values()].filter(p => p.saldo !== 0).map(p => ({
-    inventario_id: inv.id, codigo: p.codigo, eans: p.eans, nome: p.nome, categoria: p.categoria || 'Sem categoria', classe: classeDe(p), saldo: p.saldo, custo: p.custo ?? null,
-  }));
+  // Liga cada item do saldo à base pelo código interno: EANs da base + os que o relatório trouxer.
+  let semBarras = 0;
+  const linhas = [...porCodigo.values()].filter(p => p.saldo !== 0).map(p => {
+    const b = base.get(p.codigo);
+    const eans = [...new Set([...(b?.eans ?? []), ...p.eans])];
+    if (!eans.length) semBarras++;
+    const categoria = (p.categoria && p.categoria !== 'Sem categoria' ? p.categoria : b?.categoria) || 'Sem categoria';
+    return { inventario_id: inv.id, codigo: p.codigo, eans, nome: p.nome || b?.nome || '', categoria, classe: classeDe({ ...p, categoria }), saldo: p.saldo, custo: p.custo ?? null };
+  });
   if (!linhas.length) return json(400, { erro: 'Nenhum item com saldo foi encontrado para esta filial.' });
 
   const { error: e1 } = await admin.from('ce_produtos').delete().eq('inventario_id', inv.id);
@@ -60,10 +128,12 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
   }
   const { error: e2 } = await admin.from('ce_inventarios').update({
     status: 'aberto', fonte: body.fonte, arquivo: body.arquivo?.nome ?? 'API Petros', itens_total: linhas.length, erp_em: new Date().toISOString(),
+    saldo_em: saldoEm, sem_barras: semBarras,
   }).eq('id', inv.id);
   if (e2) throw new Error(`Falha ao abrir o inventário: ${e2.message}`);
   const avisos = [
     ...(ignoradas ? [`${ignoradas} linha(s) do arquivo não foram reconhecidas como produto.`] : []),
+    ...(semBarras ? [`${semBarras} item(ns) com saldo não têm código de barras na base da filial: leia-os digitando o código interno.`] : []),
     ...(produtos.length - linhas.length > 0 ? [`${produtos.length - linhas.length} item(ns) com saldo zero ou repetidos ficaram de fora.`] : []),
   ];
   return json(200, { ok: true, itens: linhas.length, categorias: new Set(linhas.map(l => l.categoria)).size, avisos });
@@ -88,6 +158,8 @@ Deno.serve(async req => {
     switch (body.acao) {
       case 'status': return json(200, { ok: true, petros: petrosConfigurado() });
       case 'carregar': return await carregar(body);
+      case 'gravar_barras': return await gravarBarras(body);
+      case 'extrair_pdf': return await extrairPdf(body);
       case 'enviar_resultado': return await enviarResultado(body);
       default: return json(400, { erro: 'Ação desconhecida.' });
     }

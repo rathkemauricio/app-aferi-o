@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { type ComponentRef, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -17,14 +18,15 @@ import {
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
 import {
-  carregarErp, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, indiceLeitura, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
+  basesCol, carregarErp, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, indiceLeitura, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
 } from './store';
+import { lerPdfBarras } from './barras';
 
 // Cores do design da Contagem de Estoque (cabeçalho azul-marinho, ação principal âmbar).
 const NAVY = '#102a46', AMBER = '#f3a200', AMBER_TXT = '#1b2230';
 
 type Tela =
-  | { n: 'lista' } | { n: 'abrir' } | { n: 'inventario'; id: string } | { n: 'nova'; inv: string }
+  | { n: 'lista' } | { n: 'abrir' } | { n: 'bases'; filial?: string } | { n: 'inventario'; id: string } | { n: 'nova'; inv: string }
   | { n: 'contagem'; id: string; aba: 'itens' | 'coleta'; rodada?: Rodada } | { n: 'finalizar'; id: string; rodada: Rodada } | { n: 'relatorio'; inv: string; divergentes?: boolean };
 const TELA_KEY = 'nevoeiro.coleta.tela.v1';
 
@@ -32,7 +34,7 @@ export default function ColetaModule() {
   const router = useRouter();
   const [pilha, setPilha] = useState<Tela[]>([{ n: 'lista' }]);
   const [pronto, setPronto] = useState(false);
-  useEffect(() => { void AsyncStorage.getItem(TELA_KEY).then(v => { if (v) setPilha(JSON.parse(v) as Tela[]); }).catch(() => undefined).finally(() => setPronto(true)); void inventariosCol.sync(); void contagensCol.sync(); }, []);
+  useEffect(() => { void AsyncStorage.getItem(TELA_KEY).then(v => { if (v) setPilha(JSON.parse(v) as Tela[]); }).catch(() => undefined).finally(() => setPronto(true)); void inventariosCol.sync(); void contagensCol.sync(); void basesCol.sync(); }, []);
   useEffect(() => { if (pronto) void AsyncStorage.setItem(TELA_KEY, JSON.stringify(pilha)).catch(() => undefined); }, [pilha, pronto]);
   const tela = pilha[pilha.length - 1];
   const ir = (t: Tela) => setPilha(p => [...p, t]);
@@ -48,6 +50,7 @@ export default function ColetaModule() {
 
   switch (tela.n) {
     case 'abrir': return <AbrirInventario dados={dados} nav={nav} />;
+    case 'bases': return <BasesBarras dados={dados} nav={nav} destaque={tela.filial} />;
     case 'inventario': { const i = inv(tela.id); return i ? <InventarioTela inv={i} dados={dados} nav={nav} /> : <Sumiu nav={nav} />; }
     case 'nova': { const i = inv(tela.inv); return i ? <NovaContagem inv={i} dados={dados} nav={nav} /> : <Sumiu nav={nav} />; }
     case 'contagem': { const c = cont(tela.id), i = c && inv(c.inventario_id); return c && i ? <ContagemTela key={c.id} c={c} inv={i} dados={dados} tela={tela} nav={nav} /> : <Sumiu nav={nav} />; }
@@ -180,6 +183,18 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo="Inventários" sub={sub} onVoltar={nav.voltar} />
       <Corpo rodape={<Botao titulo="Abrir inventário" onPress={() => nav.ir({ n: 'abrir' })} desabilitado={!isSupabaseConfigured} />}>
+        {isSupabaseConfigured ? (
+          <Cartao onPress={() => nav.ir({ n: 'bases' })}>
+            <View style={k.linha}>
+              <BarcodeIcon size={22} color={c.text} />
+              <View style={{ flex: 1 }}>
+                <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Bases de códigos de barra</Text>
+                <Text style={[k.cap, { color: c.textMuted }]}>{dados.bases.size.toLocaleString('pt-BR')} de {dados.filiais.length.toLocaleString('pt-BR')} filiais com a relação importada</Text>
+              </View>
+              <CaretRightIcon size={18} color={c.textMuted} />
+            </View>
+          </Cartao>
+        ) : null}
         {!dados.inventarios.length
           ? <EmptyState icon={PackageIcon} title="Nenhum inventário ainda" text={isSupabaseConfigured ? 'Abra um inventário: escolha a filial e carregue os saldos do ERP.' : 'A contagem de estoque precisa do servidor (o app está em modo local).'} />
           : dados.inventarios.map(i => <CartaoInventario key={i.id} inv={i} dados={dados} onPress={() => nav.ir({ n: 'inventario', id: i.id })} />)}
@@ -222,12 +237,14 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [enviando, setEnviando] = useState(false);
   useEffect(() => { void statusErp().then(r => { setPetros(r.petros); if (r.petros) setFonte('petros'); }).catch(() => undefined); }, []);
   const aberto = dados.inventarios.find(i => i.filial_id === filialId && i.status !== 'encerrado');
+  const base = filialId ? dados.bases.get(filialId) : undefined;
   const filtradas = dados.filiais.filter(f => `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(busca.toLowerCase()));
 
   const pegarArquivo = async () => { try { const a = await escolherArquivoErp(); if (a) setArquivo(a); } catch (e) { notify('Arquivo não lido', e instanceof Error ? e.message : ''); } };
   const abrir = async () => {
     if (!filialId) { notify('Escolha a filial'); return; }
     if (aberto) { notify('Filial com inventário aberto', `${aberto.codigo} ainda está aberto nesta filial. Encerre-o antes de abrir outro.`); return; }
+    if (!base) { notify('Base de códigos de barra pendente', 'Importe a relação de códigos de barra desta filial antes de abrir o inventário.'); return; }
     if (fonte === 'arquivo' && !arquivo) { notify('Escolha o arquivo do ERP', 'Use o relatório de saldos exportado pelo Petros (PDF) ou um CSV.'); return; }
     setEnviando(true);
     const id = uid('inv');
@@ -248,7 +265,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo="Abrir inventário" sub="Selecione a filial e o tipo" onVoltar={nav.voltar} />
       <Corpo rodape={<>
-        <Botao titulo={enviando ? 'Carregando o ERP…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId} />
+        <Botao titulo={enviando ? 'Carregando o ERP…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
         <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={enviando} />
       </>}>
         <Rotulo>Filial</Rotulo>
@@ -257,6 +274,18 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
           <CaretDownIcon size={18} color={c.textMuted} />
         </Pressable>
         {aberto ? <Text style={[k.cap, { color: c.danger }]}>{aberto.codigo} ainda está aberto nesta filial.</Text> : null}
+        {filialId ? (
+          <Cartao onPress={() => nav.ir({ n: 'bases', filial: filialId })}>
+            <View style={k.linha}>
+              <BarcodeIcon size={22} color={base ? c.success : c.danger} />
+              <View style={{ flex: 1 }}>
+                <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>{base ? 'Base de códigos de barra importada' : 'Falta a base de códigos de barra'}</Text>
+                <Text style={[k.cap, { color: c.textMuted }]}>{base ? `${base.itens.toLocaleString('pt-BR')} itens · ${base.eans.toLocaleString('pt-BR')} códigos · ${dataHora(base.importado_em)}` : 'Importe uma vez a relação de códigos de barra desta filial.'}</Text>
+              </View>
+              <CaretRightIcon size={18} color={c.textMuted} />
+            </View>
+          </Cartao>
+        ) : null}
         <Rotulo>Tipo de inventário</Rotulo>
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         <Cartao>
@@ -273,7 +302,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
               <UploadSimpleIcon size={22} color={c.text} />
               <View style={{ flex: 1 }}>
                 <Text style={[k.cTit, { color: c.text, fontSize: 15 }]} numberOfLines={1}>{arquivo ? arquivo.nome : 'Escolher arquivo do ERP'}</Text>
-                <Text style={[k.cap, { color: c.textMuted }]}>{arquivo ? 'Toque para trocar' : 'Relatório de saldos da filial exportado pelo Petros'}</Text>
+                <Text style={[k.cap, { color: c.textMuted }]}>{arquivo ? 'Toque para trocar' : 'PDF de saldos da filial no momento da abertura (Petros)'}</Text>
               </View>
               {arquivo ? <CheckIcon size={18} color={c.success} weight="bold" /> : null}
             </View>
@@ -293,6 +322,77 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
           ))}
         </Sheet>
       )}
+    </View>
+  );
+}
+
+const dataHora = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+
+/* =====================================================================
+   Bases de códigos de barra (uma por filial, importada uma vez)
+   ===================================================================== */
+function BasesBarras({ dados, nav, destaque }: { dados: Dados; nav: Nav; destaque?: string }) {
+  const c = useCores();
+  const [busca, setBusca] = useState('');
+  const [lendo, setLendo] = useState<{ filial: string; txt: string } | null>(null);
+  const filiais = useMemo(() => {
+    const q = busca.toLowerCase();
+    return dados.filiais.filter(f => `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(q))
+      .sort((a, b) => (a.id === destaque ? -1 : b.id === destaque ? 1 : 0) || (dados.bases.has(a.id) ? 1 : 0) - (dados.bases.has(b.id) ? 1 : 0) || String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true }));
+  }, [dados.filiais, dados.bases, busca, destaque]);
+
+  const importar = async (filialId: string) => {
+    if (lendo) return;
+    try {
+      const r = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true, multiple: false });
+      const a = r.canceled ? undefined : r.assets?.[0];
+      if (!a) return;
+      const nome = filialCurta(dados, filialId);
+      setLendo({ filial: filialId, txt: 'Abrindo o PDF…' });
+      const lido = await lerPdfBarras(a, txt => setLendo({ filial: filialId, txt }));
+      setLendo(null);
+      const ja = dados.bases.get(filialId);
+      confirmAction(`Importar base da ${nome}?`,
+        `${lido.itens.length.toLocaleString('pt-BR')} itens e ${lido.eans.toLocaleString('pt-BR')} códigos de barra em "${a.name}" (${lido.semEan.toLocaleString('pt-BR')} itens sem código de barra).${ja ? `\n\nSubstitui a base atual (${ja.itens.toLocaleString('pt-BR')} itens, ${dataHora(ja.importado_em)}). Inventários já abertos não mudam.` : ''}`,
+        ja ? 'Substituir' : 'Importar', () => {
+          void (async () => {
+            setLendo({ filial: filialId, txt: 'Gravando no servidor…' });
+            try {
+              const g = await gravarBarras(filialId, a.name, lido.itens);
+              await basesCol.sync();
+              notify('Base importada', `${nome}: ${g.itens.toLocaleString('pt-BR')} itens e ${g.eans.toLocaleString('pt-BR')} códigos de barra. Os próximos inventários desta filial já usam esta base.`);
+            } catch (e) { notify('Base não gravada', e instanceof Error ? e.message : ''); } finally { setLendo(null); }
+          })();
+        });
+    } catch (e) { setLendo(null); notify('PDF não lido', e instanceof Error ? e.message : ''); }
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <Topo titulo="Bases de códigos de barra" sub={`${dados.bases.size} de ${dados.filiais.length} filiais com base`} onVoltar={nav.voltar} />
+      <Corpo>
+        <Cartao>
+          <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Uma base fixa por filial</Text>
+          <Text style={[k.cTxt, { color: c.textMuted }]}>Importe a "Relação de Códigos de Barra por Categoria" do Petros de cada filial. Ela liga o código interno aos códigos de barra (ex.: 7790 Monster Green → 0708470220156). Em cada inventário entra só o PDF de saldos; os códigos de barra vêm daqui e seguem para os coletores.</Text>
+          <Text style={[k.cap, { color: c.textMuted }]}>Pode importar pela versão web ou pelo app: a base fica no servidor e sincroniza com todos os aparelhos.</Text>
+        </Cartao>
+        <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Código, nome ou cidade" />
+        {filiais.map(f => {
+          const b = dados.bases.get(f.id), aqui = lendo?.filial === f.id;
+          return (
+            <Cartao key={f.id} onPress={!lendo ? () => void importar(f.id) : undefined} style={f.id === destaque ? { borderColor: AMBER, borderWidth: 2 } : undefined}>
+              <View style={k.linha}>
+                <Text style={[k.cTit, { color: c.text, flex: 1, fontSize: 15 }]} numberOfLines={1}>{rotuloFilial(f)}</Text>
+                <Pilula texto={b ? 'Importada' : 'Pendente'} tom={b ? 'ok' : 'erro'} />
+              </View>
+              <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={2}>
+                {aqui && lendo ? lendo.txt : b ? `${b.itens.toLocaleString('pt-BR')} itens · ${b.eans.toLocaleString('pt-BR')} códigos · ${dataHora(b.importado_em)} · ${b.arquivo}` : 'Sem relação de códigos de barra: ainda não dá para abrir inventário.'}
+              </Text>
+              {aqui ? <ActivityIndicator color={c.textMuted} /> : !lendo ? <Text style={[k.cap, k.b, { color: c.accentText }]}>{b ? 'Toque para substituir pelo PDF mais recente' : 'Toque para importar o PDF'}</Text> : null}
+            </Cartao>
+          );
+        })}
+      </Corpo>
     </View>
   );
 }
@@ -335,7 +435,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={inv.codigo} sub={sub} onVoltar={nav.voltar} />
+      <Topo titulo={inv.codigo} sub={`${sub} · saldo ${dataHora(inv.saldo_em ?? inv.erp_em)}`} onVoltar={nav.voltar} />
       <Corpo rodape={enc
         ? <><Botao titulo="Ver relatório" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })} /><Botao titulo="Reabrir inventário" tipo="s" onPress={() => confirmAction('Reabrir inventário?', 'As contagens voltam a aceitar leituras.', 'Reabrir', () => inventariosCol.put({ ...inv, status: 'aberto', encerrado_em: null }))} /></>
         : <><Botao titulo="Abrir nova contagem" onPress={() => nav.ir({ n: 'nova', inv: inv.id })} desabilitado={!produtos} /><Botao titulo="Finalizar inventário" tipo="s" onPress={finalizarInv} desabilitado={!contagens.length} /></>}>
@@ -367,7 +467,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
             </Cartao>
           );
         })}
-        <Text style={[k.cap, { color: c.textMuted }]}>Carga do ERP: {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.erp_em ? ` em ${new Date(inv.erp_em).toLocaleString('pt-BR')}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo</Text>
+        <Text style={[k.cap, { color: c.textMuted }]}>Saldo do ERP de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
       </Corpo>
     </View>
   );
@@ -536,7 +636,8 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     setCodigo('');
     setTimeout(() => campo.current?.focus(), 30);
     if (!cod) return;
-    const prod = indice.get(cod) ?? indice.get(cod.replace(/^0+/, ''));
+    // DUN-14 (caixa): a relação de barras do Petros imprime só 13 dígitos (pula o 13º) — tenta também essa forma.
+    const prod = indice.get(cod) ?? indice.get(cod.replace(/^0+/, '')) ?? (/^\d{14}$/.test(cod) ? indice.get(cod.slice(0, 12) + cod.slice(13)) : undefined);
     if (!prod) { setAviso({ txt: `Código ${cod} não está na carga do ERP desta filial.`, tom: 'erro' }); return; }
     setSel(prod.codigo);
     if (!naRodada.has(prod.codigo)) {

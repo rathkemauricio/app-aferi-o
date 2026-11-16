@@ -8,6 +8,7 @@ import type { ProdutoErp } from './petros.ts';
 
 const numeroBR = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'));
 const NUM = /^-?[\d.]*\d(,\d+)?$/;
+const TITULO_BARRAS = /rela[çc][ãa]o de c[óo]digos de barra/i;
 
 function base64ParaBytes(b64: string) {
   const bin = atob(b64);
@@ -37,14 +38,33 @@ async function linhasDoPdf(bytes: Uint8Array): Promise<string[]> {
   return linhas;
 }
 
+/**
+ * Textos com coordenadas de um lote de páginas (usado pelo app no celular para a relação de códigos de barra:
+ * o PDF inteiro passa do limite de CPU da função, então o app pede de pouco em pouco e monta a base no aparelho).
+ */
+export async function textosDasPaginas(bytes: Uint8Array, de: number, ate: number) {
+  const pdf = await getDocumentProxy(bytes);
+  const paginas: [number, number, string][][] = [];
+  const fim = Math.min(ate, pdf.numPages);
+  for (let n = Math.max(1, de); n <= fim; n++) {
+    const page = await pdf.getPage(n);
+    const conteudo = await page.getTextContent();
+    // deno-lint-ignore no-explicit-any
+    paginas.push((conteudo.items as any[]).filter(it => it.str?.trim()).map(it => [Math.round(it.transform[4] * 10) / 10, Math.round(it.transform[5] * 10) / 10, it.str.trim()]));
+    page.cleanup();
+  }
+  return { total: pdf.numPages, paginas };
+}
+
 function cabecalhoCategoria(linha: string): string | null {
   const m = linha.match(/^\s*(?:grupo|subgrupo|categoria|departamento|se[cç][aã]o)\s*[:\-–]\s*(?:\d+\s*[-–]\s*)?(.+?)\s*$/i);
   return m ? m[1].replace(/\s{2,}/g, ' ').trim() : null;
 }
 
 function linhaProduto(linha: string): Omit<ProdutoErp, 'categoria'> | null {
-  const partes = linha.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
-  if (partes.length < 3 || !/^\d{1,10}$/.test(partes[0])) return null;
+  // "7790 - DESCRIÇÃO" (código com hífen, como na relação de barras) vira "7790  DESCRIÇÃO".
+  const partes = linha.replace(/^\s*(\d{1,14})\s+-\s+/, '$1  ').split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
+  if (partes.length < 3 || !/^\d{1,14}$/.test(partes[0])) return null;
   const codigo = partes[0];
   let i = 1;
   const eans: string[] = [];
@@ -57,17 +77,29 @@ function linhaProduto(linha: string): Omit<ProdutoErp, 'categoria'> | null {
   return Number.isFinite(saldo) ? { codigo, eans, nome, saldo } : null;
 }
 
+/** Data e hora impressas no relatório (ex.: "Emitido em 16/11/2026 10:15"), no fuso de Brasília. */
+export function dataDoRelatorio(linhas: string[]): string | null {
+  for (const l of linhas.slice(0, 40)) {
+    const m = l.match(/(\d{2})\/(\d{2})\/(\d{4})\D{1,12}?(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (!m) continue;
+    const t = Date.parse(`${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:${m[6] ?? '00'}-03:00`);
+    if (!Number.isNaN(t)) return new Date(t).toISOString();
+  }
+  return null;
+}
+
 function doTextoRelatorio(linhas: string[]) {
   const out: ProdutoErp[] = [];
   let categoria = 'Sem categoria';
   let ignoradas = 0;
   for (const l of linhas) {
+    if (TITULO_BARRAS.test(l)) continue;
     const cat = cabecalhoCategoria(l);
     if (cat) { categoria = cat; continue; }
     const p = linhaProduto(l);
     if (p) out.push({ ...p, categoria }); else if (/\d/.test(l)) ignoradas++;
   }
-  return { produtos: out, ignoradas };
+  return { produtos: out, ignoradas, saldoEm: dataDoRelatorio(linhas) };
 }
 
 /** CSV/TXT com cabeçalho (separador ; , ou tab). Colunas reconhecidas pelo nome. */
@@ -92,15 +124,17 @@ function doCsv(texto: string) {
       classe: /pista/i.test(setor) ? 'pista' : /conveni/i.test(setor) ? 'conveniencia' : undefined,
     });
   }
-  return { produtos, ignoradas };
+  return { produtos, ignoradas, saldoEm: null as string | null };
 }
 
 export async function lerArquivo(nome: string, base64: string) {
   const bytes = base64ParaBytes(base64);
   const ehPdf = bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46; // %PDF
   if (ehPdf) {
-    const r = doTextoRelatorio(await linhasDoPdf(bytes));
-    if (!r.produtos.length) throw new Error(`Não reconheci produtos no PDF "${nome}". Envie o arquivo ao suporte para ajustar a leitura do relatório do Petros.`);
+    const linhas = await linhasDoPdf(bytes);
+    if (linhas.slice(0, 5).some(l => TITULO_BARRAS.test(l))) throw new Error(`"${nome}" é a relação de códigos de barra, não o relatório de saldos. Importe-a em "Bases de códigos de barra" e escolha aqui o PDF de saldos da filial.`);
+    const r = doTextoRelatorio(linhas);
+    if (!r.produtos.length) throw new Error(`Não reconheci produtos com saldo no PDF "${nome}". Envie o arquivo ao suporte para ajustar a leitura do relatório do Petros.`);
     return r;
   }
   const texto = new TextDecoder('utf-8').decode(bytes);

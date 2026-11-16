@@ -5,11 +5,14 @@ import { Platform } from 'react-native';
 import { useFiliais } from '../../lib/data';
 import { supabase } from '../../lib/supabase';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
-import { type Classe, type Coleta, type Contagem, horaAgora, type Inventario, type Produto, type Rodada } from './model';
+import type { ItemBarras } from './barras';
+import { type BaseBarras, type Classe, type Coleta, type Contagem, horaAgora, type Inventario, type Produto, type Rodada } from './model';
 
 /* ---------- Coleções sincronizadas ---------- */
 export const inventariosCol = new Collection<Inventario>({ table: 'ce_inventarios', storageKey: 'nevoeiro.coleta.inventarios.v1' });
 export const contagensCol = new Collection<Contagem>({ table: 'ce_contagens', storageKey: 'nevoeiro.coleta.contagens.v1' });
+/** Situação da base de códigos de barra de cada filial (gravada só pela Edge Function). */
+export const basesCol = new Collection<BaseBarras>({ table: 'ce_bases', storageKey: 'nevoeiro.coleta.bases.v1' });
 
 /** Leituras: uma coleção por inventário (só baixa as do inventário aberto). */
 const coletasPorInv = new Map<string, Collection<Coleta>>();
@@ -26,8 +29,10 @@ export function useColeta() {
   const f = useFiliais();
   const i = useCollection(inventariosCol);
   const c = useCollection(contagensCol);
+  const b = useCollection(basesCol);
   const inventarios = useMemo(() => [...i.list].sort((a, b) => (a.status === 'encerrado' ? 1 : 0) - (b.status === 'encerrado' ? 1 : 0) || b.codigo.localeCompare(a.codigo)), [i.list]);
-  return { filiais: f.filiais, inventarios, contagens: c.list, loaded: f.loaded && i.loaded && c.loaded, status: combinedStatus([f.status, i.status, c.status]) };
+  const bases = useMemo(() => new Map(b.list.map(x => [x.id, x])), [b.list]);
+  return { filiais: f.filiais, inventarios, contagens: c.list, bases, loaded: f.loaded && i.loaded && c.loaded && b.loaded, status: combinedStatus([f.status, i.status, c.status, b.status]) };
 }
 
 export function useColetas(inventarioId: string) {
@@ -115,17 +120,26 @@ export function useProdutos(inv: Inventario | undefined) {
   return { produtos: lista, erro };
 }
 
-/** Índice de leitura: EAN ou código interno → produto. */
+/**
+ * Índice de leitura: EAN ou código interno → produto. EANs também entram sem os zeros à esquerda
+ * (ex.: 0708470220156 é lido como UPC-A 708470220156 por muitos coletores). O código interno tem prioridade.
+ */
 export function indiceLeitura(produtos: Produto[]) {
   const m = new Map<string, Produto>();
-  produtos.forEach(p => { m.set(p.codigo, p); p.eans.forEach(e => m.set(e, p)); });
+  produtos.forEach(p => p.eans.forEach(e => { m.set(e, p); const sem = e.replace(/^0+/, ''); if (!m.has(sem)) m.set(sem, p); }));
+  produtos.forEach(p => m.set(p.codigo, p));
   return m;
+}
+
+/** Grava a base de códigos de barra da filial (lida no navegador por `lerPdfBarras`). */
+export function gravarBarras(filialId: string, arquivo: string, itens: ItemBarras[]) {
+  return chamar<{ ok: boolean; itens: number; eans: number; semEan: number }>({ acao: 'gravar_barras', filial_id: filialId, arquivo, itens });
 }
 
 /* ---------- ERP (Edge Function "coleta-erp") ---------- */
 export type CargaErp = { itens: number; categorias: number; avisos: string[] };
 
-async function chamar<T>(body: Record<string, unknown>): Promise<T> {
+export async function chamar<T>(body: Record<string, unknown>): Promise<T> {
   if (!supabase) throw new Error('O app está em modo local: a carga do ERP precisa do servidor.');
   const { data, error } = await supabase.functions.invoke('coleta-erp', { body });
   if (!error) return data as T;

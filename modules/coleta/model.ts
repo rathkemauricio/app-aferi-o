@@ -21,7 +21,13 @@ export type Inventario = SyncRow & {
   codigo: string; filial_id: string; tipo: 'completo' | 'parcial'; status: 'carregando' | 'aberto' | 'encerrado';
   fonte: 'arquivo' | 'petros'; arquivo: string; itens_total: number;
   erp_em: string | null; encerrado_em: string | null; enviado_erp_em: string | null;
+  /** Data/hora impressa no relatório de saldos (quando o PDF traz); senão vale erp_em. */
+  saldo_em?: string | null;
+  /** Itens com saldo sem nenhum código de barras na base da filial. */
+  sem_barras?: number;
 };
+/** Base fixa de códigos de barra da filial (id = filial_id). Os itens ficam no servidor (ce_barras). */
+export type BaseBarras = SyncRow & { arquivo: string; itens: number; eans: number; importado_em: string | null };
 export type Contagem = SyncRow & {
   inventario_id: string; nome: string; classe: ClasseContagem; categorias: string[]; rodadas: StatusRodada[];
 };
