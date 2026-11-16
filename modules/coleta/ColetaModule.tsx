@@ -14,7 +14,7 @@ import { BarcodeIcon, CaretDownIcon, ClockCounterClockwiseIcon, EraserIcon, Keyb
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
-  categoriasDe, type ClasseContagem, type Contagem, concluida, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
+  categoriasDe, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
   progressoContagem, progressoInventario, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
@@ -28,7 +28,7 @@ const NAVY = '#102a46', AMBER = '#f3a200', AMBER_TXT = '#1b2230';
 
 type Tela =
   | { n: 'lista' } | { n: 'abrir' } | { n: 'bases'; filial?: string } | { n: 'inventario'; id: string } | { n: 'nova'; inv: string }
-  | { n: 'contagem'; id: string; aba: 'itens' | 'coleta'; rodada?: Rodada } | { n: 'finalizar'; id: string; rodada: Rodada } | { n: 'relatorio'; inv: string; divergentes?: boolean };
+  | { n: 'contagem'; id: string; aba: 'itens' | 'coleta' | 'detalhe'; rodada?: Rodada } | { n: 'finalizar'; id: string; rodada: Rodada } | { n: 'relatorio'; inv: string; divergentes?: boolean };
 const TELA_KEY = 'nevoeiro.coleta.tela.v1';
 
 export default function ColetaModule() {
@@ -577,13 +577,14 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={ct.nome} sub={`${inv.codigo} · ${filialCurta(dados, inv.filial_id)}`} onVoltar={nav.voltar} direita={tela.aba === 'coleta' ? <Anel pct={prog} size={46} claro /> : null} />
       <View style={[k.abas, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        {(['itens', 'coleta'] as const).map(a => (
+        {(['itens', 'coleta', 'detalhe'] as const).map(a => (
           <Pressable key={a} accessibilityRole="tab" accessibilityState={{ selected: tela.aba === a }} onPress={() => mudar({ aba: a })} style={[k.aba, tela.aba === a && { borderBottomColor: AMBER }]}>
-            <Text style={[k.abaTxt, { color: tela.aba === a ? c.text : c.textMuted }]}>{a === 'itens' ? 'Itens' : 'Coleta'}</Text>
+            <Text style={[k.abaTxt, { color: tela.aba === a ? c.text : c.textMuted }]}>{a === 'itens' ? 'Itens' : a === 'coleta' ? 'Coleta' : 'Detalhamento'}</Text>
           </Pressable>
         ))}
       </View>
       {!produtos ? <ActivityIndicator style={{ marginTop: 40 }} color={c.textMuted} />
+        : tela.aba === 'detalhe' ? <Detalhamento ct={ct} produtos={produtos} q={q} />
         : tela.aba === 'itens' ? (
           <View style={{ flex: 1 }}>
             <FlatList
@@ -619,6 +620,59 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
           } />
         )}
     </View>
+  );
+}
+
+/** Detalhamento da contagem: cada item que deu falta ou sobra (ex.: "Coca-Cola 2L  −1"). */
+function Detalhamento({ ct, produtos, q }: { ct: Contagem; produtos: Produto[]; q: Map<string, [number | null, number | null, number | null]> }) {
+  const c = useCores();
+  const d = useMemo(() => detalheContagem(ct, produtos, q), [ct, produtos, q]);
+  type Linha = { tipo: 'cab'; titulo: string; n: number; cor: string } | { tipo: 'item'; l: LinhaDetalhe };
+  const dados: Linha[] = [
+    ...(d.faltas.length ? [{ tipo: 'cab' as const, titulo: 'Faltas', n: d.faltas.length, cor: c.danger }, ...d.faltas.map(l => ({ tipo: 'item' as const, l }))] : []),
+    ...(d.sobras.length ? [{ tipo: 'cab' as const, titulo: 'Sobras', n: d.sobras.length, cor: c.warning }, ...d.sobras.map(l => ({ tipo: 'item' as const, l }))] : []),
+    ...(d.naoColetados.length ? [{ tipo: 'cab' as const, titulo: 'Não coletados (entram como falta)', n: d.naoColetados.length, cor: c.textMuted }, ...d.naoColetados.map(l => ({ tipo: 'item' as const, l }))] : []),
+  ];
+  const t = d.total;
+  const kpi = (rotulo: string, valor: string, cor?: string) => (
+    <View style={[k.kpi, { backgroundColor: c.surface, padding: 10 }]}><Text style={[k.cap, { color: c.textMuted }]}>{rotulo}</Text><Text style={[k.monoM, k.b, { color: cor ?? c.text, fontSize: 18 }]}>{valor}</Text></View>
+  );
+  const sinal = (v: number) => `${v > 0 ? '+' : ''}${fmtQ(v)}`;
+  return (
+    <FlatList
+      data={dados}
+      keyExtractor={(x, i) => (x.tipo === 'cab' ? `c${i}` : x.l.produto.codigo)}
+      contentContainerStyle={k.corpo}
+      initialNumToRender={20}
+      windowSize={9}
+      ListHeaderComponent={<View style={{ gap: space.sm }}>
+        <View style={k.linha}>
+          {kpi('Falta', fmtQ(t.faltas), t.faltas ? c.danger : undefined)}
+          {kpi('Sobra', fmtQ(t.sobras), t.sobras ? c.warning : undefined)}
+          {kpi('Resultado', sinal(t.resultado), t.resultado < 0 ? c.danger : undefined)}
+        </View>
+        <View style={k.linha}>
+          {kpi('Resultado R$ custo', t.temCusto ? brl(t.custo.resultado) : '—', t.custo.resultado < 0 ? c.danger : undefined)}
+          {kpi('Resultado R$ venda', t.temVenda ? brl(t.venda.resultado) : '—', t.venda.resultado < 0 ? c.danger : undefined)}
+        </View>
+        <Text style={[k.cap, { color: c.textMuted }]}>{t.itens.toLocaleString('pt-BR')} itens · estoque sistema {fmtQ(t.sistema)} · contado {fmtQ(t.contagem)}{t.acuracia !== null ? ` · acurácia ${fmtQ(t.acuracia)}%` : ''}{t.eficiencia !== null ? ` · eficiência ${fmtQ(t.eficiencia)}%` : ''}. Vale a última quantidade coletada de cada item.</Text>
+      </View>}
+      ListEmptyComponent={<EmptyState icon={CheckIcon} title="Sem faltas nem sobras" text="Todos os itens desta contagem bateram com o saldo do ERP." />}
+      renderItem={({ item: x }) => x.tipo === 'cab'
+        ? <Text style={[k.secao, { color: x.cor, marginTop: space.sm }]}>{x.titulo} ({x.n.toLocaleString('pt-BR')})</Text>
+        : (
+          <View style={[k.linha, { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[k.cTxt, { color: c.text, fontSize: 15 }]} numberOfLines={2}>{x.l.produto.nome}</Text>
+              <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{x.l.produto.codigo} · saldo {fmtQ(x.l.produto.saldo)} · contado {fmtQ(x.l.qtd)}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[k.monoM, k.b, { fontSize: 20, color: x.l.diferenca < 0 ? c.danger : c.warning }]}>{sinal(x.l.diferenca)}</Text>
+              {x.l.difCusto !== null || x.l.difVenda !== null ? <Text style={[k.cap, { color: c.textMuted }]}>{[x.l.difCusto !== null ? `custo ${brl(x.l.difCusto)}` : '', x.l.difVenda !== null ? `venda ${brl(x.l.difVenda)}` : ''].filter(Boolean).join(' · ')}</Text> : null}
+            </View>
+          </View>
+        )}
+    />
   );
 }
 
@@ -875,13 +929,44 @@ function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: D
   };
   const imprimir = async () => {
     if (!rel) return;
-    const linhas = problemas.slice(0, 3000).map(l => `<tr><td>${esc(l.produto.codigo)}</td><td>${esc(l.produto.nome)}</td><td>${esc(l.produto.categoria)}</td><td class="n">${fmtQ(l.produto.saldo)}</td><td class="n">${fmtQ(l.qtd)}</td><td class="n">${l.diferenca > 0 ? '+' : ''}${fmtQ(l.diferenca)}</td><td class="n">${l.difCusto === null ? '—' : brl(l.difCusto)}</td><td class="n">${l.difVenda === null ? '—' : brl(l.difVenda)}</td><td>${l.status === 'divergente' ? 'Divergente' : 'Não encontrado'}</td></tr>`).join('');
-    const valores = `<h2>Resultado em R$</h2><table><tr><th></th><th class="n">Faltas</th><th class="n">Sobras</th><th class="n">Resultado</th></tr><tr><td>A preço de custo</td><td class="n">${brl(rel.custo.faltas)}</td><td class="n">${brl(rel.custo.sobras)}</td><td class="n"><b>${brl(rel.custo.resultado)}</b></td></tr><tr><td>A preço de venda</td><td class="n">${brl(rel.venda.faltas)}</td><td class="n">${brl(rel.venda.sobras)}</td><td class="n"><b>${brl(rel.venda.resultado)}</b></td></tr></table>`;
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Inventário ${esc(inv.codigo)}</title><style>@page{size:A4;margin:12mm}body{font:11px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:18px;margin:0 0 2px;color:${NAVY}}.sub{color:#5b6475;margin-bottom:10px}.kpis{display:flex;gap:8px;margin:8px 0 12px}.kpis div{flex:1;padding:8px;border-radius:6px;background:#f2f4f7}.kpis b{display:block;font-size:18px}h2{font-size:13px;margin:14px 0 6px}table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-align:left;padding:4px}td{border-bottom:1px solid #e3e6ec;padding:3px 4px}.n{text-align:right;font-variant-numeric:tabular-nums}</style></head><body>
-<h1>Relatório do inventário ${esc(inv.codigo)}</h1><div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento'}</div>
-<div class="kpis"><div><b>${rel.corretos.toLocaleString('pt-BR')}</b>Corretos</div><div><b>${rel.divergentes.toLocaleString('pt-BR')}</b>Divergentes</div><div><b>${rel.naoEncontrados.toLocaleString('pt-BR')}</b>Não encontrados</div></div>
-${valores}<h2>Resultado por contagem</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${rel.porContagem.map(p => `<tr><td>${esc(p.contagem.nome)}</td><td class="n">${p.itens}</td><td class="n">${p.corretos}</td><td class="n">${p.divergentes}</td><td class="n">${p.naoEncontrados}</td></tr>`).join('')}</table>
-<h2>Itens divergentes e não encontrados (${problemas.length})</h2><table><tr><th>Código</th><th>Produto</th><th>Categoria</th><th class="n">Saldo</th><th class="n">Contado</th><th class="n">Dif.</th><th class="n">Dif. R$ custo</th><th class="n">Dif. R$ venda</th><th>Situação</th></tr>${linhas}</table></body></html>`;
+    // Mesmo formato do módulo Inventários: resumo, categorias e o detalhamento item a item das faltas e sobras.
+    const cons = porCategoria(rel.linhas);
+    const n = (v: number) => fmtQ(v);
+    const pct = (v: number | null) => (v === null ? '—' : `${fmtQ(v)}%`);
+    const rs = (v: number, tem: boolean) => (tem ? brl(v) : '—');
+    const sinal = (v: number) => `${v > 0 ? '+' : ''}${fmtQ(v)}`;
+    const cor = (v: number) => (v < 0 ? ' neg' : v > 0 ? ' pos' : '');
+    const t = cons.total;
+    const metrica = (rot: string, val: string, cls = '') => `<div class="m"><span>${rot}</span><b class="${cls}">${val}</b></div>`;
+    const resumo = [
+      metrica('Estoque sistema', n(t.sistema)), metrica('Contagem', n(t.contagem)), metrica('Falta', n(t.faltas), t.faltas ? 'neg' : ''), metrica('Sobra', n(t.sobras), t.sobras ? 'pos' : ''), metrica('Resultado', sinal(t.resultado), cor(t.resultado).trim()),
+      metrica('Falta R$ (custo)', rs(t.custo.faltas, t.temCusto), 'neg'), metrica('Sobra R$ (custo)', rs(t.custo.sobras, t.temCusto), 'pos'), metrica('Resultado R$ (custo)', rs(t.custo.resultado, t.temCusto), cor(t.custo.resultado).trim()),
+      metrica('Falta R$ (venda)', rs(t.venda.faltas, t.temVenda), 'neg'), metrica('Sobra R$ (venda)', rs(t.venda.sobras, t.temVenda), 'pos'), metrica('Resultado R$ (venda)', rs(t.venda.resultado, t.temVenda), cor(t.venda.resultado).trim()),
+      metrica('Acurácia', pct(t.acuracia)), metrica('Eficiência', pct(t.eficiencia)),
+      metrica('Itens corretos', rel.corretos.toLocaleString('pt-BR')), metrica('Itens divergentes', rel.divergentes.toLocaleString('pt-BR')), metrica('Não encontrados', rel.naoEncontrados.toLocaleString('pt-BR')),
+    ].join('');
+    const linhaCat = (x: Consolidado, tot = false) => `<tr${tot ? ' class="tot"' : ''}><td>${esc(x.nome)}</td><td class="n">${n(x.itens)}</td><td class="n">${n(x.sistema)}</td><td class="n">${n(x.contagem)}</td><td class="n">${n(x.faltas)}</td><td class="n">${n(x.sobras)}</td><td class="n${cor(x.resultado)}">${sinal(x.resultado)}</td><td class="n">${rs(x.custo.faltas, x.temCusto)}</td><td class="n">${rs(x.custo.sobras, x.temCusto)}</td><td class="n${cor(x.custo.resultado)}">${rs(x.custo.resultado, x.temCusto)}</td><td class="n">${rs(x.venda.faltas, x.temVenda)}</td><td class="n">${rs(x.venda.sobras, x.temVenda)}</td><td class="n${cor(x.venda.resultado)}">${rs(x.venda.resultado, x.temVenda)}</td><td class="n">${pct(x.acuracia)}</td><td class="n">${pct(x.eficiencia)}</td></tr>`;
+    const categorias = cons.categorias.map(x => linhaCat(x)).join('') + linhaCat(t, true);
+    // Detalhamento: faltas e sobras por categoria (maiores diferenças primeiro).
+    const porCat = new Map<string, typeof problemas>();
+    problemas.forEach(l => { const g = porCat.get(l.produto.categoria) ?? []; g.push(l); porCat.set(l.produto.categoria, g); });
+    const detalhe = [...porCat.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')).map(([cat, g]) => `<tr class="grp"><td colspan="9">${esc(cat)}</td></tr>` + g.sort((a, b) => a.diferenca - b.diferenca).map(l =>
+      `<tr><td>${esc(l.produto.codigo)}</td><td>${esc(l.produto.nome)}</td><td class="n">${n(l.produto.saldo)}</td><td class="n">${n(l.qtd)}</td><td class="n${cor(l.diferenca)}"><b>${sinal(l.diferenca)}</b></td><td class="n">${l.difCusto === null ? '—' : brl(l.difCusto)}</td><td class="n">${l.difVenda === null ? '—' : brl(l.difVenda)}</td><td>${l.status === 'divergente' ? (l.diferenca < 0 ? 'Falta' : 'Sobra') : 'Não encontrado'}</td><td>${esc(l.contagem)}</td></tr>`).join('')).join('');
+    const contagensTab = rel.porContagem.map(p => `<tr><td>${esc(p.contagem.nome)}</td><td class="n">${p.itens}</td><td class="n">${p.corretos}</td><td class="n">${p.divergentes}</td><td class="n">${p.naoEncontrados}</td></tr>`).join('');
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Inventário ${esc(inv.codigo)}</title><style>
+@page{size:A4 landscape;margin:10mm}body{font:10px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:17px;margin:0 0 2px;color:${NAVY}}.sub{color:#5b6475;margin-bottom:8px}
+h2{font-size:12px;margin:12px 0 5px;color:${NAVY}}.grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}.m{background:#f2f4f7;border-radius:5px;padding:5px 6px}.m span{display:block;color:#5b6475;font-size:9px}.m b{font-size:13px;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-align:left;padding:3px 4px;font-size:9px}td{border-bottom:1px solid #e3e6ec;padding:2px 4px}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.neg{color:#c0262d}.pos{color:#a86400}.tot td{font-weight:700;background:#eef1f6;border-top:2px solid ${NAVY}}.grp td{background:#e8edf5;font-weight:700;color:${NAVY}}tr{page-break-inside:avoid}
+</style></head><body>
+<h1>Relatório do inventário ${esc(inv.codigo)}</h1>
+<div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do ERP de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+<h2>Resumo</h2><div class="grid">${resumo}</div>
+<h2>Resultado por categoria</h2><table><tr><th>Categoria</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contagem</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">Resultado</th><th class="n">Falta R$ custo</th><th class="n">Sobra R$ custo</th><th class="n">Result. R$ custo</th><th class="n">Falta R$ venda</th><th class="n">Sobra R$ venda</th><th class="n">Result. R$ venda</th><th class="n">Acurácia</th><th class="n">Eficiência</th></tr>${categorias}</table>
+<h2>Resultado por contagem</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${contagensTab}</table>
+<h2>Detalhamento: faltas e sobras (${problemas.length.toLocaleString('pt-BR')} itens)</h2><table><tr><th>Código</th><th>Produto</th><th class="n">Saldo</th><th class="n">Contado</th><th class="n">Dif.</th><th class="n">Dif. R$ custo</th><th class="n">Dif. R$ venda</th><th>Situação</th><th>Contagem</th></tr>${detalhe || '<tr><td colspan="9">Nenhuma falta ou sobra.</td></tr>'}</table>
+<p class="sub" style="margin-top:8px">Acurácia = contagem ÷ estoque sistema × 100. Eficiência = (1 − (falta + sobra) ÷ estoque sistema) × 100. Valores em R$ = diferença × preço unitário de custo ou de venda dos PDFs da carga.</p>
+</body></html>`;
     try { await imprimirHtml(html, `Inventário ${inv.codigo}`); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
 

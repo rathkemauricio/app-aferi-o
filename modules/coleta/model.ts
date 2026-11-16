@@ -210,6 +210,55 @@ export function relatorio(produtos: Produto[], contagens: Contagem[], coletas: C
   };
 }
 
+/* ---------- Consolidado no formato do módulo Inventários ---------- */
+/**
+ * Mesmas métricas da base histórica de inventários:
+ *   sistema = soma dos saldos; contagem = soma do contado; falta/sobra = soma das diferenças negativas/positivas;
+ *   resultado = sobra − falta (= contagem − sistema); valores em R$ a custo e a venda;
+ *   acurácia = contagem ÷ sistema × 100; eficiência = (1 − (falta + sobra) ÷ sistema) × 100.
+ */
+export type Consolidado = {
+  nome: string; itens: number; sistema: number; contagem: number; faltas: number; sobras: number; resultado: number;
+  custo: Valores; venda: Valores; temCusto: boolean; temVenda: boolean; acuracia: number | null; eficiencia: number | null;
+};
+type LinhaValor = { produto: Produto; qtd: number; diferenca: number; difCusto: number | null; difVenda: number | null };
+export function consolidar(nome: string, linhas: LinhaValor[]): Consolidado {
+  const r = { nome, itens: linhas.length, sistema: 0, contagem: 0, faltas: 0, sobras: 0 };
+  linhas.forEach(l => { r.sistema += l.produto.saldo; r.contagem += l.qtd; if (l.diferenca < 0) r.faltas -= l.diferenca; else r.sobras += l.diferenca; });
+  const arred = (v: number) => Math.round(v * 100) / 100;
+  return {
+    ...r, resultado: r.sobras - r.faltas,
+    custo: somaValores(linhas.map(l => l.difCusto)), venda: somaValores(linhas.map(l => l.difVenda)),
+    temCusto: linhas.some(l => l.produto.custo !== null), temVenda: linhas.some(l => l.produto.venda !== null),
+    acuracia: r.sistema > 0 ? arred((r.contagem / r.sistema) * 100) : null,
+    eficiencia: r.sistema > 0 ? arred((1 - (r.faltas + r.sobras) / r.sistema) * 100) : null,
+  };
+}
+/** Total do inventário e uma linha por categoria (ordem alfabética). */
+export function porCategoria(linhas: LinhaValor[]) {
+  const m = new Map<string, LinhaValor[]>();
+  linhas.forEach(l => { const g = m.get(l.produto.categoria) ?? []; g.push(l); m.set(l.produto.categoria, g); });
+  return { total: consolidar('Total', linhas), categorias: [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')).map(([n, g]) => consolidar(n, g)) };
+}
+
+/* ---------- Detalhamento de uma contagem: itens com falta e sobra ---------- */
+export type LinhaDetalhe = LinhaValor & { coletado: boolean };
+/** Resultado de cada item da contagem (última quantidade coletada; sem coleta = 0), só os que têm diferença. */
+export function detalheContagem(c: Pick<Contagem, 'classe' | 'categorias'>, produtos: Produto[], q: Map<string, Qtds>) {
+  const linhas: LinhaDetalhe[] = escopo(c, produtos).map(p => {
+    const f = resultadoFinal(p, q.get(p.codigo) ?? [null, null, null]);
+    const dif = f.qtd - p.saldo;
+    return { produto: p, qtd: f.qtd, diferenca: dif, coletado: f.coletado, difCusto: vezes(dif, p.custo), difVenda: vezes(dif, p.venda) };
+  });
+  const ord = (a: LinhaDetalhe, b: LinhaDetalhe) => a.diferenca - b.diferenca || a.produto.nome.localeCompare(b.produto.nome, 'pt-BR');
+  return {
+    total: consolidar('Contagem', linhas),
+    faltas: linhas.filter(l => l.diferenca < 0 && l.coletado).sort(ord),
+    naoColetados: linhas.filter(l => l.diferenca < 0 && !l.coletado).sort(ord),
+    sobras: linhas.filter(l => l.diferenca > 0).sort((a, b) => b.diferenca - a.diferenca || a.produto.nome.localeCompare(b.produto.nome, 'pt-BR')),
+  };
+}
+
 /* ---------- Utilidades ---------- */
 export const fmtQ = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 3 }));
 export const horaAgora = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
