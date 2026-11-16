@@ -8,6 +8,7 @@ import { Avatar, escolherFoto } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
+import { rotuloVersao } from '../../lib/versao';
 import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, MinusIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, SunIcon, TextAaIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, ESCALAS, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
@@ -122,6 +123,7 @@ export default function ContaScreen() {
             <Button title="Sair" variant="danger" icon={SignOutIcon} onPress={() => confirmAction('Sair da conta?', 'Você volta para a tela de login.', 'Sair', () => void signOut())} />
           </View>
         ) : null}
+        <Text style={[t.caption, { textAlign: 'center', marginTop: space.md }]}>{rotuloVersao}</Text>
       </ScrollView>
 
       {foto && (

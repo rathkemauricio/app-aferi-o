@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTela } from '../../ui/zoom';
+import { rotuloVersao } from '../../lib/versao';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
@@ -143,6 +144,7 @@ export default function ModuleLauncher() {
           <ListRow style={s.divided} icon={StorefrontIcon} tint="indigo" title="Bandeiras" subtitle="Bandeiras dos postos, com cores para o croqui" onPress={() => router.push('/bandeiras')} />
           {isAdmin && isSupabaseConfigured ? <ListRow style={s.divided} icon={UserCircleIcon} tint="slate" title="Usuários e permissões" subtitle="Liberar contas e escolher os módulos de cada uma" onPress={() => router.push('/usuarios')} /> : null}
         </Card>
+        <Text style={[t.caption, { textAlign: 'center', marginTop: space.sm }]}>{rotuloVersao}</Text>
       </ScrollView>
     </SafeAreaView>
   );

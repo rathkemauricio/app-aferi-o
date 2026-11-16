@@ -2,6 +2,7 @@ import { usePathname, useRouter, type Href } from 'expo-router';
 import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTela } from '../ui/zoom';
+import { VERSAO } from '../lib/versao';
 import { Avatar } from './Avatar';
 import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -69,7 +70,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
           </View>
           <Pressable onPress={() => router.push('/conta')} accessibilityRole="button" accessibilityLabel="Minha conta" style={({ pressed }) => [styles.profile, compact && styles.profileCompact, pressed && styles.navPressed]}>
             <Avatar uri={avatar} nome={nome || userEmail} size={34} />
-            {!compact ? <View style={styles.profileCopy}><Text numberOfLines={1} style={styles.profileName}>{nome || userEmail || 'Modo local'}</Text><Text style={styles.profileRole}>{isAdmin ? 'Administrador' : 'Minha conta'}</Text></View> : null}
+            {!compact ? <View style={styles.profileCopy}><Text numberOfLines={1} style={styles.profileName}>{nome || userEmail || 'Modo local'}</Text><Text style={styles.profileRole}>{isAdmin ? 'Administrador' : 'Minha conta'} · v{VERSAO}</Text></View> : null}
           </Pressable>
         </View>
       </View>
