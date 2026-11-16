@@ -9,6 +9,7 @@ import { SheetHost } from '../ui/kit';
 import { ThemeContext, ThemeProvider } from '../ui/theme';
 import { Zoom } from '../ui/zoom';
 import { AvisoAtualizacao } from '../components/AvisoAtualizacao';
+import { SemServidor } from '../components/SemServidor';
 
 // Evita que o navegador trate a página como inglês e ofereça/aplique tradução automática.
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -20,11 +21,13 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
  * Casca do app com rotas protegidas:
  * - sem sessão: só /login (e /redefinir-senha, aberta pelo link do e-mail);
  * - com sessão, conta não liberada: /aguardando;
- * - conta liberada (ou modo local sem Supabase): área (app) com a central e os módulos.
+ * - conta liberada: área (app) com a central e os módulos.
+ * Sem servidor configurado não há "modo local": a tela fica bloqueada (é preciso saber quem faz cada atividade).
  */
 function Shell() {
   const { mode, colors } = useContext(ThemeContext);
   const { ready, userEmail, ativo, perfilPronto } = useAuth();
+  if (!isSupabaseConfigured) return <SemServidor />;
   const logado = !isSupabaseConfigured || !!userEmail;
   const liberado = !isSupabaseConfigured || (logado && ativo);
 
