@@ -246,7 +246,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     if (!filialId) { notify('Escolha a filial'); return; }
     if (aberto) { notify('Filial com inventário aberto', `${aberto.codigo} ainda está aberto nesta filial. Encerre-o antes de abrir outro.`); return; }
     if (!base) { notify('Base de códigos de barra pendente', 'Importe a relação de códigos de barra desta filial antes de abrir o inventário.'); return; }
-    if (fonte === 'arquivo' && (!arquivo || !arquivoVenda)) { notify('Faltam os PDFs de saldo', 'Escolha os dois PDFs da Conferência de Estoque da filial: um com o preço de custo e outro com o preço de venda.'); return; }
+    if (fonte === 'arquivo' && !arquivo && !arquivoVenda) { notify('Escolha o PDF de saldos', 'Use a Conferência de Estoque da filial com preço de custo, com preço de venda ou as duas.'); return; }
     setEnviando(true);
     const id = uid('inv');
     try {
@@ -335,9 +335,9 @@ function ArquivosErp({ custo, setCusto, venda, setVenda }: { custo: ArquivoErp |
     </Cartao>
   );
   return <>
-    {campo('1 · SALDOS COM PREÇO DE CUSTO', 'Conferência de Estoque - Custo (saldo no momento da abertura)', custo, setCusto)}
-    {campo('2 · SALDOS COM PREÇO DE VENDA', 'O mesmo relatório, tirado na tela com preço de venda', venda, setVenda)}
-    <Text style={[k.cap, { color: c.textMuted }]}>Os dois são ligados pelo código interno. Se trocar a ordem, o app percebe pelo título do relatório.</Text>
+    {campo('SALDOS COM PREÇO DE CUSTO', 'Conferência de Estoque - Custo (saldo no momento da abertura)', custo, setCusto)}
+    {campo('SALDOS COM PREÇO DE VENDA', 'O mesmo relatório, tirado na tela com preço de venda', venda, setVenda)}
+    <Text style={[k.cap, { color: c.textMuted }]}>Basta um dos dois (custo ou venda); com os dois, o relatório traz os valores a custo e a venda. Eles são ligados pelo código interno, e o app percebe qual é qual pelo título do relatório.</Text>
   </>;
 }
 
@@ -426,7 +426,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   const [arqCusto, setArqCusto] = useState<ArquivoErp | null>(null);
   const [arqVenda, setArqVenda] = useState<ArquivoErp | null>(null);
   const recarregar = async () => {
-    if (inv.fonte === 'arquivo' && (!arqCusto || !arqVenda)) { notify('Faltam os PDFs de saldo', 'Escolha o PDF com o preço de custo e o PDF com o preço de venda.'); return; }
+    if (inv.fonte === 'arquivo' && !arqCusto && !arqVenda) { notify('Escolha o PDF de saldos', 'Use a Conferência de Estoque com preço de custo, com preço de venda ou as duas.'); return; }
     try {
       setRecarregando(true);
       const r = await carregarErp(inv.id, inv.fonte, arqCusto ?? undefined, arqVenda ?? undefined);
@@ -445,7 +445,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   if (inv.status === 'carregando') return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={inv.codigo} sub={sub} onVoltar={nav.voltar} />
-      <Corpo rodape={<Botao titulo={recarregando ? 'Carregando…' : inv.fonte === 'arquivo' ? 'Carregar os PDFs' : 'Carregar do Petros'} onPress={() => void recarregar()} desabilitado={recarregando || (inv.fonte === 'arquivo' && (!arqCusto || !arqVenda))} />}>
+      <Corpo rodape={<Botao titulo={recarregando ? 'Carregando…' : inv.fonte === 'arquivo' ? 'Carregar os PDFs' : 'Carregar do Petros'} onPress={() => void recarregar()} desabilitado={recarregando || (inv.fonte === 'arquivo' && !arqCusto && !arqVenda)} />}>
         <EmptyState icon={PackageIcon} title="Saldos do ERP ainda não carregados" text="A carga dos produtos não terminou. Carregue de novo para começar as contagens." />
         {inv.fonte === 'arquivo' ? <ArquivosErp custo={arqCusto} setCusto={setArqCusto} venda={arqVenda} setVenda={setArqVenda} /> : null}
       </Corpo>
