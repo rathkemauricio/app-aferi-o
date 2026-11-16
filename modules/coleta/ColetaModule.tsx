@@ -28,7 +28,7 @@ import { Deslizavel } from '../tempos/Deslizavel';
 const NAVY = '#102a46', AMBER = '#f3a200', AMBER_TXT = '#1b2230';
 
 type Tela =
-  | { n: 'lista' } | { n: 'abrir' } | { n: 'bases'; filial?: string } | { n: 'inventario'; id: string } | { n: 'nova'; inv: string; editar?: string }
+  | { n: 'lista' } | { n: 'abrir' } | { n: 'editarInv'; id: string } | { n: 'bases'; filial?: string } | { n: 'inventario'; id: string } | { n: 'nova'; inv: string; editar?: string }
   | { n: 'contagem'; id: string; aba: 'itens' | 'coleta' | 'detalhe'; rodada?: Rodada } | { n: 'finalizar'; id: string; rodada: Rodada } | { n: 'relatorio'; inv: string; divergentes?: boolean };
 const TELA_KEY = 'nevoeiro.coleta.tela.v1';
 
@@ -52,6 +52,7 @@ export default function ColetaModule() {
 
   switch (tela.n) {
     case 'abrir': return <AbrirInventario dados={dados} nav={nav} />;
+    case 'editarInv': { const i = inv(tela.id); return i ? <EditarInventario inv={i} dados={dados} nav={nav} /> : <Sumiu nav={nav} />; }
     case 'bases': return <BasesBarras dados={dados} nav={nav} destaque={tela.filial} />;
     case 'inventario': { const i = inv(tela.id); return i ? <InventarioTela inv={i} dados={dados} nav={nav} /> : <Sumiu nav={nav} />; }
     case 'nova': { const i = inv(tela.inv), ed = tela.editar ? cont(tela.editar) : undefined; return i && (!tela.editar || ed) ? <NovaContagem key={tela.editar ?? 'nova'} inv={i} dados={dados} nav={nav} editar={ed} /> : <Sumiu nav={nav} />; }
@@ -199,11 +200,50 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
         ) : null}
         {!dados.inventarios.length
           ? <EmptyState icon={PackageIcon} title="Nenhum inventário ainda" text={isSupabaseConfigured ? 'Abra um inventário: escolha a filial e carregue os saldos do ERP.' : 'A contagem de estoque precisa do servidor (o app está em modo local).'} />
-          : dados.inventarios.map(i => <CartaoInventario key={i.id} inv={i} dados={dados} onPress={() => nav.ir({ n: 'inventario', id: i.id })} />)}
+          : <>
+            <Text style={[k.cap, { color: c.textMuted }]}>Arraste um inventário: para a direita edita (ou reabre, se estiver encerrado); para a esquerda exclui.</Text>
+            {dados.inventarios.map(i => {
+              const enc = i.status === 'encerrado';
+              return (
+                <Deslizavel key={i.id} raio={16} direita={enc ? ARRASTE_REABRIR : ARRASTE_EDITAR} esquerda={ARRASTE_EXCLUIR}
+                  onDireita={() => (enc ? confirmAction(`Reabrir ${i.codigo}?`, 'As contagens voltam a aceitar leituras.', 'Reabrir', () => reabrirInventario(i)) : nav.ir({ n: 'editarInv', id: i.id }))}
+                  onEsquerda={() => excluirInventario(i, dados.contagens.filter(x => x.inventario_id === i.id))}>
+                  <CartaoInventario inv={i} dados={dados} onPress={() => nav.ir({ n: 'inventario', id: i.id })} />
+                </Deslizavel>
+              );
+            })}
+          </>}
       </Corpo>
     </View>
   );
 }
+
+/* =====================================================================
+   Ações de inventário e contagem (arrastar para o lado nas listas e menu da contagem)
+   ===================================================================== */
+const ARRASTE_EDITAR = { rotulo: 'Editar', cor: '#1d4ed8', icone: PencilSimpleIcon } as const;
+const ARRASTE_REABRIR = { rotulo: 'Reabrir', cor: '#15803d', icone: ResetIcon } as const;
+const ARRASTE_EXCLUIR = { rotulo: 'Excluir', cor: '#c0262d', icone: TrashIcon } as const;
+
+/** Exclui a contagem e as coletas dela (em todos os aparelhos). */
+function excluirContagem(ct: Contagem, depois?: () => void) {
+  confirmAction(`Excluir "${ct.nome}"?`, 'A contagem e todas as coletas dela saem do inventário, em todos os aparelhos. Não dá para desfazer.', 'Excluir', () => {
+    const cc = coletasDe(ct.inventario_id);
+    cc.list().filter(x => x.contagem_id === ct.id).forEach(x => cc.remove(x.id));
+    contagensCol.remove(ct.id);
+    depois?.();
+  });
+}
+/** Exclui o inventário com as contagens e coletas dele. */
+function excluirInventario(inv: Inventario, contagens: Contagem[]) {
+  confirmAction(`Excluir o inventário ${inv.codigo}?`, `O inventário, ${contagens.length} contage${contagens.length === 1 ? 'm' : 'ns'} e todas as coletas saem de todos os aparelhos. Não dá para desfazer.`, 'Excluir', () => {
+    const cc = coletasDe(inv.id);
+    cc.list().forEach(x => cc.remove(x.id));
+    contagens.forEach(x => contagensCol.remove(x.id));
+    inventariosCol.remove(inv.id);
+  });
+}
+const reabrirInventario = (inv: Inventario) => inventariosCol.put({ ...inv, status: 'aberto', encerrado_em: null });
 
 function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dados; onPress: () => void }) {
   const c = useCores();
@@ -414,6 +454,44 @@ function BasesBarras({ dados, nav, destaque }: { dados: Dados; nav: Nav; destaqu
   );
 }
 
+/** Editar inventário aberto: tipo (completo/parcial) e, se quiser, recarregar os PDFs de saldo (as coletas continuam). */
+function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; nav: Nav }) {
+  const c = useCores();
+  const [tipo, setTipo] = useState(inv.tipo);
+  const [custo, setCusto] = useState<ArquivoErp | null>(null);
+  const [venda, setVenda] = useState<ArquivoErp | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      if (tipo !== inv.tipo) { inventariosCol.put({ ...inv, tipo }); await inventariosCol.flush(); }
+      if (inv.fonte === 'arquivo' && (custo || venda)) {
+        const r = await carregarErp(inv.id, 'arquivo', custo ?? undefined, venda ?? undefined);
+        await inventariosCol.sync();
+        notify(`${r.itens.toLocaleString('pt-BR')} itens recarregados`, ['Os saldos foram substituídos; as coletas feitas continuam valendo.', ...r.avisos].join('\n'));
+      }
+      nav.voltar();
+    } catch (e) { notify('Inventário não alterado', e instanceof Error ? e.message : ''); } finally { setSalvando(false); }
+  };
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <Topo titulo={`Editar ${inv.codigo}`} sub={nomeFilial(dados, inv.filial_id)} onVoltar={nav.voltar} />
+      <Corpo rodape={<>
+        <Botao titulo={salvando ? 'Salvando…' : 'Salvar alterações'} onPress={() => void salvar()} desabilitado={salvando || (tipo === inv.tipo && !custo && !venda)} />
+        <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={salvando} />
+      </>}>
+        <Rotulo>Tipo de inventário</Rotulo>
+        <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
+        {inv.fonte === 'arquivo' ? <>
+          <Rotulo>Recarregar saldos (opcional)</Rotulo>
+          <Text style={[k.cap, { color: c.textMuted }]}>Saldo atual de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''}. Escolha novos PDFs só se quiser trocar os saldos; o que já foi coletado continua.</Text>
+          <ArquivosErp custo={custo} setCusto={setCusto} venda={venda} setVenda={setVenda} />
+        </> : null}
+      </Corpo>
+    </View>
+  );
+}
+
 function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; nav: Nav }) {
   const c = useCores();
   const { produtos, erro } = useProdutos(inv);
@@ -473,8 +551,8 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
         {!contagens.length ? <EmptyState icon={BarcodeIcon} title="Nenhuma contagem aberta" text="Abra uma contagem por grupo de categorias (ex.: Bebidas alcoólicas) ou uma contagem completa." /> : null}
         {produtos && contagens.map(ct => {
           const q = quantidades(col.list, ct.id), itens = escopo(ct, produtos, q), pc = progressoContagem(ct, itens, q), feita = concluida(ct);
-          return (
-            <Cartao key={ct.id} onPress={() => nav.ir({ n: 'contagem', id: ct.id, aba: 'itens' })}>
+          const cartao = (
+            <Cartao onPress={() => nav.ir({ n: 'contagem', id: ct.id, aba: 'itens' })}>
               <Text style={[k.cTit, { color: c.text }]}>{ct.nome}</Text>
               <Text style={[k.cTxt, { color: c.textMuted }]}>{ROTULO_CLASSE[ct.classe]} · {ct.classe === 'completa' ? 'todas as categorias' : `${ct.categorias.length} categoria${ct.categorias.length === 1 ? '' : 's'}`} · {Math.round(pc * 100)}%</Text>
               <View style={[k.linha, { flexWrap: 'wrap' }]}>{ct.pausada ? <Pilula texto="Pausada" tom="alerta" /> : null}{ct.rodadas.map((r, i) => <Pilula key={i} texto={`${i + 1}ª ${ROTULO_RODADA[r]}`} tom={tomRodada(r)} />)}</View>
@@ -486,7 +564,16 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
               ) : null}
             </Cartao>
           );
+          // Arrastar: direita edita (ou reabre a contagem concluída); esquerda exclui.
+          return enc ? <View key={ct.id}>{cartao}</View> : (
+            <Deslizavel key={ct.id} raio={16} direita={feita ? ARRASTE_REABRIR : ARRASTE_EDITAR} esquerda={ARRASTE_EXCLUIR}
+              onDireita={() => (feita ? contagensCol.put({ ...ct, rodadas: reabrir(ct, itens, q) }) : nav.ir({ n: 'nova', inv: inv.id, editar: ct.id }))}
+              onEsquerda={() => excluirContagem(ct)}>
+              {cartao}
+            </Deslizavel>
+          );
         })}
+        {contagens.length && !enc ? <Text style={[k.cap, { color: c.textMuted }]}>Arraste uma contagem: para a direita edita (ou reabre, se concluída); para a esquerda exclui.</Text> : null}
         <Text style={[k.cap, { color: c.textMuted }]}>Saldo do ERP de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
       </Corpo>
     </View>
@@ -589,15 +676,7 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
   const noEscopo = useMemo(() => new Set(itens.map(x => x.codigo)), [itens]);
   const encerrado = inv.status === 'encerrado';
   const pausar = () => { contagensCol.put({ ...ct, pausada: !ct.pausada }); setMenu(false); };
-  const excluir = () => {
-    setMenu(false);
-    confirmAction(`Excluir "${ct.nome}"?`, 'A contagem e todas as coletas dela saem do inventário, em todos os aparelhos. Não dá para desfazer.', 'Excluir', () => {
-      const cc = coletasDe(ct.inventario_id);
-      cc.list().filter(x => x.contagem_id === ct.id).forEach(x => cc.remove(x.id));
-      contagensCol.remove(ct.id);
-      nav.voltar();
-    });
-  };
+  const excluir = () => { setMenu(false); excluirContagem(ct, nav.voltar); };
 
   const rodadas = (
     <Segmentos opcoes={ct.rodadas.map((s, i) => ({ id: String(i + 1) as '1' | '2' | '3', titulo: `Contagem ${i + 1}`, sub: ROTULO_RODADA[s] }))} valor={String(r) as '1' | '2' | '3'} onChange={v => mudar({ rodada: Number(v) as Rodada })} />
