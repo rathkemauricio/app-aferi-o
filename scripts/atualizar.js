@@ -16,7 +16,9 @@ const app = require(path.join(root, 'app.json')).expo;
 const mensagem = process.argv.slice(2).join(' ').trim() || `Atualização de ${new Date().toLocaleString('pt-BR')}`;
 
 console.log(`\nPublicando atualização para o APK ${app.runtimeVersion} (canal production): "${mensagem}"\n`);
-const r = spawnSync('npx', ['eas', 'update', '--channel', 'production', '--platform', 'android', '--environment', 'production', '--message', mensagem, '--non-interactive'], {
+// No Windows o comando roda pelo shell: a mensagem vai entre aspas para não ser quebrada nos espaços.
+const msgArg = process.platform === 'win32' ? `"${mensagem.replace(/"/g, "'")}"` : mensagem;
+const r = spawnSync('npx', ['eas', 'update', '--channel', 'production', '--platform', 'android', '--environment', 'production', '--message', msgArg, '--non-interactive'], {
   cwd: root,
   stdio: 'inherit',
   shell: process.platform === 'win32',
