@@ -66,11 +66,11 @@ export async function registrarLeitura(c: Contagem, r: Rodada, codigo: string, q
 }
 
 /* ---------- Produtos do inventário (congelados do ERP; ficam no aparelho para contar sem internet) ---------- */
-type Compacto = [string, string[], string, string, 0 | 1, number]; // codigo, eans, nome, categoria, pista?, saldo
+type Compacto = [string, string[], string, string, 0 | 1, number, (number | null)?, (number | null)?]; // codigo, eans, nome, categoria, pista?, saldo, custo, venda
 const BLOCO = 2500;
 const chaveProd = (inv: string) => `nevoeiro.coleta.produtos.${inv}`;
 const memoria = new Map<string, Produto[]>();
-const deCompacto = (x: Compacto): Produto => ({ codigo: x[0], eans: x[1], nome: x[2], categoria: x[3], classe: x[4] ? 'pista' : 'conveniencia', saldo: x[5] });
+const deCompacto = (x: Compacto): Produto => ({ codigo: x[0], eans: x[1], nome: x[2], categoria: x[3], classe: x[4] ? 'pista' : 'conveniencia', saldo: x[5], custo: x[6] ?? null, venda: x[7] ?? null });
 
 async function lerCache(inv: string): Promise<Produto[] | null> {
   const n = Number(await AsyncStorage.getItem(`${chaveProd(inv)}.n`).catch(() => null));
@@ -80,7 +80,7 @@ async function lerCache(inv: string): Promise<Produto[] | null> {
   return partes.flatMap(p => (JSON.parse(p!) as Compacto[]).map(deCompacto));
 }
 async function gravarCache(inv: string, lista: Produto[]) {
-  const comp: Compacto[] = lista.map(p => [p.codigo, p.eans, p.nome, p.categoria, p.classe === 'pista' ? 1 : 0, p.saldo]);
+  const comp: Compacto[] = lista.map(p => [p.codigo, p.eans, p.nome, p.categoria, p.classe === 'pista' ? 1 : 0, p.saldo, p.custo, p.venda]);
   const blocos = Array.from({ length: Math.ceil(comp.length / BLOCO) }, (_, i) => comp.slice(i * BLOCO, (i + 1) * BLOCO));
   await Promise.all(blocos.map((b, i) => AsyncStorage.setItem(`${chaveProd(inv)}.${i}`, JSON.stringify(b))));
   await AsyncStorage.setItem(`${chaveProd(inv)}.n`, String(blocos.length));
@@ -90,9 +90,9 @@ async function baixarProdutos(inv: string): Promise<Produto[]> {
   if (!supabase) return [];
   const out: Produto[] = [];
   for (let de = 0; ; de += 1000) {
-    const { data, error } = await supabase.from('ce_produtos').select('codigo,eans,nome,categoria,classe,saldo').eq('inventario_id', inv).order('codigo').range(de, de + 999);
+    const { data, error } = await supabase.from('ce_produtos').select('codigo,eans,nome,categoria,classe,saldo,custo,preco_venda').eq('inventario_id', inv).order('codigo').range(de, de + 999);
     if (error) throw new Error('Não foi possível baixar os produtos do inventário. Confira a internet.');
-    out.push(...(data ?? []).map(d => ({ codigo: String(d.codigo), eans: (d.eans as string[]) ?? [], nome: String(d.nome), categoria: String(d.categoria), classe: d.classe as Classe, saldo: Number(d.saldo) })));
+    out.push(...(data ?? []).map(d => ({ codigo: String(d.codigo), eans: (d.eans as string[]) ?? [], nome: String(d.nome), categoria: String(d.categoria), classe: d.classe as Classe, saldo: Number(d.saldo), custo: d.custo === null ? null : Number(d.custo), venda: d.preco_venda === null ? null : Number(d.preco_venda) })));
     if (!data || data.length < 1000) break;
   }
   return out;
@@ -163,8 +163,8 @@ export async function escolherArquivoErp(): Promise<{ nome: string; base64: stri
 }
 
 /** Carrega produtos e saldos da filial no inventário (arquivo exportado ou API do Petros). */
-export function carregarErp(inventarioId: string, fonte: 'arquivo' | 'petros', arquivo?: { nome: string; base64: string }) {
-  return chamar<CargaErp>({ acao: 'carregar', inventario_id: inventarioId, fonte, arquivo });
+export function carregarErp(inventarioId: string, fonte: 'arquivo' | 'petros', arquivo?: { nome: string; base64: string }, arquivoVenda?: { nome: string; base64: string }) {
+  return chamar<CargaErp>({ acao: 'carregar', inventario_id: inventarioId, fonte, arquivo, arquivo_venda: arquivoVenda });
 }
 
 /** Envia o resultado ao Petros pela API (quando configurada). */

@@ -2,7 +2,8 @@
 //
 // Chamadas do app (supabase.functions.invoke('coleta-erp', { body })), com o JWT do usuário:
 //   { acao: 'status' }                                                    → { petros: boolean } API do Petros configurada?
-//   { acao: 'carregar', inventario_id, fonte: 'arquivo'|'petros', arquivo?: { nome, base64 } }
+//   { acao: 'carregar', inventario_id, fonte: 'arquivo'|'petros', arquivo?: { nome, base64 }, arquivo_venda?: { nome, base64 } }
+//        arquivo = PDF da Conferência de Estoque com custo; arquivo_venda = o mesmo relatório com preço de venda.
 //        lê os produtos e saldos da filial (PDF/CSV exportado do Petros ou API), grava em ce_produtos
 //        (só itens com saldo diferente de zero) e abre o inventário.
 //   { acao: 'enviar_resultado', inventario_id, linhas: [{ codigo, saldo, contado }] } → envia ao Petros pela API
@@ -91,17 +92,44 @@ async function extrairPdf(body: { caminho: string; de: number; ate: number }) {
   return json(200, { ok: true, ...(await textosDasPaginas(new Uint8Array(await data.arrayBuffer()), de, ate)) });
 }
 
-async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petros'; arquivo?: { nome: string; base64: string } }) {
+type Arquivo = { nome: string; base64: string };
+async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petros'; arquivo?: Arquivo; arquivo_venda?: Arquivo }) {
   const inv = await inventario(body.inventario_id);
   if (inv.status === 'encerrado') return json(400, { erro: 'Este inventário já foi encerrado.' });
   // Os códigos de barra vêm da base fixa da filial; sem ela o coletor não reconhece os EANs.
   const base = await baseBarras(inv.filial_id);
   if (!base.size) return json(400, { erro: `A filial ${inv.filialCodigo} ainda não tem a relação de códigos de barra importada. Importe-a em "Bases de códigos de barra" e carregue os saldos de novo.` });
   let produtos: ProdutoErp[], ignoradas = 0, saldoEm: string | null = null, empresa: string | null = null;
+  // Dois PDFs do mesmo relatório: um com o custo unitário e outro com o preço de venda (ligados pelo código interno).
+  let venda: Map<string, number> | null = null, temCusto = true, nomeCusto = '', nomeVenda = '';
+  const avisosValor: string[] = [];
   if (body.fonte === 'petros') produtos = await saldosPetros(inv.filialCodigo);
   else {
-    if (!body.arquivo?.base64) return json(400, { erro: 'Envie o arquivo exportado pelo ERP.' });
-    ({ produtos, ignoradas, saldoEm, empresa } = await lerArquivo(body.arquivo.nome, body.arquivo.base64));
+    if (!body.arquivo?.base64 && !body.arquivo_venda?.base64) return json(400, { erro: 'Envie o arquivo exportado pelo ERP.' });
+    const lidos: { nome: string; tipo: 'custo' | 'venda'; r: Awaited<ReturnType<typeof lerArquivo>> }[] = [];
+    if (body.arquivo?.base64) { const r = await lerArquivo(body.arquivo.nome, body.arquivo.base64); lidos.push({ nome: body.arquivo.nome, tipo: r.valor ?? 'custo', r }); }
+    if (body.arquivo_venda?.base64) { const r = await lerArquivo(body.arquivo_venda.nome, body.arquivo_venda.base64); lidos.push({ nome: body.arquivo_venda.nome, tipo: r.valor ?? 'venda', r }); }
+    if (lidos.length === 2 && lidos[0].tipo === lidos[1].tipo) {
+      return json(400, { erro: `Os dois PDFs são do relatório com ${lidos[0].tipo === 'custo' ? 'preço de custo' : 'preço de venda'}. Envie um com o custo e outro com o preço de venda.` });
+    }
+    const custoL = lidos.find(l => l.tipo === 'custo'), vendaL = lidos.find(l => l.tipo === 'venda');
+    const principal = custoL ?? vendaL!;
+    ({ produtos, ignoradas, saldoEm, empresa } = principal.r);
+    nomeCusto = custoL?.nome ?? ''; nomeVenda = vendaL?.nome ?? '';
+    temCusto = !!custoL;
+    if (!custoL) avisosValor.push('Sem o PDF com o preço de custo: os valores a custo ficam em branco.');
+    if (vendaL) {
+      venda = new Map(vendaL.r.produtos.filter(p => p.custo !== null && p.custo !== undefined).map(p => [p.codigo, p.custo as number]));
+      if (custoL) {
+        const saldoVenda = new Map(vendaL.r.produtos.map(p => [p.codigo, p.saldo]));
+        const codCusto = new Set(custoL.r.produtos.map(p => p.codigo));
+        const difSaldo = custoL.r.produtos.filter(p => saldoVenda.has(p.codigo) && saldoVenda.get(p.codigo) !== p.saldo).length;
+        const soVenda = vendaL.r.produtos.filter(p => !codCusto.has(p.codigo)).length;
+        if (difSaldo) avisosValor.push(`${difSaldo} item(ns) com "Qtd Atual" diferente entre os PDFs de custo e de venda: valeu a do PDF de custo.`);
+        if (soVenda) avisosValor.push(`${soVenda} item(ns) só aparecem no PDF de preço de venda e ficaram de fora (o saldo vem do PDF de custo).`);
+        if (custoL.r.empresa && vendaL.r.empresa && custoL.r.empresa !== vendaL.r.empresa) avisosValor.push(`Atenção: o PDF de custo é da filial ${custoL.r.empresa} e o de venda da filial ${vendaL.r.empresa}.`);
+      }
+    } else avisosValor.push('Sem o PDF com o preço de venda: os valores a venda ficam em branco.');
   }
   // Um registro por código (linhas repetidas somam o saldo); só itens com saldo diferente de zero.
   const porCodigo = new Map<string, ProdutoErp>();
@@ -116,7 +144,10 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
     const eans = [...new Set([...(b?.eans ?? []), ...p.eans])];
     if (!eans.length) semBarras++;
     const categoria = (p.categoria && p.categoria !== 'Sem categoria' ? p.categoria : b?.categoria) || 'Sem categoria';
-    return { inventario_id: inv.id, codigo: p.codigo, eans, nome: p.nome || b?.nome || '', categoria, classe: classeDe({ ...p, categoria }), saldo: p.saldo, custo: p.custo ?? null };
+    return {
+      inventario_id: inv.id, codigo: p.codigo, eans, nome: p.nome || b?.nome || '', categoria, classe: classeDe({ ...p, categoria }), saldo: p.saldo,
+      custo: temCusto ? p.custo ?? null : null, preco_venda: venda ? venda.get(p.codigo) ?? null : null,
+    };
   });
   if (!linhas.length) return json(400, { erro: 'Nenhum item com saldo foi encontrado para esta filial.' });
 
@@ -127,12 +158,14 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
     if (error) throw new Error(`Falha ao gravar os produtos: ${error.message}`);
   }
   const { error: e2 } = await admin.from('ce_inventarios').update({
-    status: 'aberto', fonte: body.fonte, arquivo: body.arquivo?.nome ?? 'API Petros', itens_total: linhas.length, erp_em: new Date().toISOString(),
+    status: 'aberto', fonte: body.fonte, arquivo: body.fonte === 'petros' ? 'API Petros' : nomeCusto || nomeVenda, arquivo_venda: nomeVenda, itens_total: linhas.length, erp_em: new Date().toISOString(),
     saldo_em: saldoEm, sem_barras: semBarras,
   }).eq('id', inv.id);
   if (e2) throw new Error(`Falha ao abrir o inventário: ${e2.message}`);
   const avisos = [
     ...(ignoradas ? [`${ignoradas} linha(s) do arquivo não foram reconhecidas como produto.`] : []),
+    ...avisosValor,
+    ...(venda ? (n => (n ? [`${n} item(ns) sem preço de venda no PDF de venda.`] : []))(linhas.filter(l => l.preco_venda === null).length) : []),
     ...(empresa && inv.filialCodigo && Number(empresa) !== Number(inv.filialCodigo.replace(/\D/g, '')) ? [`Atenção: o PDF é da empresa/filial ${empresa}, mas o inventário é da filial ${inv.filialCodigo}. Confira o arquivo.`] : []),
     ...(semBarras ? [`${semBarras} item(ns) com saldo não têm código de barras na base da filial: leia-os digitando o código interno.`] : []),
     ...(produtos.length - linhas.length > 0 ? [`${produtos.length - linhas.length} item(ns) com saldo zero ou repetidos ficaram de fora.`] : []),

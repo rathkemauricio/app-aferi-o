@@ -234,25 +234,25 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [busca, setBusca] = useState('');
   const [petros, setPetros] = useState(false);
   const [fonte, setFonte] = useState<'arquivo' | 'petros'>('arquivo');
-  const [arquivo, setArquivo] = useState<{ nome: string; base64: string } | null>(null);
+  const [arquivo, setArquivo] = useState<ArquivoErp | null>(null);
+  const [arquivoVenda, setArquivoVenda] = useState<ArquivoErp | null>(null);
   const [enviando, setEnviando] = useState(false);
   useEffect(() => { void statusErp().then(r => { setPetros(r.petros); if (r.petros) setFonte('petros'); }).catch(() => undefined); }, []);
   const aberto = dados.inventarios.find(i => i.filial_id === filialId && i.status !== 'encerrado');
   const base = filialId ? dados.bases.get(filialId) : undefined;
   const filtradas = dados.filiais.filter(f => `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(busca.toLowerCase()));
 
-  const pegarArquivo = async () => { try { const a = await escolherArquivoErp(); if (a) setArquivo(a); } catch (e) { notify('Arquivo não lido', e instanceof Error ? e.message : ''); } };
   const abrir = async () => {
     if (!filialId) { notify('Escolha a filial'); return; }
     if (aberto) { notify('Filial com inventário aberto', `${aberto.codigo} ainda está aberto nesta filial. Encerre-o antes de abrir outro.`); return; }
     if (!base) { notify('Base de códigos de barra pendente', 'Importe a relação de códigos de barra desta filial antes de abrir o inventário.'); return; }
-    if (fonte === 'arquivo' && !arquivo) { notify('Escolha o arquivo do ERP', 'Use o relatório de saldos exportado pelo Petros (PDF) ou um CSV.'); return; }
+    if (fonte === 'arquivo' && (!arquivo || !arquivoVenda)) { notify('Faltam os PDFs de saldo', 'Escolha os dois PDFs da Conferência de Estoque da filial: um com o preço de custo e outro com o preço de venda.'); return; }
     setEnviando(true);
     const id = uid('inv');
     try {
       inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo)), filial_id: filialId, tipo, status: 'carregando', fonte, arquivo: arquivo?.nome ?? '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
       await inventariosCol.flush();
-      const r = await carregarErp(id, fonte, arquivo ?? undefined);
+      const r = await carregarErp(id, fonte, arquivo ?? undefined, arquivoVenda ?? undefined);
       await inventariosCol.sync();
       if (r.avisos.length) notify(`${r.itens.toLocaleString('pt-BR')} itens carregados`, r.avisos.join('\n'));
       nav.trocar({ n: 'inventario', id });
@@ -297,18 +297,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
         </Cartao>
         <Rotulo>Saldos do ERP (Petros)</Rotulo>
         <Segmentos opcoes={[{ id: 'arquivo', titulo: 'Arquivo exportado', sub: 'PDF ou CSV' }, { id: 'petros', titulo: 'API do Petros', sub: petros ? 'Conectada' : 'Em breve', desab: !petros }]} valor={fonte} onChange={setFonte} />
-        {fonte === 'arquivo' ? (
-          <Cartao onPress={() => void pegarArquivo()}>
-            <View style={k.linha}>
-              <UploadSimpleIcon size={22} color={c.text} />
-              <View style={{ flex: 1 }}>
-                <Text style={[k.cTit, { color: c.text, fontSize: 15 }]} numberOfLines={1}>{arquivo ? arquivo.nome : 'Escolher arquivo do ERP'}</Text>
-                <Text style={[k.cap, { color: c.textMuted }]}>{arquivo ? 'Toque para trocar' : 'PDF de saldos da filial no momento da abertura (Petros)'}</Text>
-              </View>
-              {arquivo ? <CheckIcon size={18} color={c.success} weight="bold" /> : null}
-            </View>
-          </Cartao>
-        ) : null}
+        {fonte === 'arquivo' ? <ArquivosErp custo={arquivo} setCusto={setArquivo} venda={arquivoVenda} setVenda={setArquivoVenda} /> : null}
       </Corpo>
       {escolher && (
         <Sheet title="Filial" onClose={() => setEscolher(false)}>
@@ -327,6 +316,32 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   );
 }
 
+type ArquivoErp = { nome: string; base64: string };
+/** Os dois PDFs da Conferência de Estoque: o mesmo relatório com o preço de custo e com o preço de venda. */
+function ArquivosErp({ custo, setCusto, venda, setVenda }: { custo: ArquivoErp | null; setCusto: (a: ArquivoErp) => void; venda: ArquivoErp | null; setVenda: (a: ArquivoErp) => void }) {
+  const c = useCores();
+  const pegar = async (set: (a: ArquivoErp) => void) => { try { const a = await escolherArquivoErp(); if (a) set(a); } catch (e) { notify('Arquivo não lido', e instanceof Error ? e.message : ''); } };
+  const campo = (titulo: string, sub: string, a: ArquivoErp | null, set: (a: ArquivoErp) => void) => (
+    <Cartao onPress={() => void pegar(set)}>
+      <View style={k.linha}>
+        <UploadSimpleIcon size={22} color={c.text} />
+        <View style={{ flex: 1 }}>
+          <Text style={[k.cap, k.b, { color: c.textMuted }]}>{titulo}</Text>
+          <Text style={[k.cTit, { color: c.text, fontSize: 15 }]} numberOfLines={1}>{a ? a.nome : 'Escolher PDF'}</Text>
+          <Text style={[k.cap, { color: c.textMuted }]}>{a ? 'Toque para trocar' : sub}</Text>
+        </View>
+        {a ? <CheckIcon size={18} color={c.success} weight="bold" /> : null}
+      </View>
+    </Cartao>
+  );
+  return <>
+    {campo('1 · SALDOS COM PREÇO DE CUSTO', 'Conferência de Estoque - Custo (saldo no momento da abertura)', custo, setCusto)}
+    {campo('2 · SALDOS COM PREÇO DE VENDA', 'O mesmo relatório, tirado na tela com preço de venda', venda, setVenda)}
+    <Text style={[k.cap, { color: c.textMuted }]}>Os dois são ligados pelo código interno. Se trocar a ordem, o app percebe pelo título do relatório.</Text>
+  </>;
+}
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataHora = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 
 /* =====================================================================
@@ -408,13 +423,15 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   const enc = inv.status === 'encerrado';
   const sub = `${nomeFilial(dados, inv.filial_id)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'}`;
 
+  const [arqCusto, setArqCusto] = useState<ArquivoErp | null>(null);
+  const [arqVenda, setArqVenda] = useState<ArquivoErp | null>(null);
   const recarregar = async () => {
+    if (inv.fonte === 'arquivo' && (!arqCusto || !arqVenda)) { notify('Faltam os PDFs de saldo', 'Escolha o PDF com o preço de custo e o PDF com o preço de venda.'); return; }
     try {
-      const a = inv.fonte === 'arquivo' ? await escolherArquivoErp() : null;
-      if (inv.fonte === 'arquivo' && !a) return;
       setRecarregando(true);
-      await carregarErp(inv.id, inv.fonte, a ?? undefined);
+      const r = await carregarErp(inv.id, inv.fonte, arqCusto ?? undefined, arqVenda ?? undefined);
       await inventariosCol.sync();
+      if (r.avisos.length) notify(`${r.itens.toLocaleString('pt-BR')} itens carregados`, r.avisos.join('\n'));
     } catch (e) { notify('ERP não carregado', e instanceof Error ? e.message : ''); } finally { setRecarregando(false); }
   };
   const finalizarInv = () => {
@@ -428,8 +445,9 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   if (inv.status === 'carregando') return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={inv.codigo} sub={sub} onVoltar={nav.voltar} />
-      <Corpo rodape={<Botao titulo={recarregando ? 'Carregando…' : inv.fonte === 'arquivo' ? 'Escolher arquivo e carregar' : 'Carregar do Petros'} onPress={() => void recarregar()} desabilitado={recarregando} />}>
+      <Corpo rodape={<Botao titulo={recarregando ? 'Carregando…' : inv.fonte === 'arquivo' ? 'Carregar os PDFs' : 'Carregar do Petros'} onPress={() => void recarregar()} desabilitado={recarregando || (inv.fonte === 'arquivo' && (!arqCusto || !arqVenda))} />}>
         <EmptyState icon={PackageIcon} title="Saldos do ERP ainda não carregados" text="A carga dos produtos não terminou. Carregue de novo para começar as contagens." />
+        {inv.fonte === 'arquivo' ? <ArquivosErp custo={arqCusto} setCusto={setArqCusto} venda={arqVenda} setVenda={setArqVenda} /> : null}
       </Corpo>
     </View>
   );
@@ -468,7 +486,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
             </Cartao>
           );
         })}
-        <Text style={[k.cap, { color: c.textMuted }]}>Saldo do ERP de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
+        <Text style={[k.cap, { color: c.textMuted }]}>Saldo do ERP de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
       </Corpo>
     </View>
   );
@@ -857,12 +875,13 @@ function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: D
   };
   const imprimir = async () => {
     if (!rel) return;
-    const linhas = problemas.slice(0, 3000).map(l => `<tr><td>${esc(l.produto.codigo)}</td><td>${esc(l.produto.nome)}</td><td>${esc(l.produto.categoria)}</td><td class="n">${fmtQ(l.produto.saldo)}</td><td class="n">${fmtQ(l.qtd)}</td><td class="n">${l.diferenca > 0 ? '+' : ''}${fmtQ(l.diferenca)}</td><td>${l.status === 'divergente' ? 'Divergente' : 'Não encontrado'}</td></tr>`).join('');
+    const linhas = problemas.slice(0, 3000).map(l => `<tr><td>${esc(l.produto.codigo)}</td><td>${esc(l.produto.nome)}</td><td>${esc(l.produto.categoria)}</td><td class="n">${fmtQ(l.produto.saldo)}</td><td class="n">${fmtQ(l.qtd)}</td><td class="n">${l.diferenca > 0 ? '+' : ''}${fmtQ(l.diferenca)}</td><td class="n">${l.difCusto === null ? '—' : brl(l.difCusto)}</td><td class="n">${l.difVenda === null ? '—' : brl(l.difVenda)}</td><td>${l.status === 'divergente' ? 'Divergente' : 'Não encontrado'}</td></tr>`).join('');
+    const valores = `<h2>Resultado em R$</h2><table><tr><th></th><th class="n">Faltas</th><th class="n">Sobras</th><th class="n">Resultado</th></tr><tr><td>A preço de custo</td><td class="n">${brl(rel.custo.faltas)}</td><td class="n">${brl(rel.custo.sobras)}</td><td class="n"><b>${brl(rel.custo.resultado)}</b></td></tr><tr><td>A preço de venda</td><td class="n">${brl(rel.venda.faltas)}</td><td class="n">${brl(rel.venda.sobras)}</td><td class="n"><b>${brl(rel.venda.resultado)}</b></td></tr></table>`;
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Inventário ${esc(inv.codigo)}</title><style>@page{size:A4;margin:12mm}body{font:11px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:18px;margin:0 0 2px;color:${NAVY}}.sub{color:#5b6475;margin-bottom:10px}.kpis{display:flex;gap:8px;margin:8px 0 12px}.kpis div{flex:1;padding:8px;border-radius:6px;background:#f2f4f7}.kpis b{display:block;font-size:18px}h2{font-size:13px;margin:14px 0 6px}table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-align:left;padding:4px}td{border-bottom:1px solid #e3e6ec;padding:3px 4px}.n{text-align:right;font-variant-numeric:tabular-nums}</style></head><body>
 <h1>Relatório do inventário ${esc(inv.codigo)}</h1><div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento'}</div>
 <div class="kpis"><div><b>${rel.corretos.toLocaleString('pt-BR')}</b>Corretos</div><div><b>${rel.divergentes.toLocaleString('pt-BR')}</b>Divergentes</div><div><b>${rel.naoEncontrados.toLocaleString('pt-BR')}</b>Não encontrados</div></div>
-<h2>Resultado por contagem</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${rel.porContagem.map(p => `<tr><td>${esc(p.contagem.nome)}</td><td class="n">${p.itens}</td><td class="n">${p.corretos}</td><td class="n">${p.divergentes}</td><td class="n">${p.naoEncontrados}</td></tr>`).join('')}</table>
-<h2>Itens divergentes e não encontrados (${problemas.length})</h2><table><tr><th>Código</th><th>Produto</th><th>Categoria</th><th class="n">Saldo</th><th class="n">Contado</th><th class="n">Dif.</th><th>Situação</th></tr>${linhas}</table></body></html>`;
+${valores}<h2>Resultado por contagem</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${rel.porContagem.map(p => `<tr><td>${esc(p.contagem.nome)}</td><td class="n">${p.itens}</td><td class="n">${p.corretos}</td><td class="n">${p.divergentes}</td><td class="n">${p.naoEncontrados}</td></tr>`).join('')}</table>
+<h2>Itens divergentes e não encontrados (${problemas.length})</h2><table><tr><th>Código</th><th>Produto</th><th>Categoria</th><th class="n">Saldo</th><th class="n">Contado</th><th class="n">Dif.</th><th class="n">Dif. R$ custo</th><th class="n">Dif. R$ venda</th><th>Situação</th></tr>${linhas}</table></body></html>`;
     try { await imprimirHtml(html, `Inventário ${inv.codigo}`); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
 
@@ -883,6 +902,21 @@ function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: D
             {tile(rel.divergentes, 'Divergentes', [c.dangerSoft, c.danger])}
             {tile(rel.naoEncontrados, 'Não encontrados', [c.accentSoft, c.accent])}
           </View>
+          <Cartao>
+            <Text style={[k.cTit, { color: c.text }]}>Resultado em R$</Text>
+            {([['A preço de custo', rel.custo, rel.temCusto], ['A preço de venda', rel.venda, rel.temVenda]] as const).map(([t, v, tem]) => (
+              <View key={t} style={[k.linha, { alignItems: 'flex-start', paddingVertical: 6 }]}>
+                <Text style={[k.cTxt, k.b, { color: c.text, flex: 1 }]}>{t}</Text>
+                {tem ? (
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[k.monoM, { color: c.danger }]}>Faltas {brl(v.faltas)}</Text>
+                    <Text style={[k.monoM, { color: c.warning }]}>Sobras {brl(v.sobras)}</Text>
+                    <Text style={[k.monoM, k.b, { color: v.resultado < 0 ? c.danger : c.text }]}>Resultado {brl(v.resultado)}</Text>
+                  </View>
+                ) : <Text style={[k.cap, { color: c.textMuted }]}>sem o PDF</Text>}
+              </View>
+            ))}
+          </Cartao>
           {divergentes ? (
             <Cartao>
               <Text style={[k.cTit, { color: c.text }]}>Itens divergentes e não encontrados ({problemas.length.toLocaleString('pt-BR')})</Text>
@@ -895,6 +929,7 @@ function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: D
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={[k.monoM, { color: c.text }]}>{fmtQ(l.qtd)} / {fmtQ(l.produto.saldo)}</Text>
                     <Text style={[k.monoM, k.b, { color: l.diferenca < 0 ? c.danger : c.warning }]}>{l.diferenca > 0 ? '+' : ''}{fmtQ(l.diferenca)}</Text>
+                    {l.difCusto !== null || l.difVenda !== null ? <Text style={[k.cap, { color: c.textMuted }]}>{l.difCusto !== null ? `custo ${brl(l.difCusto)}` : ''}{l.difCusto !== null && l.difVenda !== null ? ' · ' : ''}{l.difVenda !== null ? `venda ${brl(l.difVenda)}` : ''}</Text> : null}
                   </View>
                 </View>
               ))}

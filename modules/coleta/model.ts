@@ -15,12 +15,15 @@ export type ClasseContagem = 'completa' | 'pista' | 'conveniencia' | 'mista';
 export type StatusRodada = 'aguardando' | 'andamento' | 'finalizada';
 export type Rodada = 1 | 2 | 3;
 
-export type Produto = { codigo: string; eans: string[]; nome: string; categoria: string; classe: Classe; saldo: number };
+/** custo e venda: valores unitários dos PDFs de custo e de preço de venda (null quando não vieram). */
+export type Produto = { codigo: string; eans: string[]; nome: string; categoria: string; classe: Classe; saldo: number; custo: number | null; venda: number | null };
 
 export type Inventario = SyncRow & {
   codigo: string; filial_id: string; tipo: 'completo' | 'parcial'; status: 'carregando' | 'aberto' | 'encerrado';
   fonte: 'arquivo' | 'petros'; arquivo: string; itens_total: number;
   erp_em: string | null; encerrado_em: string | null; enviado_erp_em: string | null;
+  /** PDF com o preço de venda (o `arquivo` é o de custo). */
+  arquivo_venda?: string;
   /** Data/hora impressa no relatório de saldos (quando o PDF traz); senão vale erp_em. */
   saldo_em?: string | null;
   /** Itens com saldo sem nenhum código de barras na base da filial. */
@@ -163,7 +166,15 @@ export function progressoInventario(produtos: Produto[], coletas: Coleta[]) {
   return { coletados, total, pct: total ? coletados / total : 0 };
 }
 
-export type LinhaRelatorio = { produto: Produto; qtd: number; status: Final; contagem: string; diferenca: number; coletado: boolean };
+export type LinhaRelatorio = { produto: Produto; qtd: number; status: Final; contagem: string; diferenca: number; coletado: boolean; difCusto: number | null; difVenda: number | null };
+/** Faltas (negativas), sobras e resultado em R$, a custo e a preço de venda. */
+export type Valores = { faltas: number; sobras: number; resultado: number };
+const somaValores = (difs: (number | null)[]): Valores => {
+  const v = { faltas: 0, sobras: 0, resultado: 0 };
+  difs.forEach(d => { if (d === null) return; if (d < 0) v.faltas += d; else v.sobras += d; v.resultado += d; });
+  return v;
+};
+const vezes = (dif: number, unit: number | null) => (unit === null ? null : Math.round(dif * unit * 100) / 100);
 /**
  * Resultado do inventário: cada item entra uma vez, pela contagem mais recente em que foi coletado
  * (ou, sem coleta, pela mais recente que o incluía). Itens com saldo fora de qualquer contagem ficam de fora.
@@ -179,7 +190,10 @@ export function relatorio(produtos: Produto[], contagens: Contagem[], coletas: C
       const f = resultadoFinal(p, q.get(p.codigo) ?? [null, null, null]);
       if (f.status === 'correto') r.corretos++; else if (f.status === 'divergente') r.divergentes++; else r.naoEncontrados++;
       const ja = porItem.get(p.codigo);
-      if (!ja || (!ja.coletado && f.coletado)) porItem.set(p.codigo, { produto: p, qtd: f.qtd, status: f.status, contagem: c.nome, diferenca: f.qtd - p.saldo, coletado: f.coletado });
+      if (!ja || (!ja.coletado && f.coletado)) {
+        const dif = f.qtd - p.saldo;
+        porItem.set(p.codigo, { produto: p, qtd: f.qtd, status: f.status, contagem: c.nome, diferenca: dif, coletado: f.coletado, difCusto: vezes(dif, p.custo), difVenda: vezes(dif, p.venda) });
+      }
     });
     return r;
   });
@@ -189,6 +203,10 @@ export function relatorio(produtos: Produto[], contagens: Contagem[], coletas: C
     corretos: linhas.filter(l => l.status === 'correto').length,
     divergentes: linhas.filter(l => l.status === 'divergente').length,
     naoEncontrados: linhas.filter(l => l.status === 'nao_encontrado').length,
+    custo: somaValores(linhas.map(l => l.difCusto)),
+    venda: somaValores(linhas.map(l => l.difVenda)),
+    temCusto: linhas.some(l => l.produto.custo !== null),
+    temVenda: linhas.some(l => l.produto.venda !== null),
   };
 }
 
@@ -206,8 +224,9 @@ export function proximoCodigo(existentes: string[]) {
 export function resultadoCsv(inv: Inventario, linhas: LinhaRelatorio[]) {
   const cel = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
   const num = (v: number) => String(v).replace('.', ',');
+  const opc = (v: number | null) => (v === null ? '' : num(v));
   return [
-    ['inventario', 'codigo', 'ean', 'produto', 'categoria', 'classe', 'saldo_erp', 'contado', 'diferenca', 'situacao', 'contagem'].map(cel).join(';'),
-    ...linhas.map(l => [inv.codigo, l.produto.codigo, l.produto.eans[0] ?? '', l.produto.nome, l.produto.categoria, l.produto.classe, num(l.produto.saldo), num(l.qtd), num(l.diferenca), l.status, l.contagem].map(v => cel(v)).join(';')),
+    ['inventario', 'codigo', 'ean', 'produto', 'categoria', 'classe', 'saldo_erp', 'contado', 'diferenca', 'custo_unit', 'venda_unit', 'diferenca_custo_rs', 'diferenca_venda_rs', 'situacao', 'contagem'].map(cel).join(';'),
+    ...linhas.map(l => [inv.codigo, l.produto.codigo, l.produto.eans[0] ?? '', l.produto.nome, l.produto.categoria, l.produto.classe, num(l.produto.saldo), num(l.qtd), num(l.diferenca), opc(l.produto.custo), opc(l.produto.venda), opc(l.difCusto), opc(l.difVenda), l.status, l.contagem].map(v => cel(v)).join(';')),
   ].join('\n');
 }

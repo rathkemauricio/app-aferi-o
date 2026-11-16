@@ -97,6 +97,17 @@ function linhaProduto(linha: string): Omit<ProdutoErp, 'categoria'> | null {
   return Number.isFinite(saldo) ? { codigo, eans, nome, saldo } : null;
 }
 
+/**
+ * O mesmo relatório sai com custo ou com preço de venda na coluna de valor. Descobre qual pelo título e
+ * pelo cabeçalho das colunas ("RN - Conferência de Estoque - Custo …", "Custo Unit" × "Preço Venda"/"Venda Unit").
+ */
+export function tipoDeValor(linhas: string[]): 'custo' | 'venda' | null {
+  const cab = linhas.slice(0, 30).filter(l => /^\s*(rn\s*-|denomina)/i.test(l)).join(' ');
+  if (/venda/i.test(cab)) return 'venda';
+  if (/custo/i.test(cab)) return 'custo';
+  return null;
+}
+
 /** Data e hora impressas no relatório (ex.: "Emitido em 16/11/2026 10:15"), no fuso de Brasília. */
 export function dataDoRelatorio(linhas: string[]): string | null {
   for (const l of linhas.slice(0, 40)) {
@@ -121,7 +132,7 @@ function doTextoRelatorio(linhas: string[]) {
   }
   // "Empresa: NEVOEIRO 18" → número da filial no ERP (para conferir com a filial do inventário).
   const empresa = linhas.slice(0, 10).map(l => l.match(/empresa:\s*.*?(\d+)\s*(?:\s{2,}|$)/i)?.[1]).find(Boolean) ?? null;
-  return { produtos: out, ignoradas, saldoEm: dataDoRelatorio(linhas), empresa };
+  return { produtos: out, ignoradas, saldoEm: dataDoRelatorio(linhas), empresa, valor: tipoDeValor(linhas) };
 }
 
 /** CSV/TXT com cabeçalho (separador ; , ou tab). Colunas reconhecidas pelo nome. */
@@ -146,7 +157,7 @@ function doCsv(texto: string) {
       classe: /pista/i.test(setor) ? 'pista' : /conveni/i.test(setor) ? 'conveniencia' : undefined,
     });
   }
-  return { produtos, ignoradas, saldoEm: null as string | null, empresa: null as string | null };
+  return { produtos, ignoradas, saldoEm: null as string | null, empresa: null as string | null, valor: null as 'custo' | 'venda' | null };
 }
 
 export async function lerArquivo(nome: string, base64: string) {
