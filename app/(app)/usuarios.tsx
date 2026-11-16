@@ -7,7 +7,7 @@ import { useAuth } from '../../lib/auth';
 import { emailValido, enviarEmail } from '../../lib/email';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
-import { ArrowLeftIcon, CheckIcon, LockSimpleIcon, MagnifyingGlassIcon, PlusIcon, UserCircleIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, LockSimpleIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 
@@ -26,6 +26,8 @@ export default function UsuariosScreen() {
   const [escolha, setEscolha] = useState<Record<string, string[]>>({}); // módulos marcados antes de aprovar
   const [novo, setNovo] = useState<NovoUsuario | null>(null);
   const [criando, setCriando] = useState(false);
+  const [edicao, setEdicao] = useState<{ p: Perfil; nome: string; email: string; senha: string } | null>(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
   const carregar = useCallback(async () => {
     if (!supabase) return;
@@ -48,6 +50,46 @@ export default function UsuariosScreen() {
     }
   };
 
+  /** Chama a Edge Function "usuarios" (criar, editar, inativar/reativar); devolve o erro em português, se houver. */
+  const chamarUsuarios = async (body: Record<string, unknown>): Promise<{ ok: true; data: unknown } | { ok: false; erro: string }> => {
+    if (!supabase) return { ok: false, erro: 'Sem servidor configurado.' };
+    const { data, error } = await supabase.functions.invoke('usuarios', { body });
+    if (!error) return { ok: true, data };
+    let erro = 'Não foi possível falar com o servidor. Verifique a conexão.';
+    try { const r = (error as { context?: Response }).context; const c = r ? await r.json() : null; if (c?.erro) erro = String(c.erro); } catch { /* sem JSON */ }
+    return { ok: false, erro };
+  };
+
+  const salvarEdicao = async () => {
+    if (!edicao) return;
+    const { p } = edicao;
+    const nome = edicao.nome.trim(), email = edicao.email.trim().toLowerCase(), senha = edicao.senha;
+    if (!nome) { notify('Informe o nome'); return; }
+    if (!emailValido(email)) { notify('E-mail inválido', 'Confira o e-mail digitado.'); return; }
+    if (senha && senha.length < 8) { notify('Senha muito curta', 'Use pelo menos 8 caracteres (ou toque em "Gerar").'); return; }
+    const body: Record<string, unknown> = { acao: 'editar', user_id: p.user_id };
+    if (nome !== (p.nome ?? '')) body.nome = nome;
+    if (email !== p.email) body.email = email;
+    if (senha) body.senha = senha;
+    if (Object.keys(body).length === 2) { setEdicao(null); return; }
+    setSalvandoEdicao(true);
+    const r = await chamarUsuarios(body);
+    setSalvandoEdicao(false);
+    if (!r.ok) { notify('Dados não alterados', r.erro); return; }
+    setEdicao(null); void carregar();
+    const partes = [body.nome ? 'nome' : '', body.email ? `e-mail (login agora é ${email})` : '', body.senha ? 'senha' : ''].filter(Boolean);
+    notify('Dados alterados', `${nome}: ${partes.join(', ')} atualizado${partes.length > 1 ? 's' : ''}.${body.senha ? ' Passe a nova senha para a pessoa.' : ''}`);
+  };
+
+  /** Inativar: tira o acesso aos dados e bloqueia o login no servidor. Reativar: libera os dois. */
+  const mudarStatus = async (p: Perfil, ativo: boolean) => {
+    const r = await chamarUsuarios({ acao: 'status', user_id: p.user_id, ativo });
+    if (!r.ok) { notify(ativo ? 'Usuário não reativado' : 'Usuário não inativado', r.erro); return; }
+    void carregar();
+    const aviso = await enviarEmail({ acao: 'conta_alterada', user_id: p.user_id });
+    if (!aviso.ok) notify('Aviso por e-mail não enviado', `A alteração foi salva, mas ${p.email} não foi avisado por e-mail. ${aviso.erro}`);
+  };
+
   const criarUsuario = async () => {
     if (!supabase || !novo) return;
     const email = novo.email.trim().toLowerCase();
@@ -56,13 +98,9 @@ export default function UsuariosScreen() {
     if (novo.senha.length < 8) { notify('Senha muito curta', 'Use pelo menos 8 caracteres (ou toque em "Gerar").'); return; }
     if (novo.papel === 'usuario' && !novo.modulos.length) { notify('Marque os módulos', 'Escolha ao menos um módulo que a pessoa vai usar.'); return; }
     setCriando(true);
-    const { data, error } = await supabase.functions.invoke('usuarios', { body: { acao: 'criar', email, nome: novo.nome.trim(), senha: novo.senha, papel: novo.papel, modulos: novo.modulos } });
-    if (error) {
-      let msg = 'Não foi possível falar com o servidor. Verifique a conexão.';
-      try { const r = (error as { context?: Response }).context; const c = r ? await r.json() : null; if (c?.erro) msg = String(c.erro); } catch { /* sem JSON */ }
-      setCriando(false); notify('Usuário não criado', msg); return;
-    }
-    const userIdNovo = (data as { user_id?: string } | null)?.user_id;
+    const res = await chamarUsuarios({ acao: 'criar', email, nome: novo.nome.trim(), senha: novo.senha, papel: novo.papel, modulos: novo.modulos });
+    if (!res.ok) { setCriando(false); notify('Usuário não criado', res.erro); return; }
+    const userIdNovo = (res.data as { user_id?: string } | null)?.user_id;
     let aviso = '';
     if (novo.avisar && userIdNovo) {
       const r = await enviarEmail({ acao: 'conta_alterada', user_id: userIdNovo });
@@ -110,8 +148,10 @@ export default function UsuariosScreen() {
     const mods = p.modulos ?? [];
     return (
       <Card key={p.user_id}>
-        {cabecalho(p, <StatusPill label={p.ativo ? (p.papel === 'admin' ? 'Administrador' : 'Com acesso') : 'Bloqueada'} tone={p.ativo ? (p.papel === 'admin' ? 'accent' : 'success') : 'danger'} />)}
-        {eu ? <Text style={t.caption}>Você não pode alterar o próprio papel nem bloquear a própria conta.</Text> : <>
+        {cabecalho(p, <StatusPill label={p.ativo ? (p.papel === 'admin' ? 'Administrador' : 'Ativo') : 'Inativo'} tone={p.ativo ? (p.papel === 'admin' ? 'accent' : 'success') : 'danger'} />)}
+        {eu ? <Text style={t.caption}>Sua conta: o nome, o e-mail e a senha se alteram em Minha conta. Você não pode mudar o próprio papel nem inativar a própria conta.</Text> : <>
+          <Button title="Editar dados (nome, e-mail, senha)" icon={PencilSimpleIcon} variant="secondary" size="sm" style={{ alignSelf: 'flex-start' }}
+            onPress={() => setEdicao({ p, nome: p.nome ?? '', email: p.email, senha: '' })} />
           <ChoiceChips value={p.papel === 'admin' ? 'Administrador' : 'Usuário'} options={['Usuário', 'Administrador']}
             onChange={v => confirmAction('Alterar papel?', v === 'Administrador'
               ? `${p.email} passará a acessar todos os módulos e a gerenciar usuários, filiais e parâmetros.`
@@ -121,10 +161,10 @@ export default function UsuariosScreen() {
             {modChips(mods, id => void alterar(p, { modulos: mods.includes(id) ? mods.filter(x => x !== id) : [...mods, id] }))}
             {p.ativo && !mods.length ? <Text style={[t.caption, { color: colors.warning }]}>Conta com acesso, mas sem módulos: ela entra e não vê nenhum módulo.</Text> : null}
           </>}
-          <Button title={p.ativo ? 'Bloquear acesso' : 'Desbloquear'} variant={p.ativo ? 'danger' : 'secondary'} size="sm"
+          <Button title={p.ativo ? 'Inativar usuário' : 'Reativar usuário'} variant={p.ativo ? 'danger' : 'secondary'} size="sm"
             onPress={() => (p.ativo
-              ? confirmAction('Bloquear acesso?', `${p.email} não conseguirá mais ver nem enviar dados. Registros feitos por ela continuam guardados.`, 'Bloquear', () => void alterar(p, { ativo: false }))
-              : void alterar(p, { ativo: true }))} />
+              ? confirmAction('Inativar usuário?', `${p.nome || p.email} não conseguirá mais entrar no Postora nem ver ou enviar dados. Tudo o que essa pessoa já registrou continua guardado, com o nome dela. Dá para reativar depois.`, 'Inativar', () => void mudarStatus(p, false))
+              : confirmAction('Reativar usuário?', `${p.nome || p.email} volta a entrar no Postora com o mesmo e-mail e senha, e a ver os módulos marcados.`, 'Reativar', () => void mudarStatus(p, true)))} />
         </>}
       </Card>
     );
@@ -165,13 +205,29 @@ export default function UsuariosScreen() {
             {ativos.map(cartaoConta)}
 
             {bloqueados.length ? <>
-              <SectionHeader title={`Bloqueadas (${bloqueados.length})`} />
+              <SectionHeader title={`Inativos (${bloqueados.length})`} />
               {bloqueados.map(cartaoConta)}
             </> : null}
 
             <Text style={t.caption}>Cada conta vê e usa só os módulos marcados; o banco de dados aplica a mesma regra. Para apagar uma conta definitivamente, use o painel do Supabase (Authentication → Users).</Text>
           </>}
       </ScrollView>
+
+      {edicao && (
+        <Sheet title="Editar usuário" onClose={() => !salvandoEdicao && setEdicao(null)}
+          footer={<Button title={salvandoEdicao ? 'Salvando…' : 'Salvar alterações'} icon={CheckIcon} disabled={salvandoEdicao} onPress={() => void salvarEdicao()} />}>
+          <Field label="Nome" value={edicao.nome} onChangeText={v => setEdicao({ ...edicao, nome: v })} maxLength={80} />
+          <Field label="E-mail (login)" value={edicao.email} onChangeText={v => setEdicao({ ...edicao, email: v })} keyboardType="email-address" autoCapitalize="none" autoComplete="off" />
+          {edicao.email.trim().toLowerCase() !== edicao.p.email ? <Text style={[t.caption, { color: colors.warning }]}>O login muda na hora: a pessoa passa a entrar com o e-mail novo.</Text> : null}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
+            <View style={{ flex: 1 }}>
+              <Field label="Nova senha (deixe vazio para manter)" value={edicao.senha} onChangeText={v => setEdicao({ ...edicao, senha: v })} placeholder="Mínimo 8 caracteres" autoCapitalize="none" autoCorrect={false} autoComplete="off" />
+            </View>
+            <Button title="Gerar" size="sm" variant="secondary" onPress={() => setEdicao({ ...edicao, senha: gerarSenha() })} />
+          </View>
+          <Text style={t.caption}>Se trocar a senha, passe a nova para a pessoa. Papel e módulos se alteram no próprio cartão do usuário.</Text>
+        </Sheet>
+      )}
 
       {novo && (
         <Sheet title="Adicionar usuário" onClose={() => !criando && setNovo(null)}
