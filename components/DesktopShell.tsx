@@ -1,6 +1,7 @@
 import { usePathname, useRouter, type Href } from 'expo-router';
 import { type ReactNode, useContext, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTela } from '../ui/zoom';
 import { Avatar } from './Avatar';
 import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -12,7 +13,7 @@ import { radius, ThemeContext, type ThemeColors } from '../ui/theme';
 type LinkItem = { label: string; route: Href; icon: Icon };
 
 export function DesktopShell({ children }: { children: ReactNode }) {
-  const { width } = useWindowDimensions();
+  const { width } = useTela();
   const [collapsed, setCollapsed] = useState(width < 1220);
   const pathname = usePathname();
   const router = useRouter();

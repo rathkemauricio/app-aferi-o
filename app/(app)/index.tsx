@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTela } from '../../ui/zoom';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
@@ -15,7 +16,7 @@ import { createTypography, radius, space, ThemeContext, type ThemeColors } from 
 export default function ModuleLauncher() {
   const router = useRouter();
   const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut } = useAuth();
-  const { width } = useWindowDimensions();
+  const { width } = useTela();
   const desktop = Platform.OS === 'web' && width >= 980;
   const { filiais, loaded: filiaisLoaded } = useFiliais();
   const [pendentes, setPendentes] = useState(0);

@@ -80,14 +80,20 @@ const webColor: ThemeColors = {
 const webDarkColor: ThemeColors = {
   ...darkColor, accent: '#e5e250', accentPressed: '#cfcf40', accentSoft: '#3c3b26', accentText: '#f2ef57', primaryText: '#25261f',
 };
-export const ThemeContext = createContext<{ mode: ThemeMode; colors: ThemeColors; toggleTheme: () => void }>({
-  mode: 'light', colors: color, toggleTheme: () => undefined,
+export const ThemeContext = createContext<{ mode: ThemeMode; colors: ThemeColors; toggleTheme: () => void; escala: number; setEscala: (e: number) => void }>({
+  mode: 'light', colors: color, toggleTheme: () => undefined, escala: 1, setEscala: () => undefined,
 });
 const THEME_KEY = 'nevoeiro.display-theme.v1';
+const ESCALA_KEY = 'nevoeiro.display-escala.v1';
+/** Tamanhos de fontes e ícones oferecidos em Minha conta (o app inteiro é ampliado por igual). */
+export const ESCALAS = [0.85, 1, 1.15, 1.3, 1.5] as const;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>('light');
+  const [escala, setEscalaState] = useState(1);
   useEffect(() => { void AsyncStorage.getItem(THEME_KEY).then(saved => { if (saved === 'dark' || saved === 'light') setMode(saved); }).catch(() => undefined); }, []);
+  useEffect(() => { void AsyncStorage.getItem(ESCALA_KEY).then(v => { const n = Number(v); if (v && (ESCALAS as readonly number[]).includes(n)) setEscalaState(n); }).catch(() => undefined); }, []);
+  const setEscala = useCallback((e: number) => { setEscalaState(e); void AsyncStorage.setItem(ESCALA_KEY, String(e)).catch(() => undefined); }, []);
   const toggleTheme = useCallback(() => {
     setMode(current => {
       const next = current === 'light' ? 'dark' : 'light';
@@ -98,7 +104,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const colors = Platform.OS === 'web'
     ? mode === 'dark' ? webDarkColor : webColor
     : mode === 'dark' ? darkColor : color;
-  const value = useMemo(() => ({ mode, colors, toggleTheme }), [mode, colors, toggleTheme]);
+  const value = useMemo(() => ({ mode, colors, toggleTheme, escala, setEscala }), [mode, colors, toggleTheme, escala, setEscala]);
   return createElement(ThemeContext.Provider, { value }, children);
 }
 

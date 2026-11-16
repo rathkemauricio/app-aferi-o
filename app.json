@@ -3,7 +3,7 @@
     "name": "Postora",
     "slug": "postora",
     "scheme": "postora",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -19,7 +19,7 @@
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.mobiletestemauricio.postora",
-      "versionCode": 6
+      "versionCode": 7
     },
     "plugins": [
       "expo-router",
@@ -32,7 +32,11 @@
           "cameraPermission": "O Postora usa a câmera para tirar a foto de perfil."
         }
       ],
-      "./plugins/withCmakeObjectPathMax.js"
+      "./plugins/withCmakeObjectPathMax.js",
+      [
+        "expo-audio",
+        { "recordAudioAndroid": false, "enableBackgroundPlayback": false }
+      ]
     ],
     "icon": "./assets/icon.png",
     "web": {

@@ -6,10 +6,11 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../lib/auth';
+import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { dataBR, esc, imprimirHtml, rotuloFilial } from '../../lib/util';
-import { BarcodeIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
+import { BarcodeIcon, CaretDownIcon, ClockCounterClockwiseIcon, EraserIcon, KeyboardIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
@@ -585,7 +586,19 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
             {ativa ? <Rodape><Botao titulo={`Finalizar contagem ${r}`} tipo="s" onPress={() => nav.ir({ n: 'finalizar', id: ct.id, rodada: r })} /></Rodape> : null}
           </View>
         ) : (
-          <Coleta ct={ct} r={r} ativa={ativa} produtos={produtos} itens={itens} lista={lista} q={q} sel={sel} setSel={setSel} rodadas={rodadas} />
+          <Coleta ct={ct} r={r} ativa={ativa} produtos={produtos} itens={itens} lista={lista} q={q} sel={sel} setSel={setSel} rodadas={
+            <View style={[k.linha, { gap: 6 }]}>
+              {ct.rodadas.map((s, i) => {
+                const on = r === i + 1;
+                return (
+                  <Pressable key={i} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => mudar({ rodada: (i + 1) as Rodada })}
+                    style={[k.chip, { borderColor: on ? NAVY : c.borderStrong, backgroundColor: on ? NAVY : c.surface }]}>
+                    <Text style={[k.cap, k.b, { color: on ? '#fff' : c.text }]} numberOfLines={1}>{i + 1}ª · {ROTULO_RODADA[s]}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          } />
         )}
     </View>
   );
@@ -624,6 +637,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   const [pendente, setPendente] = useState(false);
   const [aviso, setAviso] = useState<{ txt: string; tom: 'ok' | 'erro' } | null>(null);
   const [teclado, setTeclado] = useState(false); // coletor não precisa do teclado na tela; no celular comum, liga aqui
+  const [verHist, setVerHist] = useState(false);
   const campo = useRef<ComponentRef<typeof TextInput>>(null);
   const campoQtd = useRef<ComponentRef<typeof TextInput>>(null);
   const indice = useMemo(() => indiceLeitura(produtos), [produtos]);
@@ -641,38 +655,40 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   // DUN-14 (caixa): a relação de barras do Petros imprime só 13 dígitos (pula o 13º) — tenta também essa forma.
   const achar = (cod: string) => indice.get(cod) ?? indice.get(cod.replace(/^0+/, '')) ?? (/^\d{14}$/.test(cod) ? indice.get(cod.slice(0, 12) + cod.slice(13)) : undefined);
 
-  // 1º passo: lê o código e mostra qual item é. A quantidade só é pedida depois.
+  // 1º passo: lê o código e mostra qual item é (bip). A quantidade só é pedida depois.
   const ler = (bruto: string) => {
     const cod = bruto.trim();
     setCodigo('');
     if (!cod) { focar('codigo'); return; }
     const prod = achar(cod);
     setQtd('');
-    if (!prod) { setSel(null); setPendente(false); setLido(cod); setAviso({ txt: `Código ${cod} não está na carga do ERP desta filial.`, tom: 'erro' }); focar('codigo'); return; }
+    if (!prod) { tocar('erro'); setSel(null); setPendente(false); setLido(cod); setAviso({ txt: `Código ${cod} não está na carga do ERP desta filial.`, tom: 'erro' }); focar('codigo'); return; }
     setSel(prod.codigo); setLido(cod);
     if (!naRodada.has(prod.codigo)) {
-      setPendente(false);
+      tocar('erro'); setPendente(false);
       setAviso({ txt: noEscopo.has(prod.codigo) ? 'Este item já fechou na contagem anterior: não precisa coletar.' : 'Este item está fora desta contagem (outra categoria).', tom: 'erro' });
       focar('codigo');
       return;
     }
-    setPendente(true); setAviso(null); focar('qtd');
+    tocar('bip'); setPendente(true); setAviso(null); focar('qtd');
   };
 
-  // 2º passo: confirma a quantidade do item que está na tela.
+  // 2º passo: salva a quantidade do item que está na tela (bip diferente).
   const registrar = (bruto: string) => {
     if (!p || !pendente) return;
     const t = bruto.trim();
     // Coletor disparado no campo de quantidade: é um código de barras, não quantidade → identifica o novo item.
     if (/^\d{8,}$/.test(t) && achar(t)) { ler(t); return; }
     const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); // 1,5 ou 1.5
-    if (!t || !Number.isFinite(n) || n <= 0) { setAviso({ txt: 'Informe a quantidade contada deste item.', tom: 'erro' }); focar('qtd'); return; }
-    if (n > 99999) { setAviso({ txt: `Quantidade ${t} muito alta: confira o número digitado.`, tom: 'erro' }); setQtd(''); focar('qtd'); return; }
+    if (!t || !Number.isFinite(n) || n <= 0) { tocar('erro'); setAviso({ txt: 'Informe a quantidade contada deste item.', tom: 'erro' }); focar('qtd'); return; }
+    if (n > 99999) { tocar('erro'); setAviso({ txt: `Quantidade ${t} muito alta: confira o número digitado.`, tom: 'erro' }); setQtd(''); focar('qtd'); return; }
     void registrarLeitura(ct, r, p.codigo, n);
-    setAviso({ txt: `+${fmtQ(n)} · ${p.nome} (total ${fmtQ((ja ?? 0) + n)})`, tom: 'ok' });
+    tocar('salvo');
+    setAviso({ txt: `Salvo: +${fmtQ(n)} · ${p.nome}`, tom: 'ok' });
     setPendente(false); setQtd(''); focar('codigo');
   };
-  const cancelar = () => { setPendente(false); setQtd(''); setAviso(null); focar('codigo'); };
+  /** Borracha: limpa a tela inteira e volta para a leitura, sem item. */
+  const apagar = () => { setCodigo(''); setQtd(''); setLido(null); setSel(null); setPendente(false); setAviso(null); focar('codigo'); };
   const corrigir = () => { if (p && ja) void registrarLeitura(ct, r, p.codigo, -1); };
 
   if (!ativa) return (
@@ -682,68 +698,78 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     </ScrollView>
   );
 
-  const cartaoItem = p ? (
-    <Cartao style={pendente ? { borderColor: AMBER, borderWidth: 2 } : undefined}>
-      <View style={k.linha}>
-        <Text style={[k.cap, k.b, { color: pendente ? c.text : c.textMuted, flex: 1 }]}>{pendente ? 'ITEM IDENTIFICADO' : 'ÚLTIMO ITEM'}</Text>
-        {lido && lido !== p.codigo ? <Text style={[k.mono, { color: c.textMuted }]}>Lido: {lido}</Text> : null}
-      </View>
-      <Text style={[k.cap, { color: c.textMuted }]}>Código interno</Text>
-      <Text style={[k.monoG, { color: c.text }]}>{p.codigo}</Text>
-      <Text style={[k.cap, { color: c.textMuted, marginTop: 6 }]}>Nome</Text>
-      <Text style={[k.cTit, { color: c.text, fontSize: 20 }]}>{p.nome}</Text>
-      <Text style={[k.cap, { color: c.textMuted }]}>{p.categoria}{p.eans.length ? ` · ${p.eans.join(' · ')}` : ' · sem código de barras'}</Text>
-      <View style={k.linha}>
-        <View style={[k.kpi, { backgroundColor: c.bg }]}><Text style={[k.cap, { color: c.textMuted }]}>Já coletado</Text><Text style={[k.kpiN, { color: c.text }]}>{fmtQ(ja ?? 0)}</Text></View>
-        <View style={[k.kpi, { backgroundColor: c.bg }]}><Text style={[k.cap, { color: c.textMuted }]}>Saldo atual (ERP)</Text><Text style={[k.kpiN, { color: c.text }]}>{fmtQ(p.saldo)}</Text></View>
-      </View>
-      {ja && !pendente ? <Pressable accessibilityRole="button" onPress={corrigir} style={[k.linha, { alignSelf: 'flex-start', paddingVertical: 6 }]}><MinusIcon size={16} color={c.danger} weight="bold" /><Text style={[k.b, { color: c.danger }]}>Corrigir: tirar 1</Text></Pressable> : null}
-    </Cartao>
-  ) : null;
-
+  const corAviso = aviso ? (aviso.tom === 'ok' ? c.success : c.danger) : c.textMuted;
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={k.corpo} keyboardShouldPersistTaps="always">
+      <ScrollView contentContainerStyle={k.coleta} keyboardShouldPersistTaps="always">
         {rodadas}
-        {pendente && p ? <>
-          {cartaoItem}
-          <Rotulo>Quantidade contada</Rotulo>
-          <TextInput ref={campoQtd} autoFocus value={qtd} onChangeText={setQtd} onSubmitEditing={e => registrar(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
-            placeholder="Digite a quantidade" placeholderTextColor={c.textFaint} keyboardType="decimal-pad" returnKeyType="done" selectTextOnFocus
-            style={[k.codigo, { flex: 0, color: c.text, backgroundColor: c.surface, borderColor: AMBER, textAlign: 'center', fontSize: 26 }]} accessibilityLabel={`Quantidade contada de ${p.nome}`} />
-          <Text style={[k.cap, { color: aviso?.tom === 'erro' ? c.danger : c.textMuted }]}>{aviso?.tom === 'erro' ? aviso.txt : ja ? `Será somada ao que já foi coletado (${fmtQ(ja)}).` : 'Confira o item acima antes de registrar.'}</Text>
-          <Botao titulo="Registrar quantidade" icone={CheckIcon} onPress={() => registrar(qtd)} desabilitado={!qtd.trim()} />
-          <Botao titulo="Cancelar e ler outro código" tipo="s" onPress={cancelar} />
-        </> : <>
-          <Rotulo>Código de barras ou código interno</Rotulo>
-          <TextInput ref={campo} autoFocus value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
-            placeholder="Leia o código de barras" placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado} returnKeyType="search"
-            style={[k.codigo, { flex: 0, color: c.text, backgroundColor: c.surface, borderColor: AMBER }]} accessibilityLabel="Código de barras" />
-          <Text style={[k.cap, { color: aviso ? (aviso.tom === 'ok' ? c.success : c.danger) : c.textMuted }]}>{aviso?.txt ?? 'Leia o código: o item aparece na tela e depois você informa a quantidade.'}</Text>
-          <Pressable accessibilityRole="switch" accessibilityState={{ checked: teclado }} onPress={() => { setTeclado(v => !v); focar('codigo'); }} style={{ alignSelf: 'flex-start', paddingVertical: 4 }}>
-            <Text style={[k.cap, k.b, { color: c.accentText }]}>{teclado ? 'Esconder teclado (uso com coletor)' : 'Mostrar teclado para digitar o código'}</Text>
+        {/* Leitura: código + teclado + borracha */}
+        <View style={k.linha}>
+          <TextInput ref={campo} autoFocus={!pendente} value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
+            placeholder={pendente ? 'Ler outro código' : 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado} returnKeyType="search"
+            style={[k.codigo, { color: c.text, backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : AMBER }]} accessibilityLabel="Código de barras" />
+          <Pressable accessibilityRole="switch" accessibilityLabel={teclado ? 'Esconder teclado' : 'Mostrar teclado para digitar o código'} accessibilityState={{ checked: teclado }}
+            onPress={() => { setTeclado(v => !v); focar('codigo'); }} style={[k.icone, { backgroundColor: teclado ? NAVY : c.surface, borderColor: c.borderStrong }]}>
+            <KeyboardIcon size={24} color={teclado ? '#fff' : c.text} />
           </Pressable>
-          {codigo.trim() ? <Botao titulo="Buscar item" tipo="s" icone={MagnifyingGlassIcon} onPress={() => ler(codigo)} /> : null}
-          {cartaoItem ?? <EmptyState icon={BarcodeIcon} title="Aguardando leitura" text={`${lista.length.toLocaleString('pt-BR')} itens nesta contagem. Leia um código para ver o item.`} />}
-        </>}
+          <Pressable accessibilityRole="button" accessibilityLabel="Apagar tudo e ler outro item" onPress={apagar} style={[k.icone, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
+            <EraserIcon size={24} color={c.danger} weight="bold" />
+          </Pressable>
+        </View>
+        {codigo.trim() ? <Botao titulo="Buscar item" tipo="s" icone={MagnifyingGlassIcon} onPress={() => ler(codigo)} /> : null}
+        <Text style={[k.cap, { color: corAviso }]} numberOfLines={2}>{aviso?.txt ?? (pendente ? 'Confira o item e informe a quantidade.' : 'Leia o código: o item aparece aqui e depois você informa a quantidade.')}</Text>
+
+        {/* Item identificado */}
         {p ? (
-          <Cartao>
-            <Text style={[k.cTit, { color: c.text, fontSize: 16 }]}>Histórico de coletas do item</Text>
-            <Text style={[k.cap, { color: c.textMuted }]}>Horário · quantidade</Text>
-            {hist.length ? hist.map(([h, n], i) => (
-              <View key={i} style={[k.linha, { paddingVertical: 8, borderBottomWidth: i < hist.length - 1 ? 1 : 0, borderBottomColor: c.border }]}>
-                <Text style={[k.monoM, { color: c.text, flex: 1 }]}>{h}</Text>
-                <Text style={[k.monoM, k.b, { color: n < 0 ? c.danger : c.text }]}>{n > 0 ? '+' : ''}{fmtQ(n)}</Text>
-              </View>
-            )) : <Text style={[k.cap, { color: c.textMuted }]}>Nenhuma leitura deste item nesta contagem.</Text>}
-          </Cartao>
+          <View style={[k.itemCol, { backgroundColor: c.surface, borderColor: pendente ? AMBER : c.border }]}>
+            <View style={k.linha}>
+              <Text style={[k.cap, k.b, { color: c.textMuted }]}>CÓD. INTERNO</Text>
+              <Text style={[k.monoG, { color: c.text, flex: 1, fontSize: 22 }]} numberOfLines={1}>{p.codigo}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Histórico de coletas do item" hitSlop={8} onPress={() => setVerHist(true)} style={[k.linha, { gap: 4 }]}>
+                <ClockCounterClockwiseIcon size={20} color={c.accentText} />
+                <Text style={[k.cap, k.b, { color: c.accentText }]}>{hist.length}</Text>
+              </Pressable>
+            </View>
+            <Text style={[k.cTit, { color: c.text, fontSize: 19 }]} numberOfLines={2}>{p.nome}</Text>
+            <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{lido && lido !== p.codigo ? `Lido ${lido} · ` : ''}{p.categoria}</Text>
+            <View style={k.linha}>
+              <Text style={[k.cap, { color: c.textMuted }]}>Saldo ERP</Text>
+              <Text style={[k.monoM, k.b, { color: c.text, fontSize: 20 }]}>{fmtQ(p.saldo)}</Text>
+            </View>
+          </View>
+        ) : <EmptyState icon={BarcodeIcon} title="Aguardando leitura" text={`${lista.length.toLocaleString('pt-BR')} itens nesta contagem.`} />}
+
+        {/* Quantidade: só depois de identificar o item */}
+        {pendente && p ? (
+          <View style={k.linha}>
+            <TextInput ref={campoQtd} autoFocus value={qtd} onChangeText={setQtd} onSubmitEditing={e => registrar(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
+              placeholder="Quantidade" placeholderTextColor={c.textFaint} keyboardType="decimal-pad" returnKeyType="done" selectTextOnFocus
+              style={[k.codigo, { color: c.text, backgroundColor: c.surface, borderColor: AMBER, textAlign: 'center', fontSize: 26 }]} accessibilityLabel={`Quantidade contada de ${p.nome}`} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Salvar quantidade" accessibilityState={{ disabled: !qtd.trim() }} disabled={!qtd.trim()} onPress={() => registrar(qtd)}
+              style={({ pressed }) => [k.salvar, !qtd.trim() && { opacity: 0.45 }, pressed && { opacity: 0.85 }]}>
+              <CheckIcon size={22} color={AMBER_TXT} weight="bold" />
+              <Text style={[k.botaoTxt, { color: AMBER_TXT }]}>Salvar</Text>
+            </Pressable>
+          </View>
         ) : null}
       </ScrollView>
       {p ? (
-        <View style={[k.total, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+        <View style={[k.total, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <Text style={k.totalTxt}>Total coletado do item</Text>
           <Text style={k.totalN}>{fmtQ(ja ?? 0)}</Text>
         </View>
+      ) : null}
+      {verHist && p ? (
+        <Sheet title="Histórico de coletas do item" onClose={() => setVerHist(false)}>
+          <Text style={[k.cap, { color: c.textMuted }]}>{p.codigo} · {p.nome} · contagem {r}</Text>
+          {hist.length ? hist.map(([h, n], i) => (
+            <View key={i} style={[k.linha, { paddingVertical: 8, borderBottomWidth: i < hist.length - 1 ? 1 : 0, borderBottomColor: c.border }]}>
+              <Text style={[k.monoM, { color: c.text, flex: 1 }]}>{h}</Text>
+              <Text style={[k.monoM, k.b, { color: n < 0 ? c.danger : c.text }]}>{n > 0 ? '+' : ''}{fmtQ(n)}</Text>
+            </View>
+          )) : <Text style={[k.cap, { color: c.textMuted }]}>Nenhuma coleta deste item nesta contagem.</Text>}
+          {ja ? <Botao titulo="Corrigir: tirar 1" tipo="s" icone={MinusIcon} onPress={corrigir} /> : null}
+        </Sheet>
       ) : null}
     </View>
   );
@@ -944,6 +970,11 @@ const k = StyleSheet.create({
   item: { flexDirection: 'row', gap: space.sm, padding: 14, borderRadius: 12, borderLeftWidth: 5 },
   codigo: { flex: 1, minHeight: 54, borderWidth: 2, borderRadius: 12, paddingHorizontal: 14, fontSize: 19, fontFamily: 'monospace' },
   kpi: { flex: 1, borderRadius: 10, padding: 12, gap: 2 },
+  coleta: { padding: space.md, gap: space.sm, width: '100%', maxWidth: 720, alignSelf: 'center' },
+  icone: { width: 54, height: 54, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  itemCol: { borderWidth: 2, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
+  salvar: { minHeight: 54, paddingHorizontal: 18, borderRadius: 12, backgroundColor: AMBER, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chip: { flex: 1, borderWidth: 1.5, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 8, alignItems: 'center' },
   kpiN: { fontFamily: 'monospace', fontSize: 30, fontWeight: '700' },
   total: { backgroundColor: NAVY, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xl, paddingTop: 14 },
   totalTxt: { color: '#c9d4e2', fontSize: 16, flex: 1 },

@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { FlatList, Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Platform, ScrollView, Text, View } from 'react-native';
+import { useTela } from '../../ui/zoom';
 import { imprimirHtml } from '../../lib/util';
 import { CertificateIcon, CheckIcon, EyeIcon, PencilSimpleIcon, PlusIcon, PrinterIcon, TrashIcon, TrophyIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
@@ -16,7 +17,7 @@ const ROTULO_MODO = (m: string) => (m === 'current' ? 'Último lançamento' : /^
 
 export default function DestaqueTab({ d }: { d: DadosRiscos }) {
   const { s, t, colors } = useEstilos();
-  const { width } = useWindowDimensions();
+  const { width } = useTela();
   const desktop = Platform.OS === 'web' && width >= 1180;
   const [modo, setModo] = useState('current');
   const [lancar, setLancar] = useState<{ unidade?: string; periodo?: string } | null>(null);

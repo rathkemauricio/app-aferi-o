@@ -9,7 +9,6 @@ import {
   Text,
   TextInput,
   TextInputProps,
-  useWindowDimensions,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -31,6 +30,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTela } from '../ui/zoom';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
 import {
@@ -419,7 +419,7 @@ const ULTIMO_EMAIL = 'nevoeiro.auth.ultimo-email';
 type Mode = 'login' | 'signup' | 'forgot';
 
 export default function AuthScreen() {
-  const { width } = useWindowDimensions();
+  const { width } = useTela();
   const wide = width >= 820;
 
   const [mode, setMode] = useState<Mode>('login');

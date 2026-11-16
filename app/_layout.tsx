@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { SheetHost } from '../ui/kit';
 import { ThemeContext, ThemeProvider } from '../ui/theme';
+import { Zoom } from '../ui/zoom';
 
 // Evita que o navegador trate a página como inglês e ofereça/aplique tradução automática.
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -56,15 +57,18 @@ export default function RootLayout() {
   // KeyboardAvoidingView global: no Android (edge-to-edge, obrigatório no RN atual) a janela não encolhe sozinha
   // quando o teclado abre. Aqui o app inteiro ganha um espaço do tamanho do teclado embaixo, então as telas encolhem,
   // a rolagem continua funcionando e a ScrollView leva o campo em foco para cima do teclado.
+  // Zoom: tamanho de fontes e ícones escolhido em Minha conta (o app inteiro, inclusive as janelas Sheet).
   // SheetHost: desenha as janelas (Sheet) dentro dessa área, para que elas também subam com o teclado.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <AuthProvider>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
-            <SheetHost>
-              <Shell />
-            </SheetHost>
+            <Zoom>
+              <SheetHost>
+                <Shell />
+              </SheetHost>
+            </Zoom>
           </KeyboardAvoidingView>
         </AuthProvider>
       </ThemeProvider>

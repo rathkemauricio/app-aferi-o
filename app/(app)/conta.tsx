@@ -8,15 +8,16 @@ import { Avatar, escolherFoto } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
-import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, MinusIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, SunIcon, TextAaIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
-import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
+import { createTypography, ESCALAS, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 
 /** Informações da conta: foto, nome, e-mail, senha, módulos liberados, tema e saída. */
 export default function ContaScreen() {
   const router = useRouter();
   const { userEmail, isAdmin, ativo, podeAcessar, signOut, nome, avatar, recarregarPerfil } = useAuth();
-  const { colors, mode, toggleTheme } = useContext(ThemeContext);
+  const { colors, mode, toggleTheme, escala, setEscala } = useContext(ThemeContext);
+  const iEscala = ESCALAS.indexOf(escala as (typeof ESCALAS)[number]);
   const t = useMemo(() => createTypography(colors), [colors]);
   const liberados = MODULES.filter(m => podeAcessar(m.id));
   const voltar = () => (router.canGoBack() ? router.back() : router.replace('/'));
@@ -105,6 +106,14 @@ export default function ContaScreen() {
         <Card style={{ padding: space.xs, gap: 0 }}>
           {isAdmin && isSupabaseConfigured ? <ListRow icon={UserCircleIcon} tint="indigo" title="Usuários e permissões" subtitle="Aprovar contas, papel e módulos de cada uma" onPress={() => router.push('/usuarios')} /> : null}
           <ListRow style={isAdmin && isSupabaseConfigured && divisor} icon={mode === 'dark' ? SunIcon : MoonIcon} tint="slate" title={mode === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onPress={toggleTheme} />
+          <ListRow style={divisor} icon={TextAaIcon} tint="slate" title="Tamanho de fontes e ícones" subtitle={escala === 1 ? 'Padrão' : `${Math.round(escala * 100)}% do padrão`} chevron={false}
+            right={
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <IconButton icon={MinusIcon} label="Diminuir fontes e ícones" onPress={() => { if (iEscala > 0) setEscala(ESCALAS[iEscala - 1]); }} />
+                <Text style={{ minWidth: 44, textAlign: 'center', fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] }}>{Math.round(escala * 100)}%</Text>
+                <IconButton icon={PlusIcon} label="Aumentar fontes e ícones" onPress={() => { if (iEscala < ESCALAS.length - 1) setEscala(ESCALAS[iEscala + 1]); }} />
+              </View>
+            } />
         </Card>
 
         {isSupabaseConfigured ? (
