@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * Sobe a versão do app (patch: 1.0.1 -> 1.0.2, versionCode +1) e gera o APK de release.
+ * Só é preciso para mudanças nativas (módulo nativo novo, permissões, ícone): mudanças de tela e regras
+ * vão pelos celulares sem instalar nada, com `npm run atualizar -- "mensagem"` (EAS Update).
  *
  *   npm run apk            -> sobe patch (1.0.1 -> 1.0.2)
  *   npm run apk -- minor   -> sobe minor (1.0.1 -> 1.1.0)
@@ -45,8 +47,14 @@ if (arg !== '--no-bump') {
     'app.json',
     appJson
       .replace(/("version":\s*")[^"]+(")/, `$1${version}$2`)
+      .replace(/("runtimeVersion":\s*")[^"]+(")/, `$1${version}$2`)
       .replace(/("versionCode":\s*)\d+/, `$1${code}`),
   );
+
+  // "Versão nativa" das atualizações automáticas (expo-updates): um APK novo só recebe atualizações
+  // publicadas para a mesma versão, então ela acompanha a versão do app a cada APK.
+  const stringsPath = 'android/app/src/main/res/values/strings.xml';
+  write(stringsPath, read(stringsPath).replace(/(<string name="expo_runtime_version">)[^<]*(<\/string>)/, `$1${version}$2`));
 
   // package.json e as duas primeiras ocorrências do package-lock.json (raiz do projeto)
   write('package.json', read('package.json').replace(/("version":\s*")[^"]+(")/, `$1${version}$2`));

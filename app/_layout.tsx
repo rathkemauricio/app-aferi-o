@@ -8,6 +8,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { SheetHost } from '../ui/kit';
 import { ThemeContext, ThemeProvider } from '../ui/theme';
 import { Zoom } from '../ui/zoom';
+import { AvisoAtualizacao } from '../components/AvisoAtualizacao';
 
 // Evita que o navegador trate a página como inglês e ofereça/aplique tradução automática.
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -68,6 +69,7 @@ export default function RootLayout() {
               <SheetHost>
                 <Shell />
               </SheetHost>
+              <AvisoAtualizacao />
             </Zoom>
           </KeyboardAvoidingView>
         </AuthProvider>

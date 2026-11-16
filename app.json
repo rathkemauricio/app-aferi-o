@@ -35,7 +35,10 @@
       "./plugins/withCmakeObjectPathMax.js",
       [
         "expo-audio",
-        { "recordAudioAndroid": false, "enableBackgroundPlayback": false }
+        {
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
       ]
     ],
     "icon": "./assets/icon.png",
@@ -55,6 +58,16 @@
       },
       "eas": {
         "projectId": "2d77110f-dee3-4eaf-9221-68edcfd802e8"
+      }
+    },
+    "runtimeVersion": "1.0.11",
+    "updates": {
+      "url": "https://u.expo.dev/2d77110f-dee3-4eaf-9221-68edcfd802e8",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": {
+        "expo-channel-name": "production"
       }
     }
   }
