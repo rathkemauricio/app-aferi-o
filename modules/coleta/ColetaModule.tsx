@@ -679,19 +679,33 @@ function Detalhamento({ ct, produtos, q }: { ct: Contagem; produtos: Produto[]; 
 function LinhaItem({ p, r, q, onPress }: { p: Produto; r: Rodada; q: [number | null, number | null, number | null]; onPress?: () => void }) {
   const c = useCores();
   const s = situacaoNaRodada(p, r, q);
-  const cor = s === 'correto' ? [c.successSoft, c.success] : s === 'divergente' ? [c.dangerSoft, c.danger] : [c.accentSoft, c.accent];
+  // Caixinha verde = correto, amarela = pendente (ainda não coletado), vermelha = divergente (coletado diferente do saldo).
+  const cor = s === 'correto' ? [c.successSoft, c.success] : s === 'divergente' ? [c.dangerSoft, c.danger] : [c.warningSoft, c.warning];
   const m = motivo(p, r, q);
+  const coletado = q[r - 1];
+  const dif = coletado === null ? null : coletado - p.saldo;
+  const rotulo = s === 'correto' ? 'Correto' : s === 'divergente' ? 'Divergente' : 'Pendente';
+  const caixa = s === 'pendente' ? AMBER : cor[1];
   return (
-    <Pressable accessibilityRole={onPress ? 'button' : undefined} disabled={!onPress} onPress={onPress} style={({ pressed }) => [k.item, { backgroundColor: cor[0], borderLeftColor: cor[1] }, pressed && { opacity: 0.8 }]}>
+    <Pressable accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={`${p.nome}: ${rotulo}${coletado !== null ? `, coletado ${fmtQ(coletado)}` : ''}`} disabled={!onPress} onPress={onPress}
+      style={({ pressed }) => [k.item, { backgroundColor: cor[0], borderLeftColor: caixa }, pressed && { opacity: 0.8 }]}>
+      <View style={[k.caixa, { backgroundColor: caixa }]}>
+        <PackageIcon size={22} color={s === 'pendente' ? AMBER_TXT : '#fff'} weight="fill" />
+      </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo}{m ? ` · ${m}` : ` · ${p.categoria}`}</Text>
         <Text style={[k.cTxt, { color: c.text, fontSize: 16 }]} numberOfLines={2}>{p.nome}</Text>
-        <Text style={[k.cTxt, { color: c.text }]}>Saldo <Text style={k.b}>{fmtQ(p.saldo)}</Text>{Array.from({ length: r }, (_, i) => <Text key={i}> · {i + 1}ª <Text style={k.b}>{fmtQ(q[i])}</Text></Text>)}</Text>
+        <Text style={[k.cTxt, { color: c.text }]}>Saldo <Text style={k.b}>{fmtQ(p.saldo)}</Text>{r > 1 ? Array.from({ length: r - 1 }, (_, i) => <Text key={i}> · {i + 1}ª <Text style={k.b}>{fmtQ(q[i])}</Text></Text>) : null}</Text>
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 6 }}>
-        <Text style={[k.b, { color: c.text, fontSize: 13 }]}>{s === 'correto' ? 'Correto' : s === 'divergente' ? 'Divergente' : 'Pendente'}</Text>
-        {onPress ? <CaretRightIcon size={16} color={c.textMuted} /> : null}
+      <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 2, minWidth: 74 }}>
+        <Text style={[k.cap, k.b, { color: cor[1] }]}>{rotulo}</Text>
+        {coletado !== null ? <>
+          <Text style={[k.cap, { color: c.textMuted }]}>Coletado</Text>
+          <Text style={[k.monoM, k.b, { color: c.text, fontSize: 20 }]}>{fmtQ(coletado)}</Text>
+          {dif ? <Text style={[k.cap, k.b, { color: cor[1] }]}>{dif > 0 ? '+' : ''}{fmtQ(dif)}</Text> : null}
+        </> : <Text style={[k.cap, { color: c.textMuted }]}>Não coletado</Text>}
       </View>
+      {onPress ? <View style={{ justifyContent: 'center' }}><CaretRightIcon size={16} color={c.textMuted} /></View> : null}
     </Pressable>
   );
 }
@@ -1088,6 +1102,7 @@ const k = StyleSheet.create({
   aba: { flex: 1, alignItems: 'center', paddingVertical: 13, borderBottomWidth: 3, borderBottomColor: 'transparent' },
   abaTxt: { fontSize: 16, fontWeight: '800' },
   item: { flexDirection: 'row', gap: space.sm, padding: 14, borderRadius: 12, borderLeftWidth: 5 },
+  caixa: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   codigo: { flex: 1, minHeight: 54, borderWidth: 2, borderRadius: 12, paddingHorizontal: 14, fontSize: 19, fontFamily: 'monospace' },
   kpi: { flex: 1, borderRadius: 10, padding: 12, gap: 2 },
   coleta: { padding: space.md, gap: space.sm, width: '100%', maxWidth: 720, alignSelf: 'center' },
