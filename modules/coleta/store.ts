@@ -109,8 +109,10 @@ export function useProdutos(inv: Inventario | undefined) {
     void (async () => {
       try {
         let l = memoria.get(inv.id) ?? null;
-        if (!l || l.length !== inv.itens_total) l = await lerCache(inv.id);
-        if (!l || l.length !== inv.itens_total) { l = await baixarProdutos(inv.id); await gravarCache(inv.id, l).catch(() => undefined); }
+        // itens_total = itens com saldo; a carga também traz os zerados da base de códigos de barra (saldo 0).
+        const completo = (x: Produto[] | null): x is Produto[] => !!x && x.filter(p => p.saldo !== 0).length === inv.itens_total;
+        if (!completo(l)) l = await lerCache(inv.id);
+        if (!completo(l)) { l = await baixarProdutos(inv.id); await gravarCache(inv.id, l).catch(() => undefined); }
         memoria.set(inv.id, l);
         if (vivo) { setLista(l); setErro(null); }
       } catch (e) { if (vivo) setErro(e instanceof Error ? e.message : String(e)); }

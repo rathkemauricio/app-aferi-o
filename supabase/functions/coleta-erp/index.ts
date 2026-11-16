@@ -150,11 +150,23 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
     };
   });
   if (!linhas.length) return json(400, { erro: 'Nenhum item com saldo foi encontrado para esta filial.' });
+  // Itens da base de códigos de barra sem saldo no ERP entram com saldo 0: não fazem parte das contagens,
+  // mas o coletor os reconhece (estoque físico sem saldo no sistema → sobra).
+  const comSaldo = new Set(linhas.map(l => l.codigo));
+  const zerados = [...base.values()].filter(b => !comSaldo.has(b.codigo)).map(b => {
+    const p = porCodigo.get(b.codigo);
+    const categoria = (p?.categoria && p.categoria !== 'Sem categoria' ? p.categoria : b.categoria) || 'Sem categoria';
+    return {
+      inventario_id: inv.id, codigo: b.codigo, eans: b.eans, nome: p?.nome || b.nome, categoria, classe: classeDe({ codigo: b.codigo, eans: b.eans, nome: b.nome, categoria, saldo: 0 }), saldo: 0,
+      custo: temCusto ? p?.custo ?? null : null, preco_venda: venda ? venda.get(b.codigo) ?? null : null,
+    };
+  });
+  const todas = [...linhas, ...zerados];
 
   const { error: e1 } = await admin.from('ce_produtos').delete().eq('inventario_id', inv.id);
   if (e1) throw new Error(`Falha ao limpar a carga anterior: ${e1.message}`);
-  for (let i = 0; i < linhas.length; i += 1000) {
-    const { error } = await admin.from('ce_produtos').insert(linhas.slice(i, i + 1000));
+  for (let i = 0; i < todas.length; i += 1000) {
+    const { error } = await admin.from('ce_produtos').insert(todas.slice(i, i + 1000));
     if (error) throw new Error(`Falha ao gravar os produtos: ${error.message}`);
   }
   const { error: e2 } = await admin.from('ce_inventarios').update({

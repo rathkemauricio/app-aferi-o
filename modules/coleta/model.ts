@@ -33,6 +33,8 @@ export type Inventario = SyncRow & {
 export type BaseBarras = SyncRow & { arquivo: string; itens: number; eans: number; importado_em: string | null };
 export type Contagem = SyncRow & {
   inventario_id: string; nome: string; classe: ClasseContagem; categorias: string[]; rodadas: StatusRodada[];
+  /** Pausada: não recebe leituras até ser retomada. */
+  pausada?: boolean;
 };
 /** Soma das leituras de um item numa rodada, feitas por um aparelho. `hist`: [hora, quantidade], mais recente primeiro. */
 export type Coleta = SyncRow & {
@@ -43,9 +45,24 @@ export const ROTULO_CLASSE: Record<ClasseContagem, string> = { completa: 'Pista 
 export const ROTULO_RODADA: Record<StatusRodada, string> = { aguardando: 'Aguardando', andamento: 'Em andamento', finalizada: 'Finalizada' };
 
 /* ---------- Escopo ---------- */
-/** Itens da contagem: saldo diferente de zero e, se não for completa, nas categorias escolhidas. */
-export const escopo = (c: Pick<Contagem, 'classe' | 'categorias'>, produtos: Produto[]) =>
-  produtos.filter(p => p.saldo !== 0 && (c.classe === 'completa' || c.categorias.includes(p.categoria)));
+/**
+ * Itens da contagem: saldo diferente de zero e, se não for completa, nas categorias escolhidas.
+ * Com `q`, entram também os itens zerados no ERP (vindos da base de códigos de barra) que foram coletados
+ * nesta contagem: estoque físico sem saldo no sistema, que vira sobra.
+ */
+export const escopo = (c: Pick<Contagem, 'classe' | 'categorias'>, produtos: Produto[], q?: Map<string, Qtds>) =>
+  produtos.filter(p => (p.saldo !== 0 && (c.classe === 'completa' || c.categorias.includes(p.categoria))) || (!!q && p.saldo === 0 && q.has(p.codigo)));
+
+/** Texto sem acento e em minúsculas (pesquisa). */
+export const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+/** O produto bate com a pesquisa (nome, código interno ou código de barras)? Todas as palavras precisam aparecer. */
+export function bateBusca(p: Produto, termo: string) {
+  const t = normalizar(termo.trim());
+  if (!t) return true;
+  if (/^\d+$/.test(t)) return p.codigo.includes(t) || p.eans.some(e => e.includes(t));
+  const nome = normalizar(`${p.nome} ${p.codigo}`);
+  return t.split(/\s+/).every(w => nome.includes(w));
+}
 
 export function categoriasDe(produtos: Produto[], classe?: Classe) {
   const m = new Map<string, { nome: string; classe: Classe; itens: number }>();
@@ -184,7 +201,7 @@ export function relatorio(produtos: Produto[], contagens: Contagem[], coletas: C
   const qPor = new Map(ord.map(c => [c.id, quantidades(coletas, c.id)]));
   const porItem = new Map<string, LinhaRelatorio>();
   const porContagem = ord.map(c => {
-    const itens = escopo(c, produtos), q = qPor.get(c.id)!;
+    const q = qPor.get(c.id)!, itens = escopo(c, produtos, q);
     const r = { contagem: c, itens: itens.length, corretos: 0, divergentes: 0, naoEncontrados: 0 };
     itens.forEach(p => {
       const f = resultadoFinal(p, q.get(p.codigo) ?? [null, null, null]);
@@ -245,7 +262,7 @@ export function porCategoria(linhas: LinhaValor[]) {
 export type LinhaDetalhe = LinhaValor & { coletado: boolean };
 /** Resultado de cada item da contagem (última quantidade coletada; sem coleta = 0), só os que têm diferença. */
 export function detalheContagem(c: Pick<Contagem, 'classe' | 'categorias'>, produtos: Produto[], q: Map<string, Qtds>) {
-  const linhas: LinhaDetalhe[] = escopo(c, produtos).map(p => {
+  const linhas: LinhaDetalhe[] = escopo(c, produtos, q).map(p => {
     const f = resultadoFinal(p, q.get(p.codigo) ?? [null, null, null]);
     const dif = f.qtd - p.saldo;
     return { produto: p, qtd: f.qtd, diferenca: dif, coletado: f.coletado, difCusto: vezes(dif, p.custo), difVenda: vezes(dif, p.venda) };

@@ -1,11 +1,13 @@
 import { type AudioPlayer, createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
-// Sons curtos da coleta: leitura identificada, quantidade salva e código não reconhecido.
+// Sons curtos da coleta:
+//   correto: item reconhecido e liberado para coletar;  salvo: quantidade gravada;
+//   barrado: item que não pode ser coletado (não está na carga, fora da contagem, já fechado, quantidade inválida).
 // Os players são criados na primeira vez e reaproveitados (tocar = voltar ao início e dar play).
 const ARQUIVOS = {
-  bip: require('../assets/sons/bip.wav'),
+  correto: require('../assets/sons/correto.wav'),
   salvo: require('../assets/sons/salvo.wav'),
-  erro: require('../assets/sons/erro.wav'),
+  barrado: require('../assets/sons/barrado.wav'),
 } as const;
 export type Som = keyof typeof ARQUIVOS;
 
