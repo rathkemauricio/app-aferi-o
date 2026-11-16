@@ -17,7 +17,7 @@
     "db:status": "prisma migrate status",
     "email:secrets": "npx supabase secrets set --env-file supabase/functions/.env",
     "email:deploy": "npx supabase functions deploy send-email --no-verify-jwt && npx supabase functions deploy notificar --no-verify-jwt",
-    "functions:deploy": "npx supabase functions deploy google-agenda --no-verify-jwt && npx supabase functions deploy coleta-erp --no-verify-jwt && npx supabase functions deploy notificar --no-verify-jwt"
+    "functions:deploy": "npx supabase functions deploy google-agenda --no-verify-jwt && npx supabase functions deploy coleta-erp --no-verify-jwt && npx supabase functions deploy notificar --no-verify-jwt && npx supabase functions deploy usuarios --no-verify-jwt"
   },
   "dependencies": {
     "@expo/log-box": "~58.0.15",
