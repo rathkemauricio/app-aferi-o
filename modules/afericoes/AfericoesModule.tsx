@@ -6,7 +6,7 @@ import { ArrowLeftIcon, CalendarBlankIcon, CaretRightIcon, CheckCircleIcon, Chec
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, IconTile, ListRow, notify, SectionHeader, Sheet, Skeleton, Stat, StatusPill, Steps, type Tone } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors, tint } from '../../ui/theme';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../../lib/auth';
+import { useAuth, useUsuarioLogado } from '../../lib/auth';
 import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
@@ -56,6 +56,8 @@ const htmlEscape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c
 
 export default function AfericoesModule() {
   const { isAdmin, podeAcessar } = useAuth();
+  // Aferidor = usuário logado (dá para editar).
+  const usuario = useUsuarioLogado();
   const router = useRouter();
   // Combustíveis do catálogo único (Central → Cadastros → Combustíveis).
   const catalogoCombustiveis = useCombustiveis();
@@ -90,7 +92,7 @@ export default function AfericoesModule() {
   const [auditStage, setAuditStage] = useState<'branch' | 'equipment' | 'nozzle' | 'final'>('branch');
   const [selectedPumpId, setSelectedPumpId] = useState('');
   const [selectedNozzleId, setSelectedNozzleId] = useState('');
-  const [auditMeta, setAuditMeta] = useState<Record<string, string>>({ date: today(), auditor: '', seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' });
+  const [auditMeta, setAuditMeta] = useState<Record<string, string>>({ date: today(), auditor: usuario, seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' });
   const [detailAudit, setDetailAudit] = useState<Audit | null>(null);
   const [emailAudit, setEmailAudit] = useState<Audit | null>(null); // relatório sendo enviado por e-mail
   const [emailPara, setEmailPara] = useState('');
@@ -230,7 +232,7 @@ export default function AfericoesModule() {
 
   const beginAudit = () => {
     const hasWork = !!draft.branchId || Object.keys(draft.data).length > 0;
-    const start = () => { setDraft(emptyDraft()); setAuditStage('branch'); setSelectedPumpId(''); setSelectedNozzleId(''); setAuditMeta({ date: today(), auditor: '', seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' }); setTab('auditoria'); };
+    const start = () => { setDraft(emptyDraft()); setAuditStage('branch'); setSelectedPumpId(''); setSelectedNozzleId(''); setAuditMeta({ date: today(), auditor: usuario, seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' }); setTab('auditoria'); };
     if (hasWork) { confirmAction('Iniciar nova afericao?', 'O rascunho atual sera descartado. Deseja continuar?', 'Descartar e iniciar', start); return; }
     start();
   };

@@ -5,7 +5,7 @@ import { type ComponentRef, type ReactNode, useContext, useEffect, useMemo, useR
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import { useAuth } from '../../lib/auth';
+import { useUsuarioLogado } from '../../lib/auth';
 import { preferencias, usePreferencias } from '../../lib/preferencias';
 import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
@@ -178,11 +178,11 @@ function Sumiu({ nav }: { nav: Nav }) {
    ===================================================================== */
 function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
   const c = useCores();
-  const { nome, userEmail } = useAuth();
+  const usuario = useUsuarioLogado();
   const [petros, setPetros] = useState<boolean | null>(null);
   useEffect(() => { if (isSupabaseConfigured) void statusErp().then(r => setPetros(r.petros)).catch(() => setPetros(null)); }, []);
   const ultimaCarga = dados.inventarios.map(i => i.erp_em).filter(Boolean).sort().pop();
-  const sub = `Usuário ${nome || userEmail?.split('@')[0] || ''} · ${petros ? 'ERP Petros conectado' : ultimaCarga ? `ERP carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'ERP por arquivo'}`;
+  const sub = `Usuário ${usuario} · ${petros ? 'ERP Petros conectado' : ultimaCarga ? `ERP carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'ERP por arquivo'}`;
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo="Inventários" sub={sub} onVoltar={nav.voltar} />
@@ -1293,6 +1293,7 @@ function FinalizarRodada({ c: ct, inv, r, nav }: { c: Contagem; inv: Inventario;
    ===================================================================== */
 function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: Dados; nav: Nav; divergentes: boolean }) {
   const c = useCores();
+  const usuario = useUsuarioLogado();
   const { produtos } = useProdutos(inv);
   const col = useColetas(inv.id);
   const [enviando, setEnviando] = useState(false);
@@ -1352,7 +1353,7 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
 .neg{color:#c0262d}.pos{color:#a86400}.tot td{font-weight:700;background:#eef1f6;border-top:2px solid ${NAVY}}.grp td{background:#e8edf5;font-weight:700;color:${NAVY}}tr{page-break-inside:avoid}
 </style></head><body>
 <h1>Relatório do inventário ${esc(inv.codigo)}</h1>
-<div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do ERP de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+<div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do ERP de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${esc(usuario)}` : ''}</div>
 <h2>Resumo</h2><div class="grid">${resumo}</div>
 <h2>Resultado por categoria</h2><table><tr><th>Categoria</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contagem</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">Resultado</th><th class="n">Falta R$ custo</th><th class="n">Sobra R$ custo</th><th class="n">Result. R$ custo</th><th class="n">Falta R$ venda</th><th class="n">Sobra R$ venda</th><th class="n">Result. R$ venda</th><th class="n">Acurácia</th><th class="n">Eficiência</th></tr>${categorias}</table>
 <h2>Resultado por contagem</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${contagensTab}</table>

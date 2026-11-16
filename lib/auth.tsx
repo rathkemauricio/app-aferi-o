@@ -87,3 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+
+/** Nome de quem está usando o app: o nome de exibição ou, sem ele, o login do e-mail (ex.: mauricio.rathke). */
+export const nomeDoUsuario = (nome: string, email: string | null) => nome.trim() || email?.split('@')[0] || '';
+/** Usuário logado, para preencher sozinho os campos "quem está fazendo" (aferidor, auditor, responsável pela coleta…). */
+export function useUsuarioLogado() {
+  const { nome, userEmail } = useAuth();
+  return nomeDoUsuario(nome, userEmail);
+}

@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../../lib/auth';
+import { useUsuarioLogado } from '../../lib/auth';
 import type { Filial } from '../../lib/data';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -76,7 +76,7 @@ function ListaAuditorias({ auditorias, filiais, onAbrir }: { auditorias: Auditor
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const s = useMemo(() => estilos(colors), [colors]);
-  const { nome } = useAuth();
+  const usuario = useUsuarioLogado();
   const router = useRouter();
   const [busca, setBusca] = useState('');
   const [nova, setNova] = useState(false);
@@ -129,7 +129,7 @@ function ListaAuditorias({ auditorias, filiais, onAbrir }: { auditorias: Auditor
           );
         }}
       />
-      {nova && <NovaAuditoria filiais={filiais} nomePadrao={nome} onClose={() => setNova(false)} onCriar={id => { setNova(false); onAbrir(id); }} />}
+      {nova && <NovaAuditoria filiais={filiais} nomePadrao={usuario} onClose={() => setNova(false)} onCriar={id => { setNova(false); onAbrir(id); }} />}
     </>
   );
 }

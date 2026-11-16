@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useUsuarioLogado } from '../../lib/auth';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import {
@@ -31,6 +32,7 @@ export function ColetasHome({ data, nav, filialId, setFilialId }: { data: TmData
   const router = useRouter();
   const [form, setForm] = useState<ColetaForm | null>(null);
   const [escolher, setEscolher] = useState(false);
+  const usuario = useUsuarioLogado();
   const filial = data.filiais.find(f => f.id === filialId) ?? null;
 
   const porData = useMemo(() => {
@@ -48,7 +50,7 @@ export function ColetasHome({ data, nav, filialId, setFilialId }: { data: TmData
 
   return <>
     <PageHead title="Coletas" subtitle={filial ? `${filial.codigo} · ${filial.nome}` : 'Escolha a filial'}
-      action={filial ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm())} /> : undefined} />
+      action={filial ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario))} /> : undefined} />
     <Button title={filial ? 'Trocar filial' : 'Escolher filial'} icon={StorefrontIcon} variant="secondary" size="sm" style={{ alignSelf: 'flex-start' }} onPress={() => setEscolher(true)} />
 
     {!filial ? (
@@ -72,7 +74,7 @@ export function ColetasHome({ data, nav, filialId, setFilialId }: { data: TmData
       </View>
     )) : (
       <EmptyState icon={CalendarBlankIcon} title="Nenhuma coleta nesta filial" text="Abra uma coleta para registrar atendimentos e atividades com cronômetro."
-        action={{ label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm()) }} />
+        action={{ label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario)) }} />
     )}
 
     {escolher && <FilialPicker data={data} atual={filialId} onClose={() => setEscolher(false)} onPick={id => { setFilialId(id); setEscolher(false); }} />}
@@ -302,7 +304,8 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
 
 /* ---------- Peças auxiliares ---------- */
 type ColetaForm = { data: string; setor: string; funcao: string; turno: string; demanda: string; auditor: string };
-const novaColetaForm = (): ColetaForm => ({ data: hoje(), setor: SETORES[0], funcao: '', turno: TURNOS[0], demanda: DEMANDAS[1], auditor: '' });
+/** Nova coleta: o auditor já vem com o usuário logado (dá para editar). */
+const novaColetaForm = (auditor = ''): ColetaForm => ({ data: hoje(), setor: SETORES[0], funcao: '', turno: TURNOS[0], demanda: DEMANDAS[1], auditor });
 
 function ColetaSheet({ title, form, setForm, onClose, onSave }: { title: string; form: ColetaForm; setForm: (f: ColetaForm) => void; onClose: () => void; onSave: () => void }) {
   const { s, t } = useLook();
