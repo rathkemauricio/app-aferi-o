@@ -57,11 +57,31 @@ export async function textosDasPaginas(bytes: Uint8Array, de: number, ate: numbe
 }
 
 function cabecalhoCategoria(linha: string): string | null {
-  const m = linha.match(/^\s*(?:grupo|subgrupo|categoria|departamento|se[cç][aã]o)\s*[:\-–]\s*(?:\d+\s*[-–]\s*)?(.+?)\s*$/i);
+  // "Categoria do Item: AB LUBRIFICANTES BR TB/BD/GL" (Conferência de Estoque), "GRUPO: BEBIDAS", "Categoria - Tabacaria"
+  const m = linha.match(/^\s*(?:grupo|subgrupo|categoria(?:\s+do\s+item)?|departamento|se[cç][aã]o)\s*[:\-–]\s*(?:\d+\s*[-–]\s*)?(.+?)\s*$/i);
   return m ? m[1].replace(/\s{2,}/g, ' ').trim() : null;
 }
 
+/** Linhas de cabeçalho/rodapé/totais do relatório (não são produto nem erro de leitura). */
+const RUIDO = /^\s*(total\b|empresa:|data da contagem|respons[áa]vel|adaptive|p[áa]gina|local estoque|denomina[çc][ãa]o|rn\s*-)/i;
+
+/**
+ * "RN - Conferência de Estoque - Custo" do Petros/Adaptive (sem código de barras):
+ *   16426-GALAO PLASTICO 5 LTS  [Localização]  UN  2  R$ 10,92  R$ 21,84  (1a/2a Contagem em branco)
+ * Saldo = "Qtd Atual" (número logo antes do primeiro R$); custo unitário = primeiro R$.
+ */
+function linhaConferencia(linha: string): Omit<ProdutoErp, 'categoria'> | null {
+  const partes = linha.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
+  const m = partes[0]?.match(/^(\d{1,14})\s*-\s*(.+)$/);
+  const iRs = partes.findIndex(p => /^R\$/.test(p));
+  if (!m || iRs < 2 || !NUM.test(partes[iRs - 1])) return null;
+  const saldo = numeroBR(partes[iRs - 1]);
+  const custo = numeroBR(partes[iRs].replace(/^R\$\s*/, ''));
+  return Number.isFinite(saldo) ? { codigo: m[1], eans: [], nome: m[2].trim(), saldo, custo: Number.isFinite(custo) ? custo : null } : null;
+}
+
 function linhaProduto(linha: string): Omit<ProdutoErp, 'categoria'> | null {
+  if (/R\$/.test(linha)) return linhaConferencia(linha);
   // "7790 - DESCRIÇÃO" (código com hífen, como na relação de barras) vira "7790  DESCRIÇÃO".
   const partes = linha.replace(/^\s*(\d{1,14})\s+-\s+/, '$1  ').split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
   if (partes.length < 3 || !/^\d{1,14}$/.test(partes[0])) return null;
@@ -93,13 +113,15 @@ function doTextoRelatorio(linhas: string[]) {
   let categoria = 'Sem categoria';
   let ignoradas = 0;
   for (const l of linhas) {
-    if (TITULO_BARRAS.test(l)) continue;
+    if (TITULO_BARRAS.test(l) || RUIDO.test(l)) continue;
     const cat = cabecalhoCategoria(l);
     if (cat) { categoria = cat; continue; }
     const p = linhaProduto(l);
     if (p) out.push({ ...p, categoria }); else if (/\d/.test(l)) ignoradas++;
   }
-  return { produtos: out, ignoradas, saldoEm: dataDoRelatorio(linhas) };
+  // "Empresa: NEVOEIRO 18" → número da filial no ERP (para conferir com a filial do inventário).
+  const empresa = linhas.slice(0, 10).map(l => l.match(/empresa:\s*.*?(\d+)\s*(?:\s{2,}|$)/i)?.[1]).find(Boolean) ?? null;
+  return { produtos: out, ignoradas, saldoEm: dataDoRelatorio(linhas), empresa };
 }
 
 /** CSV/TXT com cabeçalho (separador ; , ou tab). Colunas reconhecidas pelo nome. */
@@ -124,7 +146,7 @@ function doCsv(texto: string) {
       classe: /pista/i.test(setor) ? 'pista' : /conveni/i.test(setor) ? 'conveniencia' : undefined,
     });
   }
-  return { produtos, ignoradas, saldoEm: null as string | null };
+  return { produtos, ignoradas, saldoEm: null as string | null, empresa: null as string | null };
 }
 
 export async function lerArquivo(nome: string, base64: string) {

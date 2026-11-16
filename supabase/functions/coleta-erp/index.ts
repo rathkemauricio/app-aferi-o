@@ -97,11 +97,11 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
   // Os códigos de barra vêm da base fixa da filial; sem ela o coletor não reconhece os EANs.
   const base = await baseBarras(inv.filial_id);
   if (!base.size) return json(400, { erro: `A filial ${inv.filialCodigo} ainda não tem a relação de códigos de barra importada. Importe-a em "Bases de códigos de barra" e carregue os saldos de novo.` });
-  let produtos: ProdutoErp[], ignoradas = 0, saldoEm: string | null = null;
+  let produtos: ProdutoErp[], ignoradas = 0, saldoEm: string | null = null, empresa: string | null = null;
   if (body.fonte === 'petros') produtos = await saldosPetros(inv.filialCodigo);
   else {
     if (!body.arquivo?.base64) return json(400, { erro: 'Envie o arquivo exportado pelo ERP.' });
-    ({ produtos, ignoradas, saldoEm } = await lerArquivo(body.arquivo.nome, body.arquivo.base64));
+    ({ produtos, ignoradas, saldoEm, empresa } = await lerArquivo(body.arquivo.nome, body.arquivo.base64));
   }
   // Um registro por código (linhas repetidas somam o saldo); só itens com saldo diferente de zero.
   const porCodigo = new Map<string, ProdutoErp>();
@@ -133,6 +133,7 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
   if (e2) throw new Error(`Falha ao abrir o inventário: ${e2.message}`);
   const avisos = [
     ...(ignoradas ? [`${ignoradas} linha(s) do arquivo não foram reconhecidas como produto.`] : []),
+    ...(empresa && inv.filialCodigo && Number(empresa) !== Number(inv.filialCodigo.replace(/\D/g, '')) ? [`Atenção: o PDF é da empresa/filial ${empresa}, mas o inventário é da filial ${inv.filialCodigo}. Confira o arquivo.`] : []),
     ...(semBarras ? [`${semBarras} item(ns) com saldo não têm código de barras na base da filial: leia-os digitando o código interno.`] : []),
     ...(produtos.length - linhas.length > 0 ? [`${produtos.length - linhas.length} item(ns) com saldo zero ou repetidos ficaram de fora.`] : []),
   ];
