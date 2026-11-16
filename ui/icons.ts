@@ -57,6 +57,7 @@ export const FlagCheckeredIcon: Icon = require('phosphor-react-native/src/icons/
 export const GearIcon: Icon = require('phosphor-react-native/src/icons/Gear').GearIcon;
 export const HourglassIcon: Icon = require('phosphor-react-native/src/icons/Hourglass').HourglassIcon;
 export const ListBulletsIcon: Icon = require('phosphor-react-native/src/icons/ListBullets').ListBulletsIcon;
+export const FloppyDiskIcon: Icon = require('phosphor-react-native/src/icons/FloppyDisk').FloppyDiskIcon;
 export const QueueIcon: Icon = require('phosphor-react-native/src/icons/Queue').QueueIcon;
 export const ArrowClockwiseIcon: Icon = require('phosphor-react-native/src/icons/ArrowClockwise').ArrowClockwiseIcon;
 export const ArrowDownIcon: Icon = require('phosphor-react-native/src/icons/ArrowDown').ArrowDownIcon;
