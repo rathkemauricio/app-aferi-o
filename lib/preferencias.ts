@@ -6,6 +6,8 @@ import { useSyncExternalStore } from 'react';
 export type Preferencias = {
   /** Sons da coleta (correto, salvo, barrado). */
   sons: boolean;
+  /** Tela de coleta: simples (quadro amarelo e botões grandes) ou completa (layout anterior). */
+  layoutColeta: 'simples' | 'completo';
   /** Teclado na tela já ligado ao abrir a coleta (celular sem leitor de código). */
   tecladoColeta: boolean;
   /** Pedir confirmação ao salvar quantidade acima deste valor (0 = nunca pedir). */
@@ -15,7 +17,7 @@ export type Preferencias = {
   /** Tipo já escolhido ao abrir inventário. */
   tipoPadrao: 'completo' | 'parcial';
 };
-export const PADRAO: Preferencias = { sons: true, tecladoColeta: false, confirmarAcima: 100, filialPadrao: null, tipoPadrao: 'completo' };
+export const PADRAO: Preferencias = { layoutColeta: 'simples', sons: true, tecladoColeta: false, confirmarAcima: 100, filialPadrao: null, tipoPadrao: 'completo' };
 
 const CHAVE = 'nevoeiro.preferencias.v1';
 let atual: Preferencias = PADRAO;

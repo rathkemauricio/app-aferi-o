@@ -15,6 +15,7 @@ import { createTypography, ESCALAS, pageMaxWidth, type PreferenciaTema, space, T
 const TEMAS: [PreferenciaTema, string][] = [['light', 'Claro'], ['dark', 'Escuro'], ['auto', 'Automático']];
 const LIMITES: [number, string][] = [[0, 'Nunca'], [50, 'Acima de 50'], [100, 'Acima de 100'], [500, 'Acima de 500']];
 const TIPOS: ['completo' | 'parcial', string][] = [['completo', 'Completo'], ['parcial', 'Parcial']];
+const LAYOUTS: ['simples' | 'completo', string][] = [['simples', 'Simples'], ['completo', 'Completo']];
 
 /** Configurações personalizadas deste aparelho (celular ou navegador): aparência, coleta, inventário e atualizações. */
 export default function ConfiguracoesScreen() {
@@ -78,6 +79,8 @@ export default function ConfiguracoesScreen() {
 
         <SectionHeader title="Coleta" />
         <Card>
+          {linha('Layout da tela de coleta', pref.layoutColeta === 'simples' ? 'Simples: quadro amarelo do item e botões grandes com nome.' : 'Completo: cartão do item, quantidade com Salvar ao lado e total embaixo.', null)}
+          {escolha(LAYOUTS, pref.layoutColeta, v => setPreferencia('layoutColeta', v))}
           {linha('Sons', 'Correto ao reconhecer o item, salvo ao gravar e barrado quando não pode coletar.',
             <Switch value={pref.sons} onValueChange={v => { setPreferencia('sons', v); if (v) tocar('correto'); }} accessibilityLabel="Sons da coleta" />)}
           {linha('Teclado na tela', 'Já ligado ao abrir a coleta. Desligue em coletores com leitor de código.',
@@ -108,7 +111,7 @@ export default function ConfiguracoesScreen() {
         </Card>
 
         <Button title="Restaurar padrões deste aparelho" variant="secondary" onPress={() => confirmAction('Restaurar padrões?', 'Sons, teclado, confirmação, filial e tipo voltam ao padrão. Tema e tamanho de fontes também.', 'Restaurar', () => { restaurarPadrao(); setPreferenciaTema('light'); setEscala(1); })} />
-        <Text style={[t.caption, { textAlign: 'center' }]}>Padrão: sons ligados, teclado desligado, confirmar acima de {PADRAO.confirmarAcima}, tipo completo.</Text>
+        <Text style={[t.caption, { textAlign: 'center' }]}>Padrão: coleta simples, sons ligados, teclado desligado, confirmar acima de {PADRAO.confirmarAcima}, tipo completo.</Text>
       </ScrollView>
 
       {escolherFilial && (

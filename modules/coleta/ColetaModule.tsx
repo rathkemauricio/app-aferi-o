@@ -6,7 +6,7 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../lib/auth';
-import { preferencias } from '../../lib/preferencias';
+import { preferencias, usePreferencias } from '../../lib/preferencias';
 import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -668,6 +668,7 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
   const [menu, setMenu] = useState(false);
   const [busca, setBusca] = useState('');
   const [corrigir, setCorrigir] = useState<Produto | null>(null);
+  const simples = usePreferencias().layoutColeta === 'simples';
   const minhas = useMinhasColetas(ct, r);
   const avisoLista = (msg: string) => { setCorrigir(null); notify(msg); };
   const mudar = (p: Partial<Extract<Tela, { n: 'contagem' }>>) => nav.trocar({ ...tela, ...p });
@@ -686,7 +687,7 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={ct.nome} cor={tela.aba === 'coleta' && ativa ? VERDE : undefined}
+      <Topo titulo={ct.nome} cor={tela.aba === 'coleta' && ativa && simples ? VERDE : undefined}
         sub={tela.aba === 'coleta' ? `${r}ª contagem · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}` : `${inv.codigo} · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}`}
         onVoltar={nav.voltar} direita={<View style={k.linha}>
         {tela.aba === 'coleta' ? <Anel pct={prog} size={46} claro /> : null}
@@ -963,6 +964,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   const [corrigindo, setCorrigindo] = useState(false);
   const minhas = useMinhasColetas(ct, r);
   const modo = useContext(ThemeContext).mode;
+  const layoutColeta = usePreferencias().layoutColeta;
   const campo = useRef<ComponentRef<typeof TextInput>>(null);
   const campoQtd = useRef<ComponentRef<typeof TextInput>>(null);
   const indice = useMemo(() => indiceLeitura(produtos), [produtos]);
@@ -1050,6 +1052,99 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     </ScrollView>
   );
 
+  const janelas = <>
+      {verHist && p ? (
+        <Sheet title="Histórico de coletas do item" onClose={() => setVerHist(false)}>
+          <Text style={[k.cap, { color: c.textMuted }]}>{p.codigo} · {p.nome} · contagem {r}</Text>
+          {hist.length ? hist.map(([h, n], i) => (
+            <View key={i} style={[k.linha, { paddingVertical: 8, borderBottomWidth: i < hist.length - 1 ? 1 : 0, borderBottomColor: c.border }]}>
+              <Text style={[k.monoM, { color: c.text, flex: 1 }]}>{h}</Text>
+              <Text style={[k.monoM, k.b, { color: n < 0 ? c.danger : c.text }]}>{n > 0 ? '+' : ''}{fmtQ(n)}</Text>
+            </View>
+          )) : <Text style={[k.cap, { color: c.textMuted }]}>Nenhuma coleta deste item nesta contagem.</Text>}
+          {ja !== null ? <Botao titulo="Corrigir a coleta deste item" tipo="s" icone={PencilSimpleIcon} onPress={() => { setVerHist(false); abrirCorrecao(); }} /> : null}
+        </Sheet>
+      ) : null}
+      {corrigindo && p ? <CorrigirItem ct={ct} r={r} p={p} total={ja ?? 0} meu={meu} ultima={ultima} onClose={() => { setCorrigindo(false); focar('codigo'); }} onFeito={feito} /> : null}
+  </>;
+
+  // Layout completo (o anterior): escolhido em Configurações → Coleta.
+  if (layoutColeta === 'completo') {
+  const corAviso = aviso ? (aviso.tom === 'ok' ? c.success : c.danger) : c.textMuted;
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={k.coleta} keyboardShouldPersistTaps="always">
+        {rodadas}
+        {/* Leitura: código + teclado + borracha */}
+        <View style={k.linha}>
+          <TextInput ref={campo} autoFocus={!pendente} value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
+            placeholder={pendente ? 'Ler outro código' : 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado} keyboardType="number-pad" returnKeyType="search"
+            style={[k.codigo, { color: c.text, backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : AMBER }]} accessibilityLabel="Código de barras" />
+          <Pressable accessibilityRole="switch" accessibilityLabel={teclado ? 'Esconder teclado' : 'Mostrar teclado para digitar o código'} accessibilityState={{ checked: teclado }}
+            onPress={() => { setTeclado(v => !v); focar('codigo'); }} style={[k.icone, { backgroundColor: teclado ? NAVY : c.surface, borderColor: c.borderStrong }]}>
+            <KeyboardIcon size={24} color={teclado ? '#fff' : c.text} />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Apagar tudo e ler outro item" onPress={apagar} style={[k.icone, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
+            <EraserIcon size={24} color={c.danger} weight="bold" />
+          </Pressable>
+        </View>
+        {codigo.trim() ? <Botao titulo="Buscar item" tipo="s" icone={MagnifyingGlassIcon} onPress={() => ler(codigo)} /> : null}
+        <Text style={[k.cap, { color: corAviso }]} numberOfLines={2}>{aviso?.txt ?? (pendente ? 'Confira o item e informe a quantidade.' : 'Leia o código: o item aparece aqui e depois você informa a quantidade.')}</Text>
+
+        {/* Item identificado: arrastar para a direita corrige, para a esquerda zera */}
+        {p ? (
+          <Deslizavel key={p.codigo} raio={14} direita={{ ...ARRASTE_CORRIGIR, habilitada: ja !== null }} esquerda={{ ...ARRASTE_ZERAR, habilitada: !!ja }}
+            onDireita={abrirCorrecao} onEsquerda={() => zerarItem(ct, r, p, ja ?? 0, meu, feito)}
+            onBloqueada={() => setAviso({ txt: 'Nada coletado deste item ainda: não há o que corrigir.', tom: 'erro' })}>
+          <View style={[k.itemCol, { backgroundColor: c.surface, borderColor: pendente ? AMBER : c.border }]}>
+            <View style={k.linha}>
+              <Text style={[k.cap, k.b, { color: c.textMuted }]}>CÓD. INTERNO</Text>
+              <Text style={[k.monoG, { color: c.text, flex: 1, fontSize: 22 }]} numberOfLines={1}>{p.codigo}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Histórico de coletas do item" hitSlop={8} onPress={() => setVerHist(true)} style={[k.linha, { gap: 4 }]}>
+                <ClockCounterClockwiseIcon size={20} color={c.accentText} />
+                <Text style={[k.cap, k.b, { color: c.accentText }]}>{hist.length}</Text>
+              </Pressable>
+            </View>
+            <Text style={[k.cTit, { color: c.text, fontSize: 19 }]} numberOfLines={2}>{p.nome}</Text>
+            <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{lido && lido !== p.codigo ? `Lido ${lido} · ` : ''}{p.categoria}</Text>
+            <View style={k.linha}>
+              <Text style={[k.cap, { color: c.textMuted }]}>Saldo ERP</Text>
+              <Text style={[k.monoM, k.b, { color: c.text, fontSize: 20, flex: 1 }]}>{fmtQ(p.saldo)}{zerado(p) ? <Text style={[k.cap, { color: c.textMuted }]}>  zerado no arquivo</Text> : null}</Text>
+              {ja !== null ? (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Corrigir a coleta de ${p.nome} (ou arraste o item para o lado)`} onPress={abrirCorrecao} hitSlop={6}>
+                  <Text style={[k.cap, { color: c.textMuted }]}>⇆ arraste p/ corrigir</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+          </Deslizavel>
+        ) : <EmptyState icon={BarcodeIcon} title="Aguardando leitura" text={`${lista.length.toLocaleString('pt-BR')} itens nesta contagem.`} />}
+
+        {/* Quantidade: só depois de identificar o item */}
+        {pendente && p ? (
+          <View style={k.linha}>
+            <TextInput ref={campoQtd} autoFocus value={qtd} onChangeText={setQtd} onSubmitEditing={e => registrar(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
+              placeholder="Quantidade" placeholderTextColor={c.textFaint} keyboardType="decimal-pad" returnKeyType="done" selectTextOnFocus
+              style={[k.codigo, { color: c.text, backgroundColor: c.surface, borderColor: AMBER, textAlign: 'center', fontSize: 26 }]} accessibilityLabel={`Quantidade contada de ${p.nome}`} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Salvar quantidade" accessibilityState={{ disabled: !qtd.trim() }} disabled={!qtd.trim()} onPress={() => registrar(qtd)}
+              style={({ pressed }) => [k.salvar, !qtd.trim() && { opacity: 0.45 }, pressed && { opacity: 0.85 }]}>
+              <CheckIcon size={22} color={AMBER_TXT} weight="bold" />
+              <Text style={[k.botaoTxt, { color: AMBER_TXT }]}>Salvar</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </ScrollView>
+      {p ? (
+        <View style={[k.total, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <Text style={k.totalTxt}>Total coletado do item</Text>
+          <Text style={k.totalN}>{fmtQ(ja ?? 0)}</Text>
+        </View>
+      ) : null}
+      {janelas}
+    </View>
+  );
+  }
+
   // Layout simples e familiar: leitura → quadro amarelo do item → quantidade → últimas coletas → botões grandes embaixo.
   const corAviso = aviso ? (aviso.tom === 'ok' ? c.success : c.danger) : c.textMuted;
   const amarelo = modo === 'dark' ? '#3b3418' : '#fff4bf';
@@ -1069,7 +1164,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     <Pressable accessibilityRole="button" accessibilityLabel={rotulo} accessibilityState={{ disabled: !!opc.desab }} disabled={opc.desab} onPress={onPress} style={k.acao}>
       {({ pressed }) => <>
         <View style={[k.acaoBola, { backgroundColor: opc.fundo ?? c.surface, borderColor: opc.destaque ? AMBER : c.borderStrong }, opc.desab && { opacity: 0.35 }, pressed && { transform: [{ scale: 0.94 }] }]}>
-          <Icone size={30} color={opc.cor ?? c.text} weight={opc.destaque ? 'fill' : 'regular'} />
+          <Icone size={24} color={opc.cor ?? c.text} weight={opc.destaque ? 'fill' : 'regular'} />
         </View>
         <Text style={[k.acaoTxt, { color: opc.desab ? c.textFaint : c.text }]}>{rotulo}</Text>
       </>}
@@ -1139,19 +1234,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
         {botao('Salvar', FloppyDiskIcon, () => registrar(qtd), { fundo: temQtd ? AMBER : undefined, cor: temQtd ? AMBER_TXT : undefined, desab: !temQtd, destaque: temQtd })}
         {botao('Corrigir', PencilSimpleIcon, abrirCorrecao, { desab: !p || ja === null })}
       </View>
-      {verHist && p ? (
-        <Sheet title="Histórico de coletas do item" onClose={() => setVerHist(false)}>
-          <Text style={[k.cap, { color: c.textMuted }]}>{p.codigo} · {p.nome} · contagem {r}</Text>
-          {hist.length ? hist.map(([h, n], i) => (
-            <View key={i} style={[k.linha, { paddingVertical: 8, borderBottomWidth: i < hist.length - 1 ? 1 : 0, borderBottomColor: c.border }]}>
-              <Text style={[k.monoM, { color: c.text, flex: 1 }]}>{h}</Text>
-              <Text style={[k.monoM, k.b, { color: n < 0 ? c.danger : c.text }]}>{n > 0 ? '+' : ''}{fmtQ(n)}</Text>
-            </View>
-          )) : <Text style={[k.cap, { color: c.textMuted }]}>Nenhuma coleta deste item nesta contagem.</Text>}
-          {ja !== null ? <Botao titulo="Corrigir a coleta deste item" tipo="s" icone={PencilSimpleIcon} onPress={() => { setVerHist(false); abrirCorrecao(); }} /> : null}
-        </Sheet>
-      ) : null}
-      {corrigindo && p ? <CorrigirItem ct={ct} r={r} p={p} total={ja ?? 0} meu={meu} ultima={ultima} onClose={() => { setCorrigindo(false); focar('codigo'); }} onFeito={feito} /> : null}
+      {janelas}
     </View>
   );
 }
@@ -1415,10 +1498,10 @@ const k = StyleSheet.create({
   tabLinha: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1 },
   tabCab: { flex: 1, fontSize: 14, fontWeight: '700' },
   tabCel: { flex: 1, fontSize: 16, fontFamily: 'monospace' },
-  acoes: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10, borderTopWidth: 1 },
-  acao: { alignItems: 'center', gap: 4, minWidth: 72 },
-  acaoBola: { width: 62, height: 62, borderRadius: 31, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  acaoTxt: { fontSize: 14, fontWeight: '700' },
+  acoes: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8, borderTopWidth: 1 },
+  acao: { alignItems: 'center', gap: 3, minWidth: 64 },
+  acaoBola: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  acaoTxt: { fontSize: 13, fontWeight: '700' },
   icone: { width: 54, height: 54, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   itemCol: { borderWidth: 2, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
   salvar: { minHeight: 54, paddingHorizontal: 18, borderRadius: 12, backgroundColor: AMBER, flexDirection: 'row', alignItems: 'center', gap: 6 },
