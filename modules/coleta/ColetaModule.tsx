@@ -20,7 +20,7 @@ import {
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
 import {
-  basesCol, carregarErp, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, idDispositivo, indiceLeitura, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
+  apagarCopiaLocal, basesCol, carregarErp, limparCopiasAntigas, salvarNoServidor, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, idDispositivo, indiceLeitura, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
 } from './store';
 import { lerPdfBarras } from './barras';
 import { Deslizavel } from '../tempos/Deslizavel';
@@ -47,6 +47,11 @@ export default function ColetaModule() {
   const nav = { ir, trocar, voltar, inicio };
   const dados = useColeta();
   const { colors } = useContext(ThemeContext);
+  // Apaga do aparelho as cópias dos arquivos de inventários que não estão mais abertos.
+  useEffect(() => {
+    if (!dados.loaded) return;
+    void limparCopiasAntigas(new Set(dados.inventarios.filter(i => i.status !== 'encerrado').map(i => i.id)));
+  }, [dados.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!pronto || !dados.loaded) return <View style={{ flex: 1, backgroundColor: colors.bg }}><Topo titulo="Contagem de Estoque" onVoltar={voltar} /></View>;
   const inv = (id: string) => dados.inventarios.find(i => i.id === id);
   const cont = (id: string) => dados.contagens.find(c => c.id === id);
@@ -249,9 +254,12 @@ const reabrirInventario = (inv: Inventario) => inventariosCol.put({ ...inv, stat
 function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dados; onPress: () => void }) {
   const c = useCores();
   const col = useColetas(inv.id);
-  const coletados = useMemo(() => new Set(col.list.map(x => x.codigo)).size, [col.list]);
-  const nCont = dados.contagens.filter(x => x.inventario_id === inv.id).length;
   const enc = inv.status === 'encerrado';
+  const conts = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id), [dados.contagens, inv.id]);
+  const nCont = conts.length;
+  // Progresso só das categorias das contagens abertas (não o arquivo inteiro); encerrado não carrega a lista.
+  const { produtos } = useProdutos(enc ? undefined : inv);
+  const prog = useMemo(() => (produtos ? progressoInventario(produtos, col.list, conts) : null), [produtos, col.list, conts]);
   return (
     <Cartao onPress={onPress}>
       <View style={k.linha}>
@@ -260,9 +268,10 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
       </View>
       <Text style={[k.mono, { color: c.textMuted }]}>{inv.codigo}</Text>
       <Text style={[k.cTxt, { color: c.text }]}>{inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · {nCont} contage{nCont === 1 ? 'm' : 'ns'}</Text>
-      <Barra pct={enc ? 1 : inv.itens_total ? coletados / inv.itens_total : 0} />
+      <Barra pct={enc ? 1 : prog?.pct ?? 0} />
       <Text style={[k.cap, { color: c.textMuted }]}>
-        {enc ? (inv.enviado_erp_em ? `Enviado ao ERP em ${dataBR(inv.enviado_erp_em)}` : `Encerrado em ${dataBR(inv.encerrado_em)}`) : `${coletados.toLocaleString('pt-BR')} de ${inv.itens_total.toLocaleString('pt-BR')} itens coletados`}
+        {enc ? (inv.enviado_erp_em ? `Enviado ao ERP em ${dataBR(inv.enviado_erp_em)}` : `Encerrado em ${dataBR(inv.encerrado_em)}`)
+          : !nCont ? 'Nenhuma contagem aberta' : prog ? `${prog.coletados.toLocaleString('pt-BR')} de ${prog.total.toLocaleString('pt-BR')} itens das contagens · ${Math.round(prog.pct * 100)}%` : 'Calculando…'}
       </Text>
     </Cartao>
   );
@@ -500,7 +509,8 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   const col = useColetas(inv.id);
   const [recarregando, setRecarregando] = useState(false);
   const contagens = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id).sort((a, b) => (concluida(a) ? 1 : 0) - (concluida(b) ? 1 : 0)), [dados.contagens, inv.id]);
-  const prog = produtos ? progressoInventario(produtos, col.list) : { coletados: 0, total: inv.itens_total, pct: 0 };
+  // Só os itens das categorias das contagens abertas (não o arquivo inteiro).
+  const prog = produtos ? progressoInventario(produtos, col.list, contagens) : { coletados: 0, total: 0, pct: 0 };
   const enc = inv.status === 'encerrado';
   const sub = `${nomeFilial(dados, inv.filial_id)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'}`;
 
@@ -517,9 +527,16 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   };
   const finalizarInv = () => {
     const abertas = contagens.filter(x => !concluida(x)).length;
-    confirmAction('Finalizar inventário?', `${abertas ? `${abertas} contagem(ns) ainda não foram finalizadas; os itens entram com a última quantidade coletada. ` : ''}O inventário é encerrado e o relatório fica disponível aqui e no painel web.`, 'Finalizar', () => {
-      inventariosCol.put({ ...inv, status: 'encerrado', encerrado_em: new Date().toISOString() });
-      nav.trocar({ n: 'relatorio', inv: inv.id });
+    confirmAction('Finalizar inventário?', `${abertas ? `${abertas} contagem(ns) ainda não foram finalizadas; os itens entram com a última quantidade coletada. ` : ''}O inventário é encerrado, as coletas são salvas no servidor e a cópia do arquivo carregado (PDF de saldos) é apagada deste aparelho. O relatório fica disponível aqui e no painel web.`, 'Finalizar', () => {
+      void (async () => {
+        inventariosCol.put({ ...inv, status: 'encerrado', encerrado_em: new Date().toISOString() });
+        const pendentes = await salvarNoServidor(inv.id);
+        await apagarCopiaLocal(inv.id);
+        notify(pendentes ? 'Inventário finalizado · envio pendente' : 'Inventário finalizado',
+          pendentes ? `${pendentes} registro(s) ainda não chegaram ao servidor (sem internet). Eles ficam guardados no aparelho e são enviados sozinhos quando a conexão voltar.`
+            : 'Todas as coletas foram salvas no servidor e a cópia do arquivo foi apagada deste aparelho.');
+        nav.trocar({ n: 'relatorio', inv: inv.id });
+      })();
     });
   };
 
@@ -543,8 +560,8 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
           <Anel pct={prog.pct} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[k.cTit, { color: c.text }]}>Progresso da coleta</Text>
-            <Text style={[k.cTxt, { color: c.textMuted }]}>{prog.coletados.toLocaleString('pt-BR')} de {prog.total.toLocaleString('pt-BR')} itens coletados</Text>
-            <Text style={[k.cap, { color: c.textMuted }]}>Não muda ao finalizar contagens</Text>
+            <Text style={[k.cTxt, { color: c.textMuted }]}>{contagens.length ? `${prog.coletados.toLocaleString('pt-BR')} de ${prog.total.toLocaleString('pt-BR')} itens das contagens abertas` : 'Abra uma contagem para acompanhar o progresso'}</Text>
+            <Text style={[k.cap, { color: c.textMuted }]}>Conta só as categorias das contagens · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo no arquivo</Text>
           </View>
         </Cartao>
         {erro ? <Text style={[k.cap, { color: c.danger }]}>{erro}</Text> : null}

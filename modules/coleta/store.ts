@@ -133,6 +133,25 @@ export function indiceLeitura(produtos: Produto[]) {
   return m;
 }
 
+/** Apaga do aparelho a cópia da lista carregada do arquivo (PDF de saldos) deste inventário. Os dados continuam no servidor. */
+export async function apagarCopiaLocal(inv: string) {
+  const n = Number(await AsyncStorage.getItem(`${chaveProd(inv)}.n`).catch(() => null)) || 0;
+  await AsyncStorage.multiRemove([`${chaveProd(inv)}.n`, ...Array.from({ length: n }, (_, i) => `${chaveProd(inv)}.${i}`)]).catch(() => undefined);
+}
+/** Apaga as cópias locais de inventários que não estão abertos (encerrados, excluídos ou de outros aparelhos). */
+export async function limparCopiasAntigas(abertos: Set<string>) {
+  const prefixo = 'nevoeiro.coleta.produtos.';
+  const chaves = await AsyncStorage.getAllKeys().catch(() => [] as readonly string[]);
+  const invs = new Set(chaves.filter(k => k.startsWith(prefixo)).map(k => k.slice(prefixo.length).replace(/\.(n|\d+)$/, '')));
+  for (const id of invs) if (!abertos.has(id)) await apagarCopiaLocal(id);
+}
+/** Envia ao servidor as coletas, contagens e o inventário. Devolve quantos registros ficaram pendentes (sem internet). */
+export async function salvarNoServidor(inv: string) {
+  const cols = [coletasDe(inv), contagensCol, inventariosCol] as const;
+  await Promise.all(cols.map(c => c.flush().catch(() => undefined)));
+  return cols.reduce((n, c) => n + c.getSnapshot().pending, 0);
+}
+
 /** Grava a base de códigos de barra da filial (lida no navegador por `lerPdfBarras`). */
 export function gravarBarras(filialId: string, arquivo: string, itens: ItemBarras[]) {
   return chamar<{ ok: boolean; itens: number; eans: number; semEan: number }>({ acao: 'gravar_barras', filial_id: filialId, arquivo, itens });

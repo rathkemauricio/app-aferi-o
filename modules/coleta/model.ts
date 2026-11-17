@@ -190,10 +190,16 @@ export function progressoPorCategoria(produtos: Produto[], coletas: Coleta[]) {
 }
 
 /** Itens distintos com alguma coleta, sobre o total de itens com saldo (não muda ao finalizar contagens). */
-export function progressoInventario(produtos: Produto[], coletas: Coleta[]) {
-  const total = produtos.filter(p => p.saldo !== 0).length;
-  const comSaldo = new Set(produtos.filter(p => p.saldo !== 0).map(p => p.codigo));
-  const coletados = new Set(coletas.filter(c => comSaldo.has(c.codigo)).map(c => c.codigo)).size;
+export function progressoInventario(produtos: Produto[], coletas: Coleta[], contagens?: Pick<Contagem, 'classe' | 'categorias'>[]) {
+  // Com `contagens`: só os itens das categorias das contagens abertas (não o arquivo inteiro).
+  let alvo = produtos.filter(p => p.saldo !== 0);
+  if (contagens && !contagens.some(c => c.classe === 'completa')) {
+    const cats = new Set(contagens.flatMap(c => c.categorias));
+    alvo = alvo.filter(p => cats.has(p.categoria));
+  }
+  const total = alvo.length;
+  const codigos = new Set(alvo.map(p => p.codigo));
+  const coletados = new Set(coletas.filter(c => codigos.has(c.codigo)).map(c => c.codigo)).size;
   return { coletados, total, pct: total ? coletados / total : 0 };
 }
 
