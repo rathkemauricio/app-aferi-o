@@ -17,10 +17,16 @@ export function useTanques() {
 
 export const linhaVazia = (tanque = '', combustivel = ''): LinhaTanque => ({ id: uid('tq'), tanque, combustivel, metragem: null, litros: null, venda: null, informada: null, recebimento: null });
 
-/** Nova medição da filial: já vem com os tanques (número e combustível) da última medição dela, valores em branco. */
+/**
+ * Nova medição da filial: já vem com os tanques (número e combustível) da última medição finalizada dela e com a
+ * "Informada" de cada tanque = litros medidos naquela medição. Os demais valores ficam em branco.
+ */
 export function novaMedicao(filialId: string, responsavel: string, anteriores: Medicao[]): string {
-  const ultima = anteriores.find(x => x.filial_id === filialId && x.tanques.length);
-  const tanques = ultima ? ultima.tanques.map(l => linhaVazia(l.tanque, l.combustivel)) : [linhaVazia('1')];
+  const daFilial = anteriores.filter(x => x.filial_id === filialId && x.tanques.length);
+  const ultima = daFilial.find(x => x.status === 'finalizada') ?? daFilial[0];
+  const tanques = ultima
+    ? ultima.tanques.map(l => ({ ...linhaVazia(l.tanque, l.combustivel), informada: l.litros, ...(l.litros !== null ? { informadaDe: ultima.data } : {}) }))
+    : [linhaVazia('1')];
   const id = uid('med');
   medicoesCol.put({ id, filial_id: filialId, data: hojeIso(), medido_em: null, status: 'rascunho', tanques, obs: '', responsavel_nome: responsavel });
   return id;

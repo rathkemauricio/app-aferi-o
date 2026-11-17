@@ -189,7 +189,10 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }:
             <NumeroCampo label="Metragem (cm)" valor={l.metragem} editavel={!fin} onChange={v => mudarLinha(l.id, { metragem: v })} />
             <NumeroCampo label="Litros (medido)" valor={l.litros} editavel={!fin} onChange={v => mudarLinha(l.id, { litros: v })} />
             <NumeroCampo label="Venda (L)" valor={l.venda} editavel={!fin} onChange={v => mudarLinha(l.id, { venda: v })} />
-            <NumeroCampo label="Informada (L)" valor={l.informada} editavel={!fin} onChange={v => mudarLinha(l.id, { informada: v })} />
+            <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
+              <NumeroCampo label="Informada (L)" valor={l.informada} editavel={!fin} onChange={v => mudarLinha(l.id, { informada: v, informadaDe: undefined })} />
+              <Text style={t.caption}>{l.informadaDe ? `da medição de ${dataBR(l.informadaDe)}` : 'digitada (sem medição anterior)'}</Text>
+            </View>
             <NumeroCampo label="Recebimento (L)" valor={l.recebimento} editavel={!fin} onChange={v => mudarLinha(l.id, { recebimento: v })} />
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.md, paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.border }}>
@@ -200,7 +203,7 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }:
       );
     })}
     {!fin ? <Button title="Adicionar tanque" icon={PlusIcon} variant="secondary" onPress={() => salvar({ tanques: [...m.tanques, linhaVazia(String(m.tanques.length + 1))] })} /> : null}
-    <Text style={t.caption}>Total = litros medidos + venda. Resultado = informada + recebimento − total: negativo é falta, positivo é sobra.</Text>
+    <Text style={t.caption}>Total = litros medidos + venda. Resultado = informada + recebimento − total: negativo é falta, positivo é sobra. A informada vem dos litros da medição anterior de cada tanque; os litros são digitados a partir da tabela do tanque.</Text>
 
     <SectionHeader title="Resumo" />
     <Card>
@@ -242,7 +245,7 @@ function relatorioHtml(m: Medicao, filialNome: string, nomeComb: (id: string) =>
   const pc = (v: number | null) => (v === null ? '—' : `${fmtSinal(Math.round(v * 100) / 100)}%`);
   const linhas = m.tanques.map(l => {
     const res = resultado(l);
-    return `<tr><td>${esc(l.tanque)}</td><td>${esc(nomeComb(l.combustivel))}</td><td class="n">${n(l.metragem)}</td><td class="n">${n(l.litros)}</td><td class="n">${n(l.venda)}</td><td class="n"><b>${n(total(l))}</b></td><td class="n">${n(l.informada)}</td><td class="n">${n(l.recebimento)}</td><td class="n ${cor(res)}"><b>${fmtSinal(res)}</b></td><td class="n">${pc(pctVenda(l, res))}</td></tr>`;
+    return `<tr><td>${esc(l.tanque)}</td><td>${esc(nomeComb(l.combustivel))}</td><td class="n">${n(l.metragem)}</td><td class="n">${n(l.litros)}</td><td class="n">${n(l.venda)}</td><td class="n"><b>${n(total(l))}</b></td><td class="n">${n(l.informada)}${l.informadaDe ? `<br><span class="peq">${dataBR(l.informadaDe)}</span>` : ''}</td><td class="n">${n(l.recebimento)}</td><td class="n ${cor(res)}"><b>${fmtSinal(res)}</b></td><td class="n">${pc(pctVenda(l, res))}</td></tr>`;
   }).join('');
   const resumoLinhas = [...r.porCombustivel, r.geral].map(x => `<tr${x.combustivel === 'Total' ? ' class="tot"' : ''}><td>${x.combustivel === 'Total' ? 'Total geral' : esc(nomeComb(x.combustivel))}</td><td class="n">${x.tanques}</td><td class="n">${n(x.litros)}</td><td class="n">${n(x.venda)}</td><td class="n">${n(x.total)}</td><td class="n">${n(x.informada)}</td><td class="n">${n(x.recebimento)}</td><td class="n ${cor(x.resultado)}"><b>${fmtSinal(x.resultado)}</b></td><td class="n">${pc(x.pct)}</td></tr>`).join('');
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Medição de tanques · ${esc(filialNome)}</title><style>
@@ -250,14 +253,14 @@ function relatorioHtml(m: Medicao, filialNome: string, nomeComb: (id: string) =>
 h2{font-size:12.5px;margin:12px 0 4px;color:${AZUL}}table{width:100%;border-collapse:collapse}th{background:${AZUL};color:#fff;text-align:left;padding:4px 5px;font-size:10px}td{border-bottom:1px solid #e3e6ec;padding:3px 5px}
 .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.neg{color:#c0262d}.pos{color:#a86400}.tot td{font-weight:700;background:#eef4f6;border-top:2px solid ${AZUL}}
 .obs{white-space:pre-wrap;border:1px solid #e3e6ec;border-radius:6px;padding:6px;min-height:24px}.ass{display:flex;gap:40px;margin-top:34px}.ass div{flex:1;border-top:1px solid #1b2230;padding-top:4px;text-align:center}
-.nota{color:#5b6475;font-size:10px;margin-top:6px}</style></head><body>
+.nota{color:#5b6475;font-size:10px;margin-top:6px}.peq{color:#5b6475;font-size:9px}</style></head><body>
 <h1>Medição de tanques · ${esc(filialNome)}</h1>
 <div class="sub">Data ${dataBR(m.data)}${m.medido_em ? ` · finalizada em ${new Date(m.medido_em).toLocaleString('pt-BR')}` : ''} · Responsável: ${esc(m.responsavel_nome || '—')} · Emitido em ${new Date().toLocaleString('pt-BR')}</div>
 <h2>Conferência por tanque</h2>
 <table><tr><th>Tanque</th><th>Combustível</th><th class="n">Metragem (cm)</th><th class="n">Litros</th><th class="n">Venda</th><th class="n">Total</th><th class="n">Informada</th><th class="n">Recebimento</th><th class="n">Resultado final</th><th class="n">% da venda</th></tr>${linhas}</table>
 <h2>Resumo por combustível</h2>
 <table><tr><th>Combustível</th><th class="n">Tanques</th><th class="n">Litros</th><th class="n">Venda</th><th class="n">Total</th><th class="n">Informada</th><th class="n">Recebimento</th><th class="n">Resultado</th><th class="n">% da venda</th></tr>${resumoLinhas}</table>
-<p class="nota">Total = litros medidos + venda. Resultado final = informada + recebimento − total (negativo = falta; positivo = sobra).</p>
+<p class="nota">Total = litros medidos + venda. Resultado final = informada + recebimento − total (negativo = falta; positivo = sobra). Informada = litros da medição anterior do tanque (data abaixo do valor). Litros medidos lidos na tabela do tanque.</p>
 <h2>Observações</h2><div class="obs">${esc(m.obs || '—')}</div>
 <div class="ass"><div>Responsável pela medição — ${esc(m.responsavel_nome || '')}</div><div>Gerente da filial</div></div>
 </body></html>`;

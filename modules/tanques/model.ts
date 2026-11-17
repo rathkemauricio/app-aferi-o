@@ -16,8 +16,10 @@ export type LinhaTanque = {
   litros: number | null;
   /** Litros vendidos no período. */
   venda: number | null;
-  /** Estoque informado (litros). */
+  /** Estoque informado (litros): os litros medidos na medição anterior do mesmo tanque (preenchido sozinho, editável). */
   informada: number | null;
+  /** Data (AAAA-MM-DD) da medição anterior de onde veio a informada; some se ela for digitada à mão. */
+  informadaDe?: string;
   /** Combustível recebido no período (litros). */
   recebimento: number | null;
 };
