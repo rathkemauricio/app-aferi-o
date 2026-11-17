@@ -80,8 +80,31 @@ function linhaConferencia(linha: string): Omit<ProdutoErp, 'categoria'> | null {
   return Number.isFinite(saldo) ? { codigo: m[1], eans: [], nome: m[2].trim(), saldo, custo: Number.isFinite(custo) ? custo : null } : null;
 }
 
+/**
+ * "RN - Conferência de Estoque Ordenado por Item" com a coluna "Pr Venda" (sem R$):
+ *   16426-GALAO PLASTICO 5 LTS  [Localização]  UN  2  24,900      (1a/2a Contagem em branco)
+ *   8717-ARLA 32 GRANEL  L  496,425  3,250                         (quantidade com casas decimais)
+ * Os números do fim são "Qtd Atual" e o valor unitário (preço de venda ou custo, conforme o cabeçalho).
+ */
+const SIGLA = /^[A-Za-z]{1,4}\.?$/;
+function linhaOrdenada(linha: string): Omit<ProdutoErp, 'categoria'> | null {
+  const partes = linha.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
+  const m = partes[0]?.match(/^(\d{1,14})-(\S.*)$/);
+  if (!m || partes.length < 3) return null;
+  const nums: string[] = [];
+  let j = partes.length - 1;
+  while (j > 0 && NUM.test(partes[j])) nums.unshift(partes[j--]);
+  // Antes dos números vem a sigla da unidade (UN, BD, GL, L, KG…): garante que é linha de item.
+  if (!nums.length || nums.length > 2 || j < 1 || !SIGLA.test(partes[j])) return null;
+  const saldo = numeroBR(nums[0]);
+  const valor = nums.length === 2 ? numeroBR(nums[1]) : NaN;
+  if (!Number.isFinite(saldo)) return null;
+  return { codigo: m[1], eans: [], nome: m[2].trim(), saldo, custo: Number.isFinite(valor) ? valor : null };
+}
+
 function linhaProduto(linha: string): Omit<ProdutoErp, 'categoria'> | null {
   if (/R\$/.test(linha)) return linhaConferencia(linha);
+  if (/^\s*\d{1,14}-\S/.test(linha)) { const o = linhaOrdenada(linha); if (o) return o; }
   // "7790 - DESCRIÇÃO" (código com hífen, como na relação de barras) vira "7790  DESCRIÇÃO".
   const partes = linha.replace(/^\s*(\d{1,14})\s+-\s+/, '$1  ').split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
   if (partes.length < 3 || !/^\d{1,14}$/.test(partes[0])) return null;
