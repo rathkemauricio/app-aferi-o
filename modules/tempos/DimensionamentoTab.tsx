@@ -9,6 +9,7 @@ import { FilialPicker } from './ColetasTab';
 import { normNome, num, uid } from './model';
 import type { TmData } from './store';
 import { BarList, Kpi, useLook } from './ui';
+import { AnaliseIA } from './AnaliseIA';
 
 // Dimensionamento da equipe (portado do HTML / planilha de referência (modelo 07)).
 // Há um dimensionamento PADRÃO da rede (configuração global, editado pelo administrador) que vale para todas as filiais.
@@ -152,6 +153,13 @@ export function DimensionamentoTab({ data, filialId, setFilialId }: { data: TmDa
         <Field estavel editable={podeEditar} label="Dias no mês" style={s.flex} keyboardType="numeric" value={String(D.dias)} onChangeText={v => salvar({ ...D, dias: n(v) })} />
       </View>
     </Card>
+    {filial && !editandoPadrao ? (
+      <AnaliseIA data={data} filial={filial} dim={{
+        dias: D.dias, quadro_atual: D.quadro, total_funcionarios_planilha: Math.round(FT * 10) / 10, usa_media_observada: usarObs,
+        blocos: B.map(b => ({ bloco: BL[b.k][0], fator_cobertura: D.bl[b.k].f, horas_por_funcionario_mes: D.bl[b.k].h, horas_mes: Math.round(b.hr * 10) / 10, funcionarios: Math.round(b.fte * 10) / 10 })),
+        maiores_cargas: D.it.map(i => ({ atividade: nomeItem(i), minutos: i.m, frequencia: FQ[i.t], quantidade: i.v, horas_mes: Math.round(hm(i, D) * 10) / 10 })).sort((a, b) => b.horas_mes - a.horas_mes).slice(0, 15),
+      }} />
+    ) : null}
     <Card><Text style={t.section}>Funcionários necessários por bloco</Text><BarList items={B.map(b => [BL[b.k][0], b.fte])} /></Card>
     <Card><Text style={t.section}>Maiores cargas (h/mês)</Text><BarList items={D.it.map(i => [nomeItem(i), hm(i, D)] as [string, number]).sort((a, b) => b[1] - a[1]).slice(0, 8)} /></Card>
 
