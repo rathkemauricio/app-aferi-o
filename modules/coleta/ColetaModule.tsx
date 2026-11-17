@@ -185,14 +185,28 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
   const c = useCores();
   const usuario = useUsuarioLogado();
   const [petros, setPetros] = useState<boolean | null>(null);
+  const [aba, setAba] = useState<'abertos' | 'encerrados'>('abertos');
   useEffect(() => { if (isSupabaseConfigured) void statusErp().then(r => setPetros(r.petros)).catch(() => setPetros(null)); }, []);
   const ultimaCarga = dados.inventarios.map(i => i.erp_em).filter(Boolean).sort().pop();
   const sub = `Usuário ${usuario} · ${petros ? 'ERP Petros conectado' : ultimaCarga ? `ERP carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'ERP por arquivo'}`;
+  // Em aberto: uma filial por cartão (cada filial tem no máximo um inventário aberto). Encerrados: os mais recentes primeiro.
+  const abertos = useMemo(() => dados.inventarios.filter(i => i.status !== 'encerrado').sort((a, b) => nomeFilial(dados, a.filial_id).localeCompare(nomeFilial(dados, b.filial_id), 'pt-BR', { numeric: true })), [dados]);
+  const encerrados = useMemo(() => dados.inventarios.filter(i => i.status === 'encerrado').sort((a, b) => (b.encerrado_em ?? '').localeCompare(a.encerrado_em ?? '')), [dados.inventarios]);
+  const lista = aba === 'abertos' ? abertos : encerrados;
+  const reabrirSeLivre = (i: Inventario) => {
+    const outro = dados.inventarios.find(x => x.filial_id === i.filial_id && x.id !== i.id && x.status !== 'encerrado');
+    if (outro) { notify('Filial com inventário aberto', `${nomeFilial(dados, i.filial_id)} já tem o ${outro.codigo} aberto. Encerre-o antes de reabrir o ${i.codigo}.`); return; }
+    confirmAction(`Reabrir ${i.codigo}?`, 'O inventário volta para as filiais em aberto e as contagens voltam a aceitar leituras.', 'Reabrir', () => { reabrirInventario(i); setAba('abertos'); });
+  };
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo="Inventários" sub={sub} onVoltar={nav.voltar} />
       <Corpo rodape={<Botao titulo="Abrir inventário" onPress={() => nav.ir({ n: 'abrir' })} desabilitado={!isSupabaseConfigured} />}>
-        {isSupabaseConfigured ? (
+        <Segmentos opcoes={[
+          { id: 'abertos', titulo: 'Em aberto', sub: `${abertos.length} filia${abertos.length === 1 ? 'l' : 'is'}` },
+          { id: 'encerrados', titulo: 'Encerrados', sub: `${encerrados.length} inventário${encerrados.length === 1 ? '' : 's'}` },
+        ]} valor={aba} onChange={setAba} />
+        {aba === 'abertos' ? (
           <Cartao onPress={() => nav.ir({ n: 'bases' })}>
             <View style={k.linha}>
               <BarcodeIcon size={22} color={c.text} />
@@ -204,17 +218,22 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
             </View>
           </Cartao>
         ) : null}
-        {!dados.inventarios.length
-          ? <EmptyState icon={PackageIcon} title="Nenhum inventário ainda" text={isSupabaseConfigured ? 'Abra um inventário: escolha a filial e carregue os saldos do ERP.' : 'A contagem de estoque precisa do servidor (o app está em modo local).'} />
+        {!lista.length
+          ? (aba === 'abertos'
+            ? <EmptyState icon={PackageIcon} title="Nenhuma filial com inventário aberto" text="Toque em Abrir inventário: escolha a filial e carregue os saldos do ERP." />
+            : <EmptyState icon={PackageIcon} title="Nenhum inventário encerrado" text="Os inventários finalizados aparecem aqui, com o relatório e a opção de reabrir." />)
           : <>
-            <Text style={[k.cap, { color: c.textMuted }]}>Arraste um inventário: para a direita edita (ou reabre, se estiver encerrado); para a esquerda exclui.</Text>
-            {dados.inventarios.map(i => {
+            <Text style={[k.secao, { color: c.text }]}>{aba === 'abertos' ? 'Filiais com inventário aberto' : 'Inventários encerrados'}</Text>
+            <Text style={[k.cap, { color: c.textMuted }]}>{aba === 'abertos'
+              ? 'Toque na filial para ver as contagens. Arraste para a direita para editar ou para a esquerda para excluir.'
+              : 'Toque para ver o relatório. Arraste para a direita para reabrir ou para a esquerda para excluir.'}</Text>
+            {lista.map(i => {
               const enc = i.status === 'encerrado';
               return (
                 <Deslizavel key={i.id} raio={16} direita={enc ? ARRASTE_REABRIR : ARRASTE_EDITAR} esquerda={ARRASTE_EXCLUIR}
-                  onDireita={() => (enc ? confirmAction(`Reabrir ${i.codigo}?`, 'As contagens voltam a aceitar leituras.', 'Reabrir', () => reabrirInventario(i)) : nav.ir({ n: 'editarInv', id: i.id }))}
+                  onDireita={() => (enc ? reabrirSeLivre(i) : nav.ir({ n: 'editarInv', id: i.id }))}
                   onEsquerda={() => excluirInventario(i, dados.contagens.filter(x => x.inventario_id === i.id))}>
-                  <CartaoInventario inv={i} dados={dados} onPress={() => nav.ir({ n: 'inventario', id: i.id })} />
+                  <CartaoInventario inv={i} dados={dados} onPress={() => nav.ir(enc ? { n: 'relatorio', inv: i.id } : { n: 'inventario', id: i.id })} />
                 </Deslizavel>
               );
             })}
@@ -554,7 +573,11 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={inv.codigo} sub={`${sub} · saldo ${dataHora(inv.saldo_em ?? inv.erp_em)}`} onVoltar={nav.voltar} />
       <Corpo rodape={enc
-        ? <><Botao titulo="Ver relatório" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })} /><Botao titulo="Reabrir inventário" tipo="s" onPress={() => confirmAction('Reabrir inventário?', 'As contagens voltam a aceitar leituras.', 'Reabrir', () => inventariosCol.put({ ...inv, status: 'aberto', encerrado_em: null }))} /></>
+        ? <><Botao titulo="Ver relatório" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })} /><Botao titulo="Reabrir inventário" tipo="s" onPress={() => {
+          const outro = dados.inventarios.find(x => x.filial_id === inv.filial_id && x.id !== inv.id && x.status !== 'encerrado');
+          if (outro) { notify('Filial com inventário aberto', `${nomeFilial(dados, inv.filial_id)} já tem o ${outro.codigo} aberto. Encerre-o antes de reabrir este.`); return; }
+          confirmAction('Reabrir inventário?', 'As contagens voltam a aceitar leituras.', 'Reabrir', () => reabrirInventario(inv));
+        }} /></>
         : <><Botao titulo="Abrir nova contagem" onPress={() => nav.ir({ n: 'nova', inv: inv.id })} desabilitado={!produtos} /><Botao titulo="Finalizar inventário" tipo="s" onPress={finalizarInv} desabilitado={!contagens.length} /></>}>
         <Cartao style={k.linha}>
           <Anel pct={prog.pct} />
