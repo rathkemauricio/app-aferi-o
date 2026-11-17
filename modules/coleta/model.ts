@@ -47,11 +47,26 @@ export const ROTULO_RODADA: Record<StatusRodada, string> = { aguardando: 'Aguard
 /* ---------- Escopo ---------- */
 /**
  * Itens da contagem: saldo diferente de zero e, se não for completa, nas categorias escolhidas.
- * Com `q`, entram também os itens zerados no ERP (vindos da base de códigos de barra) que foram coletados
+ * Com `q`, entram também os itens zerados no Petros (vindos da base de códigos de barra) que foram coletados
  * nesta contagem: estoque físico sem saldo no sistema, que vira sobra.
  */
 export const escopo = (c: Pick<Contagem, 'classe' | 'categorias'>, produtos: Produto[], q?: Map<string, Qtds>) =>
   produtos.filter(p => (p.saldo !== 0 && (c.classe === 'completa' || c.categorias.includes(p.categoria))) || (!!q && p.saldo === 0 && q.has(p.codigo)));
+
+/** Categorias que vieram no arquivo de saldos (as dos itens com saldo). */
+export const categoriasDoArquivo = (produtos: Produto[]) => new Set(produtos.filter(p => p.saldo !== 0).map(p => p.categoria));
+/**
+ * Item sem saldo no arquivo pode ser contado como sobra nesta contagem?
+ * Só quando a categoria dele veio no arquivo (então ele está zerado no Petros) e faz parte desta contagem — ou numa
+ * contagem completa. Item de categoria que não veio no PDF pode ter saldo no Petros: não vira sobra falsa.
+ */
+export function podeSobra(p: Produto, c: Pick<Contagem, 'classe' | 'categorias'>, cats: Set<string>) {
+  if (p.saldo !== 0) return false;
+  if (c.classe === 'completa') return true;
+  return cats.has(p.categoria) && c.categorias.includes(p.categoria);
+}
+/** Rótulo do item sem saldo no arquivo. */
+export const rotuloSemSaldo = (p: Produto, cats: Set<string>) => (cats.has(p.categoria) ? 'zerado no Petros' : 'não veio no arquivo de saldos');
 
 /** Texto sem acento e em minúsculas (pesquisa). */
 export const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -343,13 +358,13 @@ export function proximoCodigo(existentes: string[]) {
   const n = existentes.map(c => c.match(new RegExp(`^INV-${ano}-(\\d+)$`))?.[1]).filter(Boolean).map(Number);
   return `INV-${ano}-${String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0')}`;
 }
-/** Resultado em CSV (separador ;) para importar no ERP enquanto a API não está ligada. */
+/** Resultado em CSV (separador ;) para importar no Petros enquanto a API não está ligada. */
 export function resultadoCsv(inv: Inventario, linhas: LinhaRelatorio[]) {
   const cel = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
   const num = (v: number) => String(v).replace('.', ',');
   const opc = (v: number | null) => (v === null ? '' : num(v));
   return [
-    ['inventario', 'codigo', 'ean', 'produto', 'categoria', 'classe', 'saldo_erp', 'contado', 'diferenca', 'custo_unit', 'venda_unit', 'diferenca_custo_rs', 'diferenca_venda_rs', 'situacao', 'contagem'].map(cel).join(';'),
+    ['inventario', 'codigo', 'ean', 'produto', 'categoria', 'classe', 'saldo_petros', 'contado', 'diferenca', 'custo_unit', 'venda_unit', 'diferenca_custo_rs', 'diferenca_venda_rs', 'situacao', 'contagem'].map(cel).join(';'),
     ...linhas.map(l => [inv.codigo, l.produto.codigo, l.produto.eans[0] ?? '', l.produto.nome, l.produto.categoria, l.produto.classe, num(l.produto.saldo), num(l.qtd), num(l.diferenca), opc(l.produto.custo), opc(l.produto.venda), opc(l.difCusto), opc(l.difVenda), l.status, l.contagem].map(v => cel(v)).join(';')),
   ].join('\n');
 }

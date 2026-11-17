@@ -105,7 +105,7 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
   const avisosValor: string[] = [];
   if (body.fonte === 'petros') produtos = await saldosPetros(inv.filialCodigo);
   else {
-    if (!body.arquivo?.base64 && !body.arquivo_venda?.base64) return json(400, { erro: 'Envie o arquivo exportado pelo ERP.' });
+    if (!body.arquivo?.base64 && !body.arquivo_venda?.base64) return json(400, { erro: 'Envie o arquivo exportado pelo Petros.' });
     const lidos: { nome: string; tipo: 'custo' | 'venda'; r: Awaited<ReturnType<typeof lerArquivo>> }[] = [];
     if (body.arquivo?.base64) { const r = await lerArquivo(body.arquivo.nome, body.arquivo.base64); lidos.push({ nome: body.arquivo.nome, tipo: r.valor ?? 'custo', r }); }
     if (body.arquivo_venda?.base64) { const r = await lerArquivo(body.arquivo_venda.nome, body.arquivo_venda.base64); lidos.push({ nome: body.arquivo_venda.nome, tipo: r.valor ?? 'venda', r }); }

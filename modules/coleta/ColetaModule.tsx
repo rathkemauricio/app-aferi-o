@@ -15,7 +15,7 @@ import { ArrowRightIcon, BarcodeIcon, CaretDownIcon, FloppyDiskIcon, ClockCounte
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
-  bateBusca, categoriasDe, normalizar, progressoPorCategoria, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
+  bateBusca, categoriasDe, categoriasDoArquivo, podeSobra, rotuloSemSaldo, normalizar, progressoPorCategoria, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
   percentualContagem, percentualGeral, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
@@ -188,7 +188,7 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [aba, setAba] = useState<'abertos' | 'encerrados'>('abertos');
   useEffect(() => { if (isSupabaseConfigured) void statusErp().then(r => setPetros(r.petros)).catch(() => setPetros(null)); }, []);
   const ultimaCarga = dados.inventarios.map(i => i.erp_em).filter(Boolean).sort().pop();
-  const sub = `Usuário ${usuario} · ${petros ? 'ERP Petros conectado' : ultimaCarga ? `ERP carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'ERP por arquivo'}`;
+  const sub = `Usuário ${usuario} · ${petros ? 'Petros conectado (API)' : ultimaCarga ? `Petros carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Petros por arquivo'}`;
   // Em aberto: uma filial por cartão (cada filial tem no máximo um inventário aberto). Encerrados: os mais recentes primeiro.
   const abertos = useMemo(() => dados.inventarios.filter(i => i.status !== 'encerrado').sort((a, b) => nomeFilial(dados, a.filial_id).localeCompare(nomeFilial(dados, b.filial_id), 'pt-BR', { numeric: true })), [dados]);
   const encerrados = useMemo(() => dados.inventarios.filter(i => i.status === 'encerrado').sort((a, b) => (b.encerrado_em ?? '').localeCompare(a.encerrado_em ?? '')), [dados.inventarios]);
@@ -220,7 +220,7 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
         ) : null}
         {!lista.length
           ? (aba === 'abertos'
-            ? <EmptyState icon={PackageIcon} title="Nenhuma filial com inventário aberto" text="Toque em Abrir inventário: escolha a filial e carregue os saldos do ERP." />
+            ? <EmptyState icon={PackageIcon} title="Nenhuma filial com inventário aberto" text="Toque em Abrir inventário: escolha a filial e carregue os saldos do Petros." />
             : <EmptyState icon={PackageIcon} title="Nenhum inventário encerrado" text="Os inventários finalizados aparecem aqui, com o relatório e a opção de reabrir." />)
           : <>
             <Text style={[k.secao, { color: c.text }]}>{aba === 'abertos' ? 'Filiais com inventário aberto' : 'Inventários encerrados'}</Text>
@@ -289,7 +289,7 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
       <Text style={[k.cTxt, { color: c.text }]}>{inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · {nCont} contage{nCont === 1 ? 'm' : 'ns'}</Text>
       <Barra pct={enc ? 1 : prog?.pct ?? 0} />
       <Text style={[k.cap, { color: c.textMuted }]}>
-        {enc ? (inv.enviado_erp_em ? `Enviado ao ERP em ${dataBR(inv.enviado_erp_em)}` : `Encerrado em ${dataBR(inv.encerrado_em)}`)
+        {enc ? (inv.enviado_erp_em ? `Enviado ao Petros em ${dataBR(inv.enviado_erp_em)}` : `Encerrado em ${dataBR(inv.encerrado_em)}`)
           : prog ? `Geral ${Math.round(prog.pct * 100)}% · ${fmtQ(prog.contado)} de ${fmtQ(prog.sistema)} unidades do arquivo${nCont ? '' : ' · nenhuma contagem aberta'}` : 'Calculando…'}
       </Text>
     </Cartao>
@@ -328,7 +328,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
       if (r.avisos.length) notify(`${r.itens.toLocaleString('pt-BR')} itens carregados`, r.avisos.join('\n'));
       nav.trocar({ n: 'inventario', id });
     } catch (e) {
-      notify('Inventário não aberto', `${e instanceof Error ? e.message : ''}\n\nO inventário ficou como "carregando": abra-o para tentar carregar o ERP de novo.`);
+      notify('Inventário não aberto', `${e instanceof Error ? e.message : ''}\n\nO inventário ficou como "carregando": abra-o para tentar carregar os saldos de novo.`);
       await inventariosCol.sync().catch(() => undefined);
     } finally { setEnviando(false); }
   };
@@ -337,7 +337,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo="Abrir inventário" sub="Selecione a filial e o tipo" onVoltar={nav.voltar} />
       <Corpo rodape={<>
-        <Botao titulo={enviando ? 'Carregando o ERP…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
+        <Botao titulo={enviando ? 'Carregando os saldos…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
         <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={enviando} />
       </>}>
         <Rotulo>Filial</Rotulo>
@@ -361,12 +361,12 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
         <Rotulo>Tipo de inventário</Rotulo>
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         <Cartao>
-          <Text style={[k.cTit, { color: c.text }]}>Classificação automática (ERP)</Text>
-          <Text style={[k.cTxt, { color: c.textMuted }]}>Produtos e categorias são separados pelo ERP entre Pista e Conveniência.</Text>
+          <Text style={[k.cTit, { color: c.text }]}>Classificação automática (Petros)</Text>
+          <Text style={[k.cTxt, { color: c.textMuted }]}>Produtos e categorias são separados pelo Petros entre Pista e Conveniência.</Text>
           <View style={k.linha}><Pilula texto="Pista" tom="alerta" /><Pilula texto="Conveniência" tom="neutro" /></View>
           <Text style={[k.cap, { color: c.textMuted }]}>Só entram itens com saldo diferente de zero na filial.</Text>
         </Cartao>
-        <Rotulo>Saldos do ERP (Petros)</Rotulo>
+        <Rotulo>Saldos do Petros</Rotulo>
         <Segmentos opcoes={[{ id: 'arquivo', titulo: 'Arquivo exportado', sub: 'PDF ou CSV' }, { id: 'petros', titulo: 'API do Petros', sub: petros ? 'Conectada' : 'Em breve', desab: !petros }]} valor={fonte} onChange={setFonte} />
         {fonte === 'arquivo' ? <ArquivosErp custo={arquivo} setCusto={setArquivo} venda={arquivoVenda} setVenda={setArquivoVenda} /> : null}
       </Corpo>
@@ -543,7 +543,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
       const r = await carregarErp(inv.id, inv.fonte, arqCusto ?? undefined, arqVenda ?? undefined);
       await inventariosCol.sync();
       if (r.avisos.length) notify(`${r.itens.toLocaleString('pt-BR')} itens carregados`, r.avisos.join('\n'));
-    } catch (e) { notify('ERP não carregado', e instanceof Error ? e.message : ''); } finally { setRecarregando(false); }
+    } catch (e) { notify('Saldos não carregados', e instanceof Error ? e.message : ''); } finally { setRecarregando(false); }
   };
   const finalizarInv = () => {
     const abertas = contagens.filter(x => !concluida(x)).length;
@@ -564,7 +564,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={inv.codigo} sub={sub} onVoltar={nav.voltar} />
       <Corpo rodape={<Botao titulo={recarregando ? 'Carregando…' : inv.fonte === 'arquivo' ? 'Carregar os PDFs' : 'Carregar do Petros'} onPress={() => void recarregar()} desabilitado={recarregando || (inv.fonte === 'arquivo' && !arqCusto && !arqVenda)} />}>
-        <EmptyState icon={PackageIcon} title="Saldos do ERP ainda não carregados" text="A carga dos produtos não terminou. Carregue de novo para começar as contagens." />
+        <EmptyState icon={PackageIcon} title="Saldos do Petros ainda não carregados" text="A carga dos produtos não terminou. Carregue de novo para começar as contagens." />
         {inv.fonte === 'arquivo' ? <ArquivosErp custo={arqCusto} setCusto={setArqCusto} venda={arqVenda} setVenda={setArqVenda} /> : null}
       </Corpo>
     </View>
@@ -629,7 +629,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
             </View>
           </Cartao>
         ) : null}
-        <Text style={[k.cap, { color: c.textMuted }]}>Saldo do ERP de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
+        <Text style={[k.cap, { color: c.textMuted }]}>Saldo do Petros de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
       </Corpo>
     </View>
   );
@@ -699,7 +699,7 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
         <Rotulo>Classificação</Rotulo>
         <Segmentos opcoes={opcoes} valor={classes} multi onChange={alternarClasse} />
         {editar ? <Text style={[k.cap, { color: c.textMuted }]}>Incluir ou tirar categorias no meio da contagem: os itens das categorias novas entram como pendentes; o que já foi coletado continua salvo.</Text> : null}
-        <Text style={[k.cap, { color: c.textMuted }]}>Completa: todas as categorias do ERP. Pista e Conveniência podem ser combinadas.</Text>
+        <Text style={[k.cap, { color: c.textMuted }]}>Completa: todas as categorias do Petros. Pista e Conveniência podem ser combinadas.</Text>
         {completasAbertas.length ? <Text style={[k.cap, k.b, { color: c.warning }]}>Já existe contagem completa neste inventário: {completasAbertas.map(x => x.nome).join(', ')}. Você ainda pode abrir outra.</Text> : null}
         {!completa && (
           <View style={[k.cartao, { padding: 0, backgroundColor: c.surface, borderColor: c.border, overflow: 'hidden' }]}>
@@ -779,6 +779,7 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
   const filtrada = useMemo(() => (busca.trim() ? lista.filter(x => bateBusca(x, busca)) : lista), [lista, busca]);
   const outros = useMemo(() => (produtos && busca.trim().length >= 2 ? produtos.filter(x => !naLista.has(x.codigo) && bateBusca(x, busca)).slice(0, 40) : []), [produtos, naLista, busca]);
   const noEscopo = useMemo(() => new Set(itens.map(x => x.codigo)), [itens]);
+  const catsArquivo = useMemo(() => (produtos ? categoriasDoArquivo(produtos) : new Set<string>()), [produtos]);
   const encerrado = inv.status === 'encerrado';
   const pausar = () => { contagensCol.put({ ...ct, pausada: !ct.pausada }); setMenu(false); };
   const excluir = () => { setMenu(false); excluirContagem(ct, nav.voltar); };
@@ -832,17 +833,20 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
               ListEmptyComponent={busca.trim() ? <Text style={[k.cap, { color: c.textMuted }]}>Nenhum item desta contagem com "{busca.trim()}".</Text> : <EmptyState icon={CheckIcon} title="Nenhum item nesta contagem" text={r > 1 ? 'Tudo fechou na contagem anterior.' : 'Sem itens com saldo nas categorias escolhidas.'} />}
               ListFooterComponent={outros.length ? <View style={{ gap: space.sm, marginTop: space.lg }}>
                 <Text style={[k.secao, { color: c.text }]}>Outros itens da carga ({outros.length}{outros.length === 40 ? '+' : ''})</Text>
-                <Text style={[k.cap, { color: c.textMuted }]}>Itens fora desta lista. Os zerados no arquivo do ERP (base de códigos de barra) podem ser coletados aqui e entram como sobra.</Text>
+                <Text style={[k.cap, { color: c.textMuted }]}>Itens fora desta lista. Os zerados no Petros (a categoria veio no arquivo, o item não) podem ser coletados e entram como sobra. Itens de categorias que não vieram no arquivo podem ter saldo no Petros e não entram.</Text>
                 {outros.map(x => {
-                  const pode = ativa && x.saldo === 0;
-                  const motivoFora = x.saldo === 0 ? 'Zerado no ERP: toque para coletar (sobra)' : noEscopo.has(x.codigo) ? 'Já fechado na contagem anterior' : 'De outra categoria (fora desta contagem)';
+                  const pode = ativa && podeSobra(x, ct, catsArquivo);
+                  const desconhecido = x.saldo === 0 && !catsArquivo.has(x.categoria);
+                  const motivoFora = x.saldo === 0
+                    ? (pode ? `${desconhecido ? 'Não veio no arquivo' : 'Zerado no Petros'}: toque para coletar (sobra)` : desconhecido ? 'Não veio no arquivo de saldos: pode ter saldo no Petros' : 'Zerado no Petros, mas de outra categoria (fora desta contagem)')
+                    : noEscopo.has(x.codigo) ? 'Já fechado na contagem anterior' : 'De outra categoria (fora desta contagem)';
                   return (
                     <Pressable key={x.codigo} accessibilityRole={pode ? 'button' : undefined} disabled={!pode} onPress={() => { setSel(x.codigo); mudar({ aba: 'coleta' }); }}
                       style={({ pressed }) => [k.item, { backgroundColor: c.surface, borderLeftColor: x.saldo === 0 ? AMBER : c.borderStrong }, pressed && { opacity: 0.8 }]}>
                       <View style={{ flex: 1, gap: 2 }}>
                         <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{x.codigo} · {x.categoria}</Text>
                         <Text style={[k.cTxt, { color: c.text, fontSize: 15 }]} numberOfLines={2}>{x.nome}</Text>
-                        <Text style={[k.cap, { color: x.saldo === 0 ? c.accentText : c.textMuted }]}>Saldo {fmtQ(x.saldo)} · {motivoFora}</Text>
+                        <Text style={[k.cap, { color: pode ? c.accentText : c.textMuted }]}>{desconhecido ? 'Saldo desconhecido' : `Saldo ${fmtQ(x.saldo)}`} · {motivoFora}</Text>
                       </View>
                       {pode ? <View style={{ justifyContent: 'center' }}><CaretRightIcon size={16} color={c.textMuted} /></View> : null}
                     </Pressable>
@@ -930,7 +934,7 @@ function Detalhamento({ ct, produtos, q }: { ct: Contagem; produtos: Produto[]; 
         </View>
         <Text style={[k.cap, { color: c.textMuted }]}>{t.itens.toLocaleString('pt-BR')} itens · estoque sistema {fmtQ(t.sistema)} · contado {fmtQ(t.contagem)}{t.acuracia !== null ? ` · acurácia ${fmtQ(t.acuracia)}%` : ''}{t.eficiencia !== null ? ` · eficiência ${fmtQ(t.eficiencia)}%` : ''}. Vale a última quantidade coletada de cada item.</Text>
       </View>}
-      ListEmptyComponent={<EmptyState icon={CheckIcon} title="Sem faltas nem sobras" text="Todos os itens desta contagem bateram com o saldo do ERP." />}
+      ListEmptyComponent={<EmptyState icon={CheckIcon} title="Sem faltas nem sobras" text="Todos os itens desta contagem bateram com o saldo do Petros." />}
       renderItem={({ item: x }) => x.tipo === 'cab'
         ? <Text style={[k.secao, { color: x.cor, marginTop: space.sm }]}>{x.titulo} ({x.n.toLocaleString('pt-BR')})</Text>
         : (
@@ -966,7 +970,7 @@ function LinhaItem({ p, r, q, onPress }: { p: Produto; r: Rodada; q: [number | n
         <PackageIcon size={22} color={s === 'pendente' ? AMBER_TXT : '#fff'} weight="fill" />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo}{m ? ` · ${m}` : ` · ${p.categoria}`}{p.saldo === 0 ? ' · zerado no ERP' : ''}</Text>
+        <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo}{m ? ` · ${m}` : ` · ${p.categoria}`}{p.saldo === 0 ? ' · zerado no Petros' : ''}</Text>
         <Text style={[k.cTxt, { color: c.text, fontSize: 16 }]} numberOfLines={2}>{p.nome}</Text>
         <Text style={[k.cTxt, { color: c.text }]}>Saldo <Text style={k.b}>{fmtQ(p.saldo)}</Text>{r > 1 ? Array.from({ length: r - 1 }, (_, i) => <Text key={i}> · {i + 1}ª <Text style={k.b}>{fmtQ(q[i])}</Text></Text>) : null}</Text>
       </View>
@@ -1083,13 +1087,15 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     setTimeout(() => ref.current?.focus(), 60);
     setTimeout(() => { if (!ref.current?.isFocused()) ref.current?.focus(); }, 280);
   };
-  /** Item zerado no ERP (veio da base de códigos de barra): pode ser coletado em qualquer contagem e vira sobra. */
-  const zerado = (x: Produto) => x.saldo === 0;
+  // Item sem saldo no arquivo: só vira sobra se a categoria dele veio no arquivo (zerado no Petros) — ver podeSobra.
+  const catsArquivo = useMemo(() => categoriasDoArquivo(produtos), [produtos]);
+  const zerado = (x: Produto) => podeSobra(x, ct, catsArquivo);
 
   // Item tocado na aba "Itens": já chega identificado, pedindo a quantidade.
   useEffect(() => {
     const x = sel ? produtos.find(y => y.codigo === sel) : undefined;
-    if (ativa && x && (naRodada.has(x.codigo) || zerado(x))) { setPendente(true); setLido(null); focar('qtd'); }
+    // Mesmo bip da leitura: sinaliza que o item tocado na lista está pronto para coletar.
+    if (ativa && x && (naRodada.has(x.codigo) || zerado(x))) { tocar('correto'); setPendente(true); setLido(null); focar('qtd'); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // DUN-14 (caixa): a relação de barras do Petros imprime só 13 dígitos (pula o 13º) — tenta também essa forma.
@@ -1102,13 +1108,20 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     if (!cod) { focar('codigo'); return; }
     const prod = achar(cod);
     setQtd('');
-    if (!prod) { tocar('barrado'); setSel(null); setPendente(false); setLido(cod); setAviso({ txt: `Código ${cod} não está na carga do ERP nem na base de códigos de barra desta filial.`, tom: 'erro' }); focar('codigo'); return; }
+    if (!prod) { tocar('barrado'); setSel(null); setPendente(false); setLido(cod); setAviso({ txt: `Código ${cod} não está na carga do Petros nem na base de códigos de barra desta filial.`, tom: 'erro' }); focar('codigo'); return; }
     setSel(prod.codigo); setLido(cod);
     if (!naRodada.has(prod.codigo) && zerado(prod)) {
-      // Estoque físico de item sem saldo no ERP: entra na contagem como sobra.
+      // Estoque físico de item zerado no Petros: entra na contagem como sobra.
       tocar('correto'); setPendente(true);
-      setAviso({ txt: 'Item sem saldo no ERP (zerado no arquivo): a quantidade entra como sobra.', tom: 'erro' });
+      setAviso({ txt: catsArquivo.has(prod.categoria) ? 'Item zerado no Petros: a quantidade entra como sobra.' : 'Item que não veio no arquivo de saldos: na contagem completa, a quantidade entra como sobra.', tom: 'erro' });
       focar('qtd');
+      return;
+    }
+    if (!naRodada.has(prod.codigo) && prod.saldo === 0 && !catsArquivo.has(prod.categoria)) {
+      // Categoria que não veio no PDF: o app não sabe o saldo (pode ter no Petros) e não conta como sobra falsa.
+      tocar('barrado'); setPendente(false);
+      setAviso({ txt: 'Este item não veio no arquivo de saldos carregado e pode ter saldo no Petros. Para contá-lo, recarregue os saldos com um PDF que inclua a categoria dele (Editar inventário).', tom: 'erro' });
+      focar('codigo');
       return;
     }
     if (!naRodada.has(prod.codigo)) {
@@ -1220,9 +1233,9 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
                 ) : null}
               </View>
               <Text style={[k.cNome, { color: c.text }]} numberOfLines={2}>{p.nome}</Text>
-              <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{p.categoria}{zerado(p) ? '  ·  zerado no ERP' : ''}</Text>
+              <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{p.categoria}{p.saldo === 0 ? `  ·  ${rotuloSemSaldo(p, catsArquivo)}` : ''}</Text>
               <View style={[k.linha, { gap: 6 }]}>
-                {mini('Saldo ERP', fmtQ(p.saldo))}
+                {mini('Saldo Petros', p.saldo === 0 && !catsArquivo.has(p.categoria) ? '?' : fmtQ(p.saldo))}
                 {mini('Coletado', fmtQ(ja ?? 0))}
                 {mini('Diferença', dif === null ? '—' : `${dif > 0 ? '+' : ''}${fmtQ(dif)}`, dif ? (dif < 0 ? c.danger : c.warning) : dif === 0 ? c.success : undefined)}
               </View>
@@ -1300,7 +1313,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
             {linhaInfo('Categoria', p?.categoria ?? '')}
             {linhaInfo('Produto', p?.nome ?? '', true)}
             {linhaInfo('Código', p ? `${p.codigo}${lido && lido !== p.codigo ? `   (lido ${lido})` : ''}` : '')}
-            {linhaInfo('Saldo no sistema', p ? `${fmtQ(p.saldo)}${zerado(p) ? '  (zerado no ERP)' : ''}` : '')}
+            {linhaInfo('Saldo no sistema', p ? (p.saldo === 0 && !catsArquivo.has(p.categoria) ? 'desconhecido (não veio no arquivo)' : `${fmtQ(p.saldo)}${p.saldo === 0 ? '  (zerado no Petros)' : ''}`) : '')}
             {linhaInfo('Já coletado', p ? fmtQ(ja ?? 0) : '')}
           </View>
         </Deslizavel>
@@ -1464,7 +1477,7 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
 .neg{color:#c0262d}.pos{color:#a86400}.tot td{font-weight:700;background:#eef1f6;border-top:2px solid ${NAVY}}.grp td{background:#e8edf5;font-weight:700;color:${NAVY}}tr{page-break-inside:avoid}
 </style></head><body>
 <h1>${soDela ? `Relatório da contagem ${esc(soDela.nome)}` : 'Relatório do inventário'} · ${esc(inv.codigo)}</h1>
-<div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do ERP de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${esc(usuario)}` : ''}</div>
+<div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${esc(usuario)}` : ''}</div>
 <h2>Resumo</h2><div class="grid">${resumo}</div>
 <h2>Resultado por categoria</h2><table><tr><th>Categoria</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contagem</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">Resultado</th><th class="n">Falta R$ custo</th><th class="n">Sobra R$ custo</th><th class="n">Result. R$ custo</th><th class="n">Falta R$ venda</th><th class="n">Sobra R$ venda</th><th class="n">Result. R$ venda</th><th class="n">Acurácia</th><th class="n">Eficiência</th></tr>${categorias}</table>
 <h2>${soDela ? 'Resultado da contagem' : 'Resultado por contagem'}</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contado</th><th class="n">Percentual</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${contagensTab}</table>
@@ -1563,10 +1576,10 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
           )}
           <Cartao>
             <Text style={[k.cTit, { color: c.text }]}>Também no painel web</Text>
-            <Text style={[k.cTxt, { color: c.textMuted }]}>Este relatório fica disponível no dashboard e aqui no app.{inv.enviado_erp_em ? ` Resultado enviado ao ERP em ${dataBR(inv.enviado_erp_em)}.` : ''}</Text>
+            <Text style={[k.cTxt, { color: c.textMuted }]}>Este relatório fica disponível no dashboard e aqui no app.{inv.enviado_erp_em ? ` Resultado enviado ao Petros em ${dataBR(inv.enviado_erp_em)}.` : ''}</Text>
             <View style={[k.linha, { flexWrap: 'wrap' }]}>
               <Pressable accessibilityRole="button" onPress={() => void imprimir()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><PrinterIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>PDF</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => void exportar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><FileCsvIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>Arquivo para o ERP</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => void exportar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><FileCsvIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>Arquivo para o Petros</Text></Pressable>
               {petros && enc && !soDela ? <Pressable accessibilityRole="button" disabled={enviando} onPress={() => void enviar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><UploadSimpleIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>{enviando ? 'Enviando…' : 'Enviar ao Petros'}</Text></Pressable> : null}
             </View>
           </Cartao>

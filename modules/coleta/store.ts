@@ -161,7 +161,7 @@ export function gravarBarras(filialId: string, arquivo: string, itens: ItemBarra
 export type CargaErp = { itens: number; categorias: number; avisos: string[] };
 
 export async function chamar<T>(body: Record<string, unknown>): Promise<T> {
-  if (!supabase) throw new Error('O app está em modo local: a carga do ERP precisa do servidor.');
+  if (!supabase) throw new Error('Sem servidor: a carga dos saldos do Petros precisa de conexão.');
   const { data, error } = await supabase.functions.invoke('coleta-erp', { body });
   if (!error) return data as T;
   let erro = 'Não foi possível falar com o servidor. Verifique a conexão.';
