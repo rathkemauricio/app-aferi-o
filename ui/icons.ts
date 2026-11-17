@@ -75,6 +75,7 @@ export const ShieldWarningIcon: Icon = require('phosphor-react-native/src/icons/
 export const ArchiveIcon: Icon = require('phosphor-react-native/src/icons/Archive').ArchiveIcon;
 export const TrophyIcon: Icon = require('phosphor-react-native/src/icons/Trophy').TrophyIcon;
 export const PrinterIcon: Icon = require('phosphor-react-native/src/icons/Printer').PrinterIcon;
+export const RulerIcon: Icon = require('phosphor-react-native/src/icons/Ruler').RulerIcon;
 export const SparkleIcon: Icon = require('phosphor-react-native/src/icons/Sparkle').SparkleIcon;
 export const CalendarCheckIcon: Icon = require('phosphor-react-native/src/icons/CalendarCheck').CalendarCheckIcon;
 export const PaperclipIcon: Icon = require('phosphor-react-native/src/icons/Paperclip').PaperclipIcon;

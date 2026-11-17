@@ -26,7 +26,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 
 // Mesmos ids de modules/registry.ts.
-const MODULOS = ['afericoes', 'tempos', 'croqui', 'auditoria', 'riscos', 'inventarios', 'agenda', 'coleta'];
+const MODULOS = ['afericoes', 'tempos', 'croqui', 'auditoria', 'riscos', 'inventarios', 'agenda', 'coleta', 'tanques'];
 const EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:"]+$/;
 
 type Criar = { email?: string; nome?: string; senha?: string; papel?: string; modulos?: unknown };

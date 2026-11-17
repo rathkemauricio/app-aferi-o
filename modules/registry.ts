@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 import { useTemposAviso } from './tempos/aviso';
-import { ArchiveIcon, BarcodeIcon, CalendarDotsIcon, ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, ShieldWarningIcon, StorefrontIcon } from '../ui/icons';
+import { ArchiveIcon, BarcodeIcon, CalendarDotsIcon, ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, RulerIcon, ShieldWarningIcon, StorefrontIcon } from '../ui/icons';
 import type { Tint } from '../ui/theme';
 
 // Catálogo de módulos exibido na tela inicial.
@@ -81,5 +81,13 @@ export const MODULES: AppModule[] = [
     icon: BarcodeIcon,
     tint: 'amber',
     route: '/coleta',
+  },
+  {
+    id: 'tanques',
+    name: 'Medição de Tanques',
+    description: 'Medição dos tanques de combustível por filial: estoque medido, venda, recebimento e resultado (sobra ou falta).',
+    icon: RulerIcon,
+    tint: 'sky',
+    route: '/tanques',
   },
 ];
