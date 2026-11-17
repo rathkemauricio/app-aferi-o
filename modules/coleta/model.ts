@@ -168,6 +168,28 @@ export function reabrir(c: Contagem, itens: Produto[], q: Map<string, Qtds>): St
 }
 
 /* ---------- Progresso e relatório ---------- */
+/** Unidades contadas ÷ saldo do sistema (passa de 100% quando há sobra; sem saldo e com contagem = 100%). */
+const fracao = (contado: number, sistema: number) => (sistema > 0 ? contado / sistema : contado > 0 ? 1 : 0);
+/**
+ * Percentual da contagem por quantidade: na rodada em andamento, soma do que foi contado nela ÷ soma do saldo dos
+ * itens da rodada; contagem concluída: última quantidade de cada item ÷ saldo. Sobe conforme se conta e pode
+ * passar de 100% (ex.: 105%, 120%) quando o físico é maior que o sistema.
+ */
+export function percentualContagem(c: Pick<Contagem, 'rodadas'>, itens: Produto[], q: Map<string, Qtds>) {
+  const r = rodadaAtual(c as Contagem);
+  let contado = 0, sistema = 0;
+  if (r) itensDaRodada(r, itens, q).forEach(p => { contado += q.get(p.codigo)?.[r - 1] ?? 0; sistema += Math.max(0, p.saldo); });
+  else itens.forEach(p => { contado += resultadoFinal(p, q.get(p.codigo) ?? [null, null, null]).qtd; sistema += Math.max(0, p.saldo); });
+  return { contado, sistema, pct: fracao(contado, sistema) };
+}
+/** Percentual do inventário por quantidade: última quantidade de cada item das contagens ÷ saldo do sistema (a acurácia). */
+export function percentualInventario(produtos: Produto[], contagens: Contagem[], coletas: Coleta[]) {
+  const rel = relatorio(produtos, contagens, coletas);
+  let contado = 0, sistema = 0;
+  rel.linhas.forEach(l => { contado += l.qtd; sistema += Math.max(0, l.produto.saldo); });
+  return { contado, sistema, itens: rel.linhas.length, coletados: rel.linhas.filter(l => l.coletado).length, pct: fracao(contado, sistema) };
+}
+
 export function progressoContagem(c: Contagem, itens: Produto[], q: Map<string, Qtds>) {
   const r = rodadaAtual(c);
   if (!r) return 1;

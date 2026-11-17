@@ -16,7 +16,7 @@ import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
   bateBusca, categoriasDe, normalizar, progressoPorCategoria, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
-  progressoContagem, progressoInventario, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
+  percentualContagem, percentualInventario, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
 import {
@@ -30,7 +30,7 @@ const NAVY = '#102a46', AMBER = '#f3a200', AMBER_TXT = '#1b2230', VERDE = '#1e9e
 
 type Tela =
   | { n: 'lista' } | { n: 'abrir' } | { n: 'editarInv'; id: string } | { n: 'bases'; filial?: string } | { n: 'inventario'; id: string } | { n: 'nova'; inv: string; editar?: string }
-  | { n: 'contagem'; id: string; aba: 'itens' | 'coleta' | 'detalhe'; rodada?: Rodada } | { n: 'finalizar'; id: string; rodada: Rodada } | { n: 'relatorio'; inv: string; divergentes?: boolean };
+  | { n: 'contagem'; id: string; aba: 'itens' | 'coleta' | 'detalhe'; rodada?: Rodada } | { n: 'finalizar'; id: string; rodada: Rodada } | { n: 'relatorio'; inv: string; divergentes?: boolean; contagem?: string };
 const TELA_KEY = 'nevoeiro.coleta.tela.v1';
 
 export default function ColetaModule() {
@@ -64,7 +64,7 @@ export default function ColetaModule() {
     case 'nova': { const i = inv(tela.inv), ed = tela.editar ? cont(tela.editar) : undefined; return i && (!tela.editar || ed) ? <NovaContagem key={tela.editar ?? 'nova'} inv={i} dados={dados} nav={nav} editar={ed} /> : <Sumiu nav={nav} />; }
     case 'contagem': { const c = cont(tela.id), i = c && inv(c.inventario_id); return c && i ? <ContagemTela key={c.id} c={c} inv={i} dados={dados} tela={tela} nav={nav} /> : <Sumiu nav={nav} />; }
     case 'finalizar': { const c = cont(tela.id), i = c && inv(c.inventario_id); return c && i ? <FinalizarRodada c={c} inv={i} r={tela.rodada} dados={dados} nav={nav} /> : <Sumiu nav={nav} />; }
-    case 'relatorio': { const i = inv(tela.inv); return i ? <Relatorio inv={i} dados={dados} nav={nav} divergentes={!!tela.divergentes} /> : <Sumiu nav={nav} />; }
+    case 'relatorio': { const i = inv(tela.inv), ct = tela.contagem ? cont(tela.contagem) : undefined; return i && (!tela.contagem || ct) ? <Relatorio inv={i} dados={dados} nav={nav} divergentes={!!tela.divergentes} contagem={ct} /> : <Sumiu nav={nav} />; }
     default: return <ListaInventarios dados={dados} nav={nav} />;
   }
 }
@@ -278,7 +278,7 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
   const nCont = conts.length;
   // Progresso só das categorias das contagens abertas (não o arquivo inteiro); encerrado não carrega a lista.
   const { produtos } = useProdutos(enc ? undefined : inv);
-  const prog = useMemo(() => (produtos ? progressoInventario(produtos, col.list, conts) : null), [produtos, col.list, conts]);
+  const prog = useMemo(() => (produtos ? percentualInventario(produtos, conts, col.list) : null), [produtos, col.list, conts]);
   return (
     <Cartao onPress={onPress}>
       <View style={k.linha}>
@@ -290,7 +290,7 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
       <Barra pct={enc ? 1 : prog?.pct ?? 0} />
       <Text style={[k.cap, { color: c.textMuted }]}>
         {enc ? (inv.enviado_erp_em ? `Enviado ao ERP em ${dataBR(inv.enviado_erp_em)}` : `Encerrado em ${dataBR(inv.encerrado_em)}`)
-          : !nCont ? 'Nenhuma contagem aberta' : prog ? `${prog.coletados.toLocaleString('pt-BR')} de ${prog.total.toLocaleString('pt-BR')} itens das contagens · ${Math.round(prog.pct * 100)}%` : 'Calculando…'}
+          : !nCont ? 'Nenhuma contagem aberta' : prog ? `${Math.round(prog.pct * 100)}% · ${fmtQ(prog.contado)} de ${fmtQ(prog.sistema)} unidades contadas` : 'Calculando…'}
       </Text>
     </Cartao>
   );
@@ -529,7 +529,8 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   const [recarregando, setRecarregando] = useState(false);
   const contagens = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id).sort((a, b) => (concluida(a) ? 1 : 0) - (concluida(b) ? 1 : 0)), [dados.contagens, inv.id]);
   // Só os itens das categorias das contagens abertas (não o arquivo inteiro).
-  const prog = produtos ? progressoInventario(produtos, col.list, contagens) : { coletados: 0, total: 0, pct: 0 };
+  // Unidades contadas ÷ saldo do sistema das contagens (a acurácia): sobe conforme se conta e pode passar de 100%.
+  const prog = useMemo(() => (produtos ? percentualInventario(produtos, contagens, col.list) : { contado: 0, sistema: 0, itens: 0, coletados: 0, pct: 0 }), [produtos, contagens, col.list]);
   const enc = inv.status === 'encerrado';
   const sub = `${nomeFilial(dados, inv.filial_id)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'}`;
 
@@ -583,8 +584,8 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
           <Anel pct={prog.pct} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[k.cTit, { color: c.text }]}>Progresso da coleta</Text>
-            <Text style={[k.cTxt, { color: c.textMuted }]}>{contagens.length ? `${prog.coletados.toLocaleString('pt-BR')} de ${prog.total.toLocaleString('pt-BR')} itens das contagens abertas` : 'Abra uma contagem para acompanhar o progresso'}</Text>
-            <Text style={[k.cap, { color: c.textMuted }]}>Conta só as categorias das contagens · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo no arquivo</Text>
+            <Text style={[k.cTxt, { color: c.textMuted }]}>{contagens.length ? `${fmtQ(prog.contado)} de ${fmtQ(prog.sistema)} unidades do sistema contadas` : 'Abra uma contagem para acompanhar o progresso'}</Text>
+            <Text style={[k.cap, { color: c.textMuted }]}>{contagens.length ? `${prog.coletados.toLocaleString('pt-BR')} de ${prog.itens.toLocaleString('pt-BR')} itens das contagens já coletados · passa de 100% quando sobra` : `${inv.itens_total.toLocaleString('pt-BR')} itens com saldo no arquivo`}</Text>
           </View>
         </Cartao>
         {erro ? <Text style={[k.cap, { color: c.danger }]}>{erro}</Text> : null}
@@ -592,7 +593,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
         <Text style={[k.secao, { color: c.text }]}>Contagens</Text>
         {!contagens.length ? <EmptyState icon={BarcodeIcon} title="Nenhuma contagem aberta" text="Abra uma contagem por grupo de categorias (ex.: Bebidas alcoólicas) ou uma contagem completa." /> : null}
         {produtos && contagens.map(ct => {
-          const q = quantidades(col.list, ct.id), itens = escopo(ct, produtos, q), pc = progressoContagem(ct, itens, q), feita = concluida(ct);
+          const q = quantidades(col.list, ct.id), itens = escopo(ct, produtos, q), pc = percentualContagem(ct, itens, q).pct, feita = concluida(ct);
           const cartao = (
             <Cartao onPress={() => nav.ir({ n: 'contagem', id: ct.id, aba: 'itens' })}>
               <Text style={[k.cTit, { color: c.text }]}>{ct.nome}</Text>
@@ -601,7 +602,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
               {feita && !enc ? (
                 <View style={k.linha}>
                   <View style={{ flex: 1 }}><Botao titulo="Reabrir contagem" tipo="s" onPress={() => contagensCol.put({ ...ct, rodadas: reabrir(ct, itens, q) })} /></View>
-                  <View style={{ flex: 1 }}><Botao titulo="Ver relatório" tipo="s" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })} /></View>
+                  <View style={{ flex: 1 }}><Botao titulo="Ver relatório" tipo="s" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id, contagem: ct.id })} /></View>
                 </View>
               ) : null}
             </Cartao>
@@ -616,6 +617,18 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
           );
         })}
         {contagens.length && !enc ? <Text style={[k.cap, { color: c.textMuted }]}>Arraste uma contagem: para a direita edita (ou reabre, se concluída); para a esquerda exclui.</Text> : null}
+        {contagens.length ? (
+          <Cartao onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })}>
+            <View style={k.linha}>
+              <FileCsvIcon size={22} color={c.text} />
+              <View style={{ flex: 1 }}>
+                <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Visualizar relatório geral</Text>
+                <Text style={[k.cap, { color: c.textMuted }]}>Todas as contagens do inventário juntas. O relatório de uma contagem só fica no menu ⋮ dela ou em "Ver relatório".</Text>
+              </View>
+              <CaretRightIcon size={18} color={c.textMuted} />
+            </View>
+          </Cartao>
+        ) : null}
         <Text style={[k.cap, { color: c.textMuted }]}>Saldo do ERP de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
       </Corpo>
     </View>
@@ -751,7 +764,7 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
   const itens = useMemo(() => (produtos ? escopo(ct, produtos, q) : []), [produtos, ct, q]);
   const lista = useMemo(() => itensDaRodada(r, itens, q), [r, itens, q]);
   // Percentual das categorias desta contagem (o mesmo do cartão da contagem), não do inventário inteiro.
-  const prog = produtos ? progressoContagem(ct, itens, q) : 0;
+  const prog = produtos ? percentualContagem(ct, itens, q).pct : 0;
   const ativa = ct.rodadas[r - 1] === 'andamento' && inv.status !== 'encerrado' && !ct.pausada;
   const [sel, setSel] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
@@ -874,6 +887,7 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
         <Sheet title={ct.nome} onClose={() => setMenu(false)}>
           <Botao titulo="Editar contagem (nome e categorias)" tipo="s" icone={PencilSimpleIcon} onPress={() => { setMenu(false); nav.ir({ n: 'nova', inv: inv.id, editar: ct.id }); }} />
           <Botao titulo={ct.pausada ? 'Retomar contagem' : 'Pausar contagem'} tipo="s" icone={ct.pausada ? PlayIcon : PauseIcon} onPress={pausar} />
+          <Botao titulo="Ver relatório desta contagem" tipo="s" icone={FileCsvIcon} onPress={() => { setMenu(false); nav.ir({ n: 'relatorio', inv: inv.id, contagem: ct.id }); }} />
           <Botao titulo="Excluir contagem" tipo="s" icone={TrashIcon} onPress={excluir} />
           <Text style={[k.cap, { color: c.textMuted }]}>Pausada, a contagem não recebe leituras até ser retomada. Ao editar, dá para incluir ou tirar categorias no meio da contagem: o que já foi coletado continua valendo.</Text>
         </Sheet>
@@ -1048,7 +1062,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   /** Item identificado e aguardando a quantidade (2º passo). */
   const [pendente, setPendente] = useState(false);
   const [aviso, setAviso] = useState<{ txt: string; tom: 'ok' | 'erro' } | null>(null);
-  const [teclado, setTeclado] = useState(() => preferencias().tecladoColeta); // coletor não precisa do teclado na tela; padrão em Configurações
+  const teclado = usePreferencias().tecladoColeta; // teclado na tela: só em Configurações → Coleta (coletor com leitor não precisa)
   const [verHist, setVerHist] = useState(false);
   const [corrigindo, setCorrigindo] = useState(false);
   const minhas = useMinhasColetas(ct, r);
@@ -1183,7 +1197,6 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
             placeholder={pendente ? 'Ler outro código' : 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado} keyboardType="number-pad" returnKeyType="search"
             style={[k.cCodigo, { color: c.text, backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : AMBER }]} accessibilityLabel="Código de barras" />
           {codigo.trim() ? icone('Buscar item', MagnifyingGlassIcon, () => ler(codigo), { fundo: AMBER, cor: AMBER_TXT, ativo: true }) : null}
-          {icone(teclado ? 'Esconder teclado' : 'Mostrar teclado para digitar o código', KeyboardIcon, () => { setTeclado(v => !v); focar('codigo'); }, { fundo: teclado ? NAVY : undefined, cor: teclado ? '#fff' : undefined })}
           {icone('Apagar tudo e ler outro item', EraserIcon, apagar, { cor: c.danger, ativo: true })}
         </View>
         <Text style={[k.cap, { color: corAviso }]} numberOfLines={2}>{aviso?.txt ?? (pendente ? 'Confira o item e informe a quantidade.' : 'Leia o código: o item aparece aqui e depois você informa a quantidade.')}</Text>
@@ -1326,7 +1339,6 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
       {/* Botões grandes, com nome */}
       <View style={[k.acoes, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {botao('Apagar', EraserIcon, apagar, { cor: c.danger })}
-        {botao(teclado ? 'Sem teclado' : 'Teclado', KeyboardIcon, () => { setTeclado(v => !v); focar('codigo'); }, { fundo: teclado ? NAVY : undefined, cor: teclado ? '#fff' : undefined })}
         {botao('Salvar', FloppyDiskIcon, () => registrar(qtd), { fundo: temQtd ? AMBER : undefined, cor: temQtd ? AMBER_TXT : undefined, desab: !temQtd, destaque: temQtd })}
         {botao('Corrigir', PencilSimpleIcon, abrirCorrecao, { desab: !p || ja === null })}
       </View>
@@ -1387,7 +1399,7 @@ function FinalizarRodada({ c: ct, inv, r, nav }: { c: Contagem; inv: Inventario;
 /* =====================================================================
    Relatório do inventário
    ===================================================================== */
-function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: Dados; nav: Nav; divergentes: boolean }) {
+function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: Inventario; dados: Dados; nav: Nav; divergentes: boolean; contagem?: Contagem }) {
   const c = useCores();
   const usuario = useUsuarioLogado();
   const { produtos } = useProdutos(inv);
@@ -1395,7 +1407,8 @@ function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: D
   const [enviando, setEnviando] = useState(false);
   const [petros, setPetros] = useState(false);
   useEffect(() => { void statusErp().then(r => setPetros(r.petros)).catch(() => undefined); }, []);
-  const contagens = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id), [dados.contagens, inv.id]);
+  // Relatório de uma contagem só (mesmo layout, só os itens dela) ou geral (todas as contagens).
+  const contagens = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id && (!soDela || x.id === soDela.id)), [dados.contagens, inv.id, soDela]);
   const rel = useMemo(() => (produtos ? relatorio(produtos, contagens, col.list) : null), [produtos, contagens, col.list]);
   const enc = inv.status === 'encerrado';
   const filial = nomeFilial(dados, inv.filial_id);
@@ -1404,7 +1417,7 @@ function Relatorio({ inv, dados, nav, divergentes }: { inv: Inventario; dados: D
   const exportar = async () => {
     if (!rel) return;
     await shareText(`resultado_${inv.codigo}.csv`, resultadoCsv(inv, rel.linhas), 'text/csv;charset=utf-8');
-    if (enc && !inv.enviado_erp_em) inventariosCol.put({ ...inv, enviado_erp_em: new Date().toISOString() });
+    if (enc && !soDela && !inv.enviado_erp_em) inventariosCol.put({ ...inv, enviado_erp_em: new Date().toISOString() });
   };
   const enviar = async () => {
     if (!rel) return;
@@ -1448,7 +1461,7 @@ h2{font-size:12px;margin:12px 0 5px;color:${NAVY}}.grid{display:grid;grid-templa
 table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-align:left;padding:3px 4px;font-size:9px}td{border-bottom:1px solid #e3e6ec;padding:2px 4px}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .neg{color:#c0262d}.pos{color:#a86400}.tot td{font-weight:700;background:#eef1f6;border-top:2px solid ${NAVY}}.grp td{background:#e8edf5;font-weight:700;color:${NAVY}}tr{page-break-inside:avoid}
 </style></head><body>
-<h1>Relatório do inventário ${esc(inv.codigo)}</h1>
+<h1>${soDela ? `Relatório da contagem ${esc(soDela.nome)}` : 'Relatório do inventário'} · ${esc(inv.codigo)}</h1>
 <div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do ERP de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${esc(usuario)}` : ''}</div>
 <h2>Resumo</h2><div class="grid">${resumo}</div>
 <h2>Resultado por categoria</h2><table><tr><th>Categoria</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contagem</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">Resultado</th><th class="n">Falta R$ custo</th><th class="n">Sobra R$ custo</th><th class="n">Result. R$ custo</th><th class="n">Falta R$ venda</th><th class="n">Sobra R$ venda</th><th class="n">Result. R$ venda</th><th class="n">Acurácia</th><th class="n">Eficiência</th></tr>${categorias}</table>
@@ -1465,9 +1478,9 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo="Relatório do inventário" sub={`${inv.codigo} · ${filialCurta(dados, inv.filial_id)} · ${enc ? 'Finalizado' : 'Parcial'}`} onVoltar={nav.voltar} />
+      <Topo titulo={soDela ? `Relatório · ${soDela.nome}` : 'Relatório geral do inventário'} sub={`${inv.codigo} · ${filialCurta(dados, inv.filial_id)} · ${soDela ? 'só esta contagem' : enc ? 'Finalizado' : 'Parcial'}`} onVoltar={nav.voltar} />
       <Corpo rodape={<>
-        <Botao titulo={divergentes ? 'Ocultar itens divergentes' : 'Ver itens divergentes'} onPress={() => nav.trocar({ n: 'relatorio', inv: inv.id, divergentes: !divergentes })} desabilitado={!rel} />
+        <Botao titulo={divergentes ? 'Ocultar itens divergentes' : 'Ver itens divergentes'} onPress={() => nav.trocar({ n: 'relatorio', inv: inv.id, divergentes: !divergentes, contagem: soDela?.id })} desabilitado={!rel} />
         <Botao titulo="Voltar ao início" tipo="s" onPress={nav.inicio} />
       </>}>
         {!rel ? <ActivityIndicator color={c.textMuted} /> : <>
@@ -1530,7 +1543,7 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
             <View style={[k.linha, { flexWrap: 'wrap' }]}>
               <Pressable accessibilityRole="button" onPress={() => void imprimir()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><PrinterIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>PDF</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => void exportar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><FileCsvIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>Arquivo para o ERP</Text></Pressable>
-              {petros && enc ? <Pressable accessibilityRole="button" disabled={enviando} onPress={() => void enviar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><UploadSimpleIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>{enviando ? 'Enviando…' : 'Enviar ao Petros'}</Text></Pressable> : null}
+              {petros && enc && !soDela ? <Pressable accessibilityRole="button" disabled={enviando} onPress={() => void enviar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><UploadSimpleIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>{enviando ? 'Enviando…' : 'Enviar ao Petros'}</Text></Pressable> : null}
             </View>
           </Cartao>
         </>}
