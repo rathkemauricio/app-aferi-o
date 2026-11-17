@@ -190,6 +190,19 @@ export function percentualInventario(produtos: Produto[], contagens: Contagem[],
   return { contado, sistema, itens: rel.linhas.length, coletados: rel.linhas.filter(l => l.coletado).length, pct: fracao(contado, sistema) };
 }
 
+/**
+ * Percentual geral do arquivo: unidades contadas (última quantidade de cada item, em qualquer contagem) ÷ saldo do
+ * sistema de TODOS os itens carregados do arquivo. Itens ainda sem contagem entram como zero.
+ */
+export function percentualGeral(produtos: Produto[], contagens: Contagem[], coletas: Coleta[]) {
+  const rel = relatorio(produtos, contagens, coletas);
+  const doArquivo = produtos.filter(p => p.saldo !== 0);
+  const sistema = doArquivo.reduce((n, p) => n + Math.max(0, p.saldo), 0);
+  const contado = rel.linhas.reduce((n, l) => n + l.qtd, 0);
+  const coletados = new Set(rel.linhas.filter(l => l.coletado && l.produto.saldo !== 0).map(l => l.produto.codigo)).size;
+  return { contado, sistema, itens: doArquivo.length, coletados, pct: fracao(contado, sistema) };
+}
+
 export function progressoContagem(c: Contagem, itens: Produto[], q: Map<string, Qtds>) {
   const r = rodadaAtual(c);
   if (!r) return 1;
