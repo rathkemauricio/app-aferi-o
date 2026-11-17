@@ -6,8 +6,8 @@
 //        → { ok, id, modelo, resultado } e grava em tm_analises_ia (com quem pediu)
 //
 // Secrets (npx supabase secrets set ...): GEMINI_API_KEY (obrigatório) e GEMINI_MODEL (opcional; padrão
-// gemini-2.5-flash, que tem cota gratuita). Se um modelo responder "cota/créditos esgotados" (429), tenta o
-// gemini-2.5-flash-lite antes de desistir.
+// gemini-3.8-flash). Só modelos com cota gratuita na reserva (nov/2026: 3.8 Flash, 3.6 Flash, 3.5 Flash-Lite,
+// 2.5 Flash — este é desativado em 1/12/2026). gemini-4-argon/carbon e os "pro" são só pagos.
 // Publicar: npx supabase functions deploy analise-ia --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 
@@ -21,7 +21,7 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 
 const CHAVE = Deno.env.get('GEMINI_API_KEY') ?? '';
 // Se o modelo não existir para a chave (404) ou estiver sem cota/créditos (429), tenta o seguinte.
-const MODELOS = [...new Set([Deno.env.get('GEMINI_MODEL') ?? '', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'].filter(Boolean))];
+const MODELOS = [...new Set([Deno.env.get('GEMINI_MODEL') ?? '', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'].filter(Boolean))];
 
 /** Perfis de negócio: hoje só postos de combustível; outros (lojas, oficinas…) entram aqui depois. */
 const PERFIS: Record<string, { nome: string; contexto: string }> = {
