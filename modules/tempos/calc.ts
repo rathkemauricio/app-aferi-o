@@ -1,4 +1,4 @@
-import { type Atendimento, CLASSES, type Coleta, pausaSeg } from './model';
+import { type Atendimento, ciclosMinimos, CLASSES, type Coleta, DEMANDAS, metaColetas, pausaSeg, TURNOS } from './model';
 import type { TmData } from './store';
 
 export type Filtro = { filialId: string; setor: string; demanda: string };
@@ -39,12 +39,13 @@ export function indicadores(d: TmData, f: Filtro) {
   });
 
   const fator = d.parametros.ritmo * (1 + d.parametros.tol / 100);
+  const minimo = ciclosMinimos(d.parametros);
   const atividades: IndicadorAtividade[] = [...porAtv.entries()].map(([id, o]) => {
     const atv = byId.get(id);
     const mediaSeg = o.t / o.n;
     const ref = atv?.ref ?? null;
-    const situacao: IndicadorAtividade['situacao'] = o.n < 10 ? 'amostra' : !ref ? 'sem-ref' : mediaSeg / 60 > ref ? 'acima' : 'dentro';
-    return { id, nome: atv?.nome ?? 'Atividade removida', ref, ciclos: o.n, mediaSeg, totalSeg: o.t, padraoSeg: o.n >= 10 ? mediaSeg * fator : null, situacao };
+    const situacao: IndicadorAtividade['situacao'] = o.n < minimo ? 'amostra' : !ref ? 'sem-ref' : mediaSeg / 60 > ref ? 'acima' : 'dentro';
+    return { id, nome: atv?.nome ?? 'Atividade removida', ref, ciclos: o.n, mediaSeg, totalSeg: o.t, padraoSeg: o.n >= minimo ? mediaSeg * fator : null, situacao };
   }).sort((a, b) => b.totalSeg - a.totalSeg);
 
   const completos = ats.filter(a => a.tipo === 'completo');
@@ -70,6 +71,26 @@ export function indicadores(d: TmData, f: Filtro) {
     porClasse: CLASSES.map(c => [c, porClasse.get(c) ?? 0] as [string, number]).filter(([, v]) => v > 0),
     atividades,
   };
+}
+
+/**
+ * Progresso das coletas da filial pela meta padrão (Cadastros → Parâmetros): coletas feitas ÷ meta, turnos e demandas
+ * cobertos e atividades com ciclos suficientes. `faltas` lista o que falta para dar as coletas por completas.
+ */
+export function progressoFilial(d: TmData, filialId: string) {
+  const cs = d.coletas.filter(c => c.filial_id === filialId);
+  const meta = metaColetas(d.parametros), minimo = ciclosMinimos(d.parametros);
+  const turnos = TURNOS.map(t => [t, cs.filter(c => c.turno === t).length] as const);
+  const demandas = DEMANDAS.map(x => [x, cs.filter(c => c.demanda === x).length] as const);
+  const ind = indicadores(d, { filialId, setor: '', demanda: '' });
+  const comAmostra = ind.atividades.filter(a => a.ciclos >= minimo).length;
+  const faltas = [
+    ...(cs.length < meta ? [`${meta - cs.length} coleta(s) para a meta de ${meta}`] : []),
+    ...turnos.filter(([, n]) => !n).map(([t]) => `turno ${t.toLowerCase()} sem coleta`),
+    ...demandas.filter(([, n]) => !n).map(([x]) => `demanda "${x.toLowerCase()}" sem coleta`),
+    ...(ind.atividades.length && comAmostra < ind.atividades.length ? [`${ind.atividades.length - comAmostra} atividade(s) com menos de ${minimo} ciclos`] : []),
+  ];
+  return { coletas: cs.length, meta, minimo, turnos, demandas, atividades: ind.atividades.length, comAmostra, atendimentos: ind.atendimentos, pct: Math.min(1, cs.length / meta), completo: !faltas.length, faltas };
 }
 
 /** Média observada de uma atividade (por nome normalizado) numa filial, para o dimensionamento. */

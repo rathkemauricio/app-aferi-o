@@ -4,13 +4,13 @@ import { ChartBarIcon, StorefrontIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, EmptyState, SectionHeader, StatusPill, type Tone } from '../../ui/kit';
 import { type Filtro, indicadores } from './calc';
 import { FilialPicker, PageHead } from './ColetasTab';
-import { DEMANDAS, fmtMin, num, SETORES } from './model';
+import { ciclosMinimos, DEMANDAS, fmtMin, num, SETORES } from './model';
 import type { TmData } from './store';
 import { BarList, Kpi, useLook } from './ui';
 
 const TODAS = 'Todas', TODOS = 'Todos';
 const SITUACAO: Record<string, { label: string; tone: Tone }> = {
-  amostra: { label: 'Amostra < 10', tone: 'neutral' },
+  amostra: { label: 'Amostra pequena', tone: 'neutral' },
   'sem-ref': { label: 'Sem referência', tone: 'neutral' },
   acima: { label: 'Acima da referência', tone: 'warning' },
   dentro: { label: 'Dentro da referência', tone: 'success' },
@@ -88,7 +88,7 @@ export function PainelTab({ data }: { data: TmData }) {
         })}
       </Card>
       <Text style={t.caption}>
-        Tempo padrão = média × fator de ritmo ({num(data.parametros.ritmo)}) × (1 + tolerância {num(data.parametros.tol)}%), calculado só com 10 ou mais ciclos.
+        Tempo padrão = média × fator de ritmo ({num(data.parametros.ritmo)}) × (1 + tolerância {num(data.parametros.tol)}%), calculado só com {ciclosMinimos(data.parametros)} ou mais ciclos.
         Ocupação = tempo fora de espera ÷ (tempo em atividade + pausas). Não use como medida de desempenho individual; baixa demanda não significa excesso de pessoal.
       </Text>
     </>}

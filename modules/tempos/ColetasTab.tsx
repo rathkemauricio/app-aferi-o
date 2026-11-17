@@ -3,8 +3,8 @@ import { useUsuarioLogado } from '../../lib/auth';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import {
-  ArrowLeftIcon, CalendarBlankIcon, CheckIcon, FlagCheckeredIcon, ListBulletsIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlayIcon, PlusIcon,
-  QueueIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, XIcon,
+  ArrowLeftIcon, CalendarBlankIcon, ChartBarIcon, CheckIcon, FlagCheckeredIcon, ListBulletsIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlayIcon, PlusIcon,
+  QueueIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import {
@@ -13,7 +13,8 @@ import {
 } from './model';
 import { Deslizavel } from './Deslizavel';
 import { ops } from './ops';
-import type { ColetasView, TmData } from './store';
+import { progressoFilial } from './calc';
+import { type ColetasView, finalizarFilial, finalizada, reabrirFilial, statusDaFilial, type TmData } from './store';
 import { ActivityPicker, useLook, useNow } from './ui';
 
 type Nav = { push: (v: ColetasView) => void; pop: () => void };
@@ -27,35 +28,107 @@ const nomeFilial = (d: TmData, id: string) => { const f = d.filiais.find(x => x.
 /* =====================================================================
    Lista: Filial → Data → Coletas
    ===================================================================== */
-export function ColetasHome({ data, nav, filialId, setFilialId }: { data: TmData; nav: Nav; filialId: string; setFilialId: (id: string) => void }) {
-  const { s } = useLook();
+export function ColetasHome({ data, nav, setFilialId }: { data: TmData; nav: Nav; filialId: string; setFilialId: (id: string) => void }) {
+  const { s, t } = useLook();
   const router = useRouter();
-  const [form, setForm] = useState<ColetaForm | null>(null);
-  const [escolher, setEscolher] = useState(false);
-  const usuario = useUsuarioLogado();
-  const filial = data.filiais.find(f => f.id === filialId) ?? null;
-
-  const porData = useMemo(() => {
-    const m = new Map<string, Coleta[]>();
-    data.coletas.filter(c => c.filial_id === filial?.id).forEach(c => m.set(c.data, [...(m.get(c.data) ?? []), c]));
-    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [data.coletas, filial?.id]);
+  const [busca, setBusca] = useState('');
+  // 1º passo: a filial. Cada uma mostra se está em coleta (com o progresso da meta) ou com as coletas finalizadas.
+  const filiais = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const lista = data.filiais.filter(f => !q || `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(q));
+    const qtd = (id: string) => data.coletas.filter(c => c.filial_id === id).length;
+    return lista.sort((a, b) => (qtd(b.id) ? 1 : 0) - (qtd(a.id) ? 1 : 0) || String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true }));
+  }, [data.filiais, data.coletas, busca]);
+  const abrir = (id: string) => { setFilialId(id); nav.push({ name: 'filial', filialId: id }); };
 
   if (!data.filiais.length) {
     return <>
-      <PageHead title="Coletas" subtitle="Filial, data, coletas e atendimentos" />
+      <PageHead title="Coletas" subtitle="Filial, coletas, finalização e análise" />
       <EmptyState icon={StorefrontIcon} title="Nenhuma filial cadastrada" text="As coletas pertencem a uma filial do cadastro único." action={{ label: 'Abrir cadastro de filiais', onPress: () => router.push('/filiais') }} />
     </>;
   }
-
   return <>
-    <PageHead title="Coletas" subtitle={filial ? `${filial.codigo} · ${filial.nome}` : 'Escolha a filial'}
-      action={filial ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario))} /> : undefined} />
-    <Button title={filial ? 'Trocar filial' : 'Escolher filial'} icon={StorefrontIcon} variant="secondary" size="sm" style={{ alignSelf: 'flex-start' }} onPress={() => setEscolher(true)} />
+    <PageHead title="Coletas por filial" subtitle="Escolha a filial: faça as coletas, finalize e analise o dimensionamento" />
+    <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar filial por código, nome ou cidade" />
+    <Card style={s.listCard}>
+      {filiais.map((f, i) => {
+        const st = statusDaFilial(data, f.id), pr = progressoFilial(data, f.id);
+        const fim = st?.finalizado_em;
+        return (
+          <ListRow key={f.id} style={i > 0 && s.divided} icon={StorefrontIcon} tint={fim ? 'emerald' : pr.coletas ? 'indigo' : 'slate'}
+            title={`${f.codigo} · ${f.nome}`}
+            subtitle={fim ? `Coletas finalizadas em ${new Date(fim).toLocaleDateString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : pr.coletas ? `${pr.coletas} de ${pr.meta} coletas · ${pr.atendimentos} atendimento(s)` : 'Sem coletas ainda'}
+            right={fim ? <StatusPill label="Finalizada" tone="success" /> : pr.coletas ? <StatusPill label={`${Math.round(pr.pct * 100)}%`} tone={pr.completo ? 'success' : 'accent'} /> : undefined}
+            onPress={() => abrir(f.id)} />
+        );
+      })}
+      {!filiais.length ? <Text style={[t.caption, { padding: 12 }]}>Nenhuma filial com &quot;{busca.trim()}&quot;.</Text> : null}
+    </Card>
+  </>;
+}
 
-    {!filial ? (
-      <EmptyState icon={StorefrontIcon} title="Escolha a filial" text="Cada coleta pertence a uma filial e a uma data." action={{ label: 'Escolher filial', onPress: () => setEscolher(true) }} />
-    ) : porData.length ? porData.map(([dia, cs]) => (
+/* =====================================================================
+   Filial: coletas, progresso da meta, finalização e análise
+   ===================================================================== */
+export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; filialId: string }) {
+  const { s, t, colors } = useLook();
+  const [form, setForm] = useState<ColetaForm | null>(null);
+  const usuario = useUsuarioLogado();
+  const filial = data.filiais.find(f => f.id === filialId) ?? null;
+  const st = statusDaFilial(data, filialId);
+  const fim = st?.finalizado_em ?? null;
+  const pr = progressoFilial(data, filialId);
+  const emAndamento = data.rascunhos.filter(a => data.coletas.some(c => c.id === a.coleta_id && c.filial_id === filialId)).length;
+
+  const porData = useMemo(() => {
+    const m = new Map<string, Coleta[]>();
+    data.coletas.filter(c => c.filial_id === filialId).forEach(c => m.set(c.data, [...(m.get(c.data) ?? []), c]));
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [data.coletas, filialId]);
+
+  if (!filial) return <Missing onBack={nav.pop} />;
+
+  const finalizar = () => {
+    if (emAndamento) { notify('Há atendimentos em andamento', `Encerre os ${emAndamento} atendimento(s) em andamento nesta filial antes de finalizar as coletas.`); return; }
+    const resumo = { coletas: pr.coletas, meta: pr.meta, atendimentos: pr.atendimentos, atividades: pr.atividades, atividades_com_amostra: pr.comAmostra, faltas: pr.faltas };
+    const fazer = () => { finalizarFilial(filialId, usuario, resumo); nav.push({ name: 'analise', filialId }); };
+    if (pr.completo) confirmAction('Finalizar as coletas?', `${filial.nome}: ${pr.coletas} coletas, meta cumprida. Em seguida você faz a análise e o dimensionamento desta filial.`, 'Finalizar', fazer);
+    else confirmAction('Finalizar sem cumprir a meta?', `Ainda falta:\n• ${pr.faltas.join('\n• ')}\n\nA análise fica menos confiável. Finalizar mesmo assim?`, 'Finalizar assim', fazer);
+  };
+
+  const sim = (ok: boolean) => (ok ? '✓' : '✗');
+  return <>
+    <Button title="Filiais" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={nav.pop} />
+    <PageHead title={`${filial.codigo} · ${filial.nome}`} subtitle={fim ? `Coletas finalizadas em ${new Date(fim).toLocaleString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : 'Em coleta'}
+      action={!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario))} /> : undefined} />
+
+    {/* Progresso pela meta padrão (Gestão → Cadastros → Parâmetros) */}
+    <Card>
+      <View style={s.row}>
+        <Text style={[t.section, s.flex]}>Meta de coletas</Text>
+        <StatusPill label={pr.completo ? 'Meta cumprida' : `${Math.round(pr.pct * 100)}%`} tone={pr.completo ? 'success' : 'accent'} />
+      </View>
+      <Text style={t.body}><Text style={{ fontWeight: '800' }}>{pr.coletas}</Text> de {pr.meta} coletas · {pr.atendimentos} atendimento(s)</Text>
+      <Text style={t.caption}>Turnos: {pr.turnos.map(([x, n]) => `${x} ${sim(n > 0)}`).join('  ·  ')}</Text>
+      <Text style={t.caption}>Demandas: {pr.demandas.map(([x, n]) => `${x} ${sim(n > 0)}`).join('  ·  ')}</Text>
+      <Text style={t.caption}>Atividades com {pr.minimo}+ ciclos: {pr.comAmostra} de {pr.atividades}</Text>
+      {!pr.completo && pr.faltas.length ? <Text style={[t.caption, { color: colors.warning }]}>Falta: {pr.faltas.join('; ')}.</Text> : null}
+    </Card>
+
+    {/* Passo final: finalizar e analisar */}
+    {fim ? (
+      <Card>
+        <Text style={t.section}>Coletas finalizadas</Text>
+        <Text style={t.caption}>Faça a análise e o dimensionamento desta filial. Para registrar mais coletas, reabra.</Text>
+        <Button title="Análise e dimensionamento da filial" icon={ChartBarIcon} onPress={() => nav.push({ name: 'analise', filialId })} />
+        <Button title="Reabrir coletas" icon={ResetIcon} variant="secondary" size="sm" style={s.alignStart}
+          onPress={() => confirmAction('Reabrir as coletas?', 'A filial volta para "em coleta" e aceita novas coletas. A análise já feita continua guardada.', 'Reabrir', () => reabrirFilial(filialId))} />
+      </Card>
+    ) : pr.coletas ? (
+      <Button title={pr.completo ? 'Finalizar coletas e analisar' : 'Finalizar coletas'} icon={FlagCheckeredIcon} variant={pr.completo ? 'primary' : 'secondary'} onPress={finalizar} />
+    ) : null}
+
+    {porData.length ? porData.map(([dia, cs]) => (
       <View key={dia} style={s.group}>
         <SectionHeader title={rotuloDia(dia)} />
         <Card style={s.listCard}>
@@ -74,12 +147,10 @@ export function ColetasHome({ data, nav, filialId, setFilialId }: { data: TmData
       </View>
     )) : (
       <EmptyState icon={CalendarBlankIcon} title="Nenhuma coleta nesta filial" text="Abra uma coleta para registrar atendimentos e atividades com cronômetro."
-        action={{ label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario)) }} />
+        action={!fim ? { label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario)) } : undefined} />
     )}
 
-    {escolher && <FilialPicker data={data} atual={filialId} onClose={() => setEscolher(false)} onPick={id => { setFilialId(id); setEscolher(false); }} />}
-
-    {form && filial && (
+    {form && (
       <ColetaSheet title="Nova coleta" form={form} setForm={setForm} onClose={() => setForm(null)}
         onSave={() => {
           if (!/^\d{4}-\d{2}-\d{2}$/.test(form.data)) { notify('Data inválida', 'Use o formato AAAA-MM-DD.'); return; }
@@ -112,7 +183,7 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
   };
 
   return <>
-    <Button title="Coletas" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={nav.pop} />
+    <Button title="Filial" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={nav.pop} />
     <PageHead title={nomeFilial(data, c.filial_id)} subtitle={`${dataBR(c.data)} · ${c.setor}`}
       action={<IconButton icon={PencilSimpleIcon} label="Editar coleta" onPress={() => setForm({ data: c.data, setor: c.setor, funcao: c.funcao, turno: c.turno, demanda: c.demanda, auditor: c.auditor })} />} />
     <View style={[s.row, { flexWrap: 'wrap' }]}>
@@ -148,8 +219,10 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
     {abertos.length ? <Text style={t.caption}>Deslize o cartão para a direita para encerrar e gravar, ou para a esquerda para descartar.</Text> : null}
 
     <View style={s.twoCol}>
+      {finalizada(data, c.filial_id) ? <Text style={[t.caption, s.flex]}>As coletas desta filial foram finalizadas. Para registrar mais, reabra na tela da filial.</Text> : <>
       <Button title="Atendimento completo" icon={PlayIcon} style={s.flex} onPress={() => iniciar('completo')} />
       <Button title="Atividade individual" icon={TimerIcon} variant="secondary" style={s.flex} onPress={() => iniciar('isolada')} />
+      </>}
     </View>
 
     <SectionHeader title={`Registros (${feitos.length})`} />

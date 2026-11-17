@@ -4,9 +4,9 @@ import { BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { ArrowLeftIcon, ChartBarIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, GearIcon, HourglassIcon, type Icon, TimerIcon } from '../../ui/icons';
-import { ChoiceChips, IconButton, Skeleton, StatusPill } from '../../ui/kit';
+import { Button, ChoiceChips, IconButton, Skeleton, StatusPill } from '../../ui/kit';
 import { CadastrosTab } from './CadastrosTab';
-import { AtendimentoScreen, ColetaScreen, ColetasHome } from './ColetasTab';
+import { AtendimentoScreen, ColetaScreen, ColetasHome, FilialScreen } from './ColetasTab';
 import { DimensionamentoTab } from './DimensionamentoTab';
 import { HistoricoTab } from './HistoricoTab';
 import { PainelTab } from './PainelTab';
@@ -49,7 +49,8 @@ export default function TemposModule() {
 
   const openFromHistory = (v: ColetasView) => {
     if (v.name !== 'atendimento') return;
-    setUi(u => ({ ...u, tab: 'coletas', stack: [{ name: 'home' }, { name: 'coleta', coletaId: v.coletaId }, v] }));
+    const filialId = data.coletas.find(c => c.id === v.coletaId)?.filial_id;
+    setUi(u => ({ ...u, tab: 'coletas', stack: [{ name: 'home' }, ...(filialId ? [{ name: 'filial' as const, filialId }] : []), { name: 'coleta', coletaId: v.coletaId }, v] }));
   };
 
   const syncPill = !isSupabaseConfigured ? <StatusPill icon={DeviceMobileIcon} label="Neste aparelho" />
@@ -68,6 +69,12 @@ export default function TemposModule() {
         : <DimensionamentoTab data={data} filialId={ui.filialId} setFilialId={setFilialId} />}
     </>;
     const nav = { push, pop };
+    // Fluxo: filial → coletas → finalizar → análise e dimensionamento da filial.
+    if (view.name === 'filial') return <FilialScreen data={data} nav={nav} filialId={view.filialId} />;
+    if (view.name === 'analise') return <>
+      <Button title="Filial" icon={ArrowLeftIcon} variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onPress={pop} />
+      <DimensionamentoTab data={data} filialId={view.filialId} setFilialId={setFilialId} somenteFilial />
+    </>;
     if (view.name === 'coleta') return <ColetaScreen data={data} nav={nav} coletaId={view.coletaId} />;
     if (view.name === 'atendimento') return <AtendimentoScreen data={data} nav={nav} coletaId={view.coletaId} atendimentoId={view.atendimentoId} />;
     return <ColetasHome data={data} nav={nav} filialId={ui.filialId} setFilialId={setFilialId} />;

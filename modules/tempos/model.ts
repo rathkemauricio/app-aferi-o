@@ -10,7 +10,15 @@ export const TURNOS = ['Manhã', 'Tarde', 'Noite'] as const;
 export const TODOS_SETORES = '';
 
 export type Atividade = { id: string; nome: string; setor: string; classe: string; ref: number | null; ativo?: boolean };
-export type Parametros = { ritmo: number; tol: number };
+/** metaColetas: coletas por filial antes de finalizar (padrão 9 = 3 turnos × 3 demandas); ciclosMinimos: amostra por atividade (padrão 10). */
+export type Parametros = { ritmo: number; tol: number; metaColetas?: number; ciclosMinimos?: number };
+export const META_COLETAS_PADRAO = 9;
+export const CICLOS_MINIMOS_PADRAO = 10;
+export const metaColetas = (p: Parametros) => (p.metaColetas && p.metaColetas > 0 ? p.metaColetas : META_COLETAS_PADRAO);
+export const ciclosMinimos = (p: Parametros) => (p.ciclosMinimos && p.ciclosMinimos > 0 ? p.ciclosMinimos : CICLOS_MINIMOS_PADRAO);
+
+/** Linha de tm_filiais_status (id = filial_id): coletas da filial finalizadas por quem e quando. */
+export type StatusFilial = SyncRow & { finalizado_em: string | null; finalizado_por_nome: string; resumo: Record<string, unknown> };
 
 /** Etapa cronometrada. Horários ISO; `fim` nulo = em andamento. Pausas: [início, fim|null]. */
 export type Etapa = { ordem: number; atividade_id: string; inicio: string | null; fim: string | null; duracao_s: number; pausas: [string, string | null][] };

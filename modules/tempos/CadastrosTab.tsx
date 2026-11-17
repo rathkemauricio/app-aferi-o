@@ -7,7 +7,7 @@ import { CheckIcon, DownloadSimpleIcon, PlusIcon, StorefrontIcon, TrashIcon, Upl
 import { Button, Card, ChoiceChips, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { FilialPicker, PageHead } from './ColetasTab';
 import { aplicarImportacao, lerBackupEtm, type Previa, rotuloFilial } from './importEtm';
-import { CLASSES, num, SETORES, TODOS_SETORES, uid } from './model';
+import { CICLOS_MINIMOS_PADRAO, CLASSES, ciclosMinimos, META_COLETAS_PADRAO, metaColetas, num, SETORES, TODOS_SETORES, uid } from './model';
 import { salvarAtividades, salvarParametros, salvarVeiculos, type TmData } from './store';
 import { useLook } from './ui';
 
@@ -96,6 +96,13 @@ export function CadastrosTab({ data }: { data: TmData }) {
           onEndEditing={e => { const v = Number(e.nativeEvent.text.replace(',', '.')); salvarParametros({ ...data.parametros, ritmo: v > 0 ? v : 1 }); }} />
         <Field label="Tolerância (%)" style={s.flex} keyboardType="decimal-pad" editable={isAdmin} defaultValue={String(data.parametros.tol).replace('.', ',')}
           onEndEditing={e => { const v = Number(e.nativeEvent.text.replace(',', '.')); salvarParametros({ ...data.parametros, tol: v >= 0 ? v : 0 }); }} />
+      </View>
+      <Text style={t.label}>Meta padrão de coletas (para finalizar a filial)</Text>
+      <View style={s.twoCol}>
+        <Field label="Coletas por filial" style={s.flex} keyboardType="numeric" editable={isAdmin} defaultValue={String(metaColetas(data.parametros))}
+          onEndEditing={e => { const v = Math.round(Number(e.nativeEvent.text.replace(',', '.'))); salvarParametros({ ...data.parametros, metaColetas: v > 0 ? v : META_COLETAS_PADRAO }); }} />
+        <Field label="Ciclos mínimos por atividade" style={s.flex} keyboardType="numeric" editable={isAdmin} defaultValue={String(ciclosMinimos(data.parametros))}
+          onEndEditing={e => { const v = Math.round(Number(e.nativeEvent.text.replace(',', '.'))); salvarParametros({ ...data.parametros, ciclosMinimos: v > 0 ? v : CICLOS_MINIMOS_PADRAO }); }} />
       </View>
       <Text style={t.caption}>Exige justificativa técnica e avaliador capacitado (seção 7 da metodologia).</Text>
     </Card>

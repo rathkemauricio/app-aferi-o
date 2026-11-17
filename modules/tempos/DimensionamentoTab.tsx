@@ -65,7 +65,8 @@ function migrarFaixas(d: Dimensionamento): Dimensionamento {
 
 type Alvo = 'filial' | 'padrao';
 
-export function DimensionamentoTab({ data, filialId, setFilialId }: { data: TmData; filialId: string; setFilialId: (id: string) => void }) {
+/** `somenteFilial`: análise da filial no fluxo de coletas (sem trocar de filial nem editar o padrão da rede). */
+export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial = false }: { data: TmData; filialId: string; setFilialId: (id: string) => void; somenteFilial?: boolean }) {
   const { s, t, colors } = useLook();
   const { isAdmin } = useAuth();
   const [escolher, setEscolher] = useState(false);
@@ -103,7 +104,8 @@ export function DimensionamentoTab({ data, filialId, setFilialId }: { data: TmDa
 
   const cabecalho = (
     <Card>
-      <ChoiceChips value={editandoPadrao ? 'Padrão da rede' : 'Por filial'} options={['Por filial', 'Padrão da rede']} onChange={v => setAlvo(v === 'Padrão da rede' ? 'padrao' : 'filial')} />
+      {somenteFilial ? <Text style={t.section}>Análise e dimensionamento da filial</Text>
+        : <ChoiceChips value={editandoPadrao ? 'Padrão da rede' : 'Por filial'} options={['Por filial', 'Padrão da rede']} onChange={v => setAlvo(v === 'Padrão da rede' ? 'padrao' : 'filial')} />}
       {editandoPadrao ? (
         <Text style={t.caption}>
           {isAdmin
@@ -114,7 +116,7 @@ export function DimensionamentoTab({ data, filialId, setFilialId }: { data: TmDa
         <View style={s.row}>
           <Text style={[t.label, s.flex]}>Filial: {filial ? `${filial.codigo} · ${filial.nome}` : 'escolha a filial'}</Text>
           {filial ? <StatusPill label={usaPadrao ? 'Usa o padrão' : 'Próprio'} tone={usaPadrao ? 'accent' : 'neutral'} /> : null}
-          <Button title="Trocar" icon={StorefrontIcon} variant="secondary" size="sm" onPress={() => setEscolher(true)} />
+          {!somenteFilial ? <Button title="Trocar" icon={StorefrontIcon} variant="secondary" size="sm" onPress={() => setEscolher(true)} /> : null}
         </View>
       )}
       {!editandoPadrao && (
