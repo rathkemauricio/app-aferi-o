@@ -15,7 +15,7 @@ import { ArrowRightIcon, BarcodeIcon, CaretDownIcon, FloppyDiskIcon, ClockCounte
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
-  bateBusca, categoriasDe, progressoPorCategoria, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
+  bateBusca, categoriasDe, normalizar, progressoPorCategoria, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
   progressoContagem, progressoInventario, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
@@ -634,7 +634,14 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
     editar ? (editar.classe === 'mista' ? ['pista', 'conveniencia'] : [editar.classe]) : parcial ? ['conveniencia'] : ['completa']);
   const [cats, setCats] = useState<string[]>(editar?.categorias ?? []);
   const completa = classes.includes('completa');
-  const lista = useMemo(() => (produtos ? categoriasDe(produtos).filter(x => classes.includes(x.classe)) : []), [produtos, classes]);
+  const [buscaCat, setBuscaCat] = useState('');
+  const todasCats = useMemo(() => (produtos ? categoriasDe(produtos) : []), [produtos]);
+  const lista = useMemo(() => todasCats.filter(x => classes.includes(x.classe)), [todasCats, classes]);
+  // Pesquisando, procura em pista e conveniência; sem pesquisa, mostra as da classificação escolhida.
+  const mostradas = useMemo(() => {
+    const termo = normalizar(buscaCat.trim());
+    return termo ? todasCats.filter(x => termo.split(/\s+/).every(w => normalizar(x.nome).includes(w))) : lista;
+  }, [buscaCat, todasCats, lista]);
   const itens = produtos ? escopo({ classe: completa ? 'completa' : 'mista', categorias: cats }, produtos).length : 0;
   // Categorias que já têm contagem neste inventário (só aviso: dá para abrir outra com a mesma categoria) e o quanto já foi coletado de cada uma.
   const col = useColetas(inv.id);
@@ -649,13 +656,13 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
   const completasAbertas = outras.filter(x => x.classe === 'completa');
   const comContagem = lista.filter(x => jaEm.has(x.nome)).length;
   const alternarClasse = (v: ClasseContagem) => {
-    if (!parcial) { setClasses([v]); setCats([]); return; }
-    setClasses(cl => (cl.includes(v) ? (cl.length > 1 ? cl.filter(x => x !== v) : cl) : [...cl, v]));
-    setCats(cs => cs.filter(x => lista.some(l => l.nome === x)));
+    if (v === 'completa') { setClasses(['completa']); return; }
+    setClasses(cl => { const base = cl.filter(x => x !== 'completa'); return base.includes(v) ? (base.length > 1 ? base.filter(x => x !== v) : base) : [...base, v]; });
   };
   const criar = () => {
     if (!completa && !cats.length) { notify('Escolha as categorias'); return; }
-    const classe: ClasseContagem = completa ? 'completa' : classes.length > 1 ? 'mista' : classes[0];
+    const classesMarcadas = [...new Set(todasCats.filter(x => cats.includes(x.nome)).map(x => x.classe))];
+    const classe: ClasseContagem = completa ? 'completa' : classesMarcadas.length > 1 ? 'mista' : classesMarcadas[0] ?? (classes[0] === 'completa' ? 'mista' : classes[0]);
     if (editar) {
       // Edição no meio da contagem: mantém as rodadas e as coletas; muda nome, classificação e categorias.
       contagensCol.put({ ...editar, nome: nome.trim() || editar.nome, classe, categorias: completa ? [] : cats });
@@ -679,7 +686,7 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
         <Rotulo>Classificação</Rotulo>
         <Segmentos opcoes={opcoes} valor={classes} multi onChange={alternarClasse} />
         {editar ? <Text style={[k.cap, { color: c.textMuted }]}>Incluir ou tirar categorias no meio da contagem: os itens das categorias novas entram como pendentes; o que já foi coletado continua salvo.</Text> : null}
-        <Text style={[k.cap, { color: c.textMuted }]}>Completa: todas as categorias do ERP. Em inventário parcial, Pista e Conveniência podem ser combinadas.</Text>
+        <Text style={[k.cap, { color: c.textMuted }]}>Completa: todas as categorias do ERP. Pista e Conveniência podem ser combinadas.</Text>
         {completasAbertas.length ? <Text style={[k.cap, k.b, { color: c.warning }]}>Já existe contagem completa neste inventário: {completasAbertas.map(x => x.nome).join(', ')}. Você ainda pode abrir outra.</Text> : null}
         {!completa && (
           <View style={[k.cartao, { padding: 0, backgroundColor: c.surface, borderColor: c.border, overflow: 'hidden' }]}>
@@ -687,7 +694,21 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
               <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Categorias de {classes.map(x => ROTULO_CLASSE[x]).join(' e ')}</Text>
               {comContagem ? <Text style={[k.cap, { color: c.textMuted }]}>{comContagem} de {lista.length} já têm contagem neste inventário (em amarelo). Pode marcar de novo se quiser contar outra vez.</Text> : null}
             </View>
-            {!produtos ? <ActivityIndicator style={{ margin: 16 }} color={c.textMuted} /> : lista.map(cat => {
+            <View style={{ paddingHorizontal: space.lg, paddingVertical: space.md, gap: space.sm, borderBottomWidth: 1, borderBottomColor: c.border }}>
+              <Field icon={MagnifyingGlassIcon} value={buscaCat} onChangeText={setBuscaCat} placeholder="Pesquisar categoria (pista e conveniência)" autoCorrect={false} />
+              <View style={[k.linha, { flexWrap: 'wrap', gap: space.sm }]}>
+                <Pressable accessibilityRole="button" disabled={!mostradas.length} onPress={() => setCats(cs => [...new Set([...cs, ...mostradas.map(x => x.nome)])])} style={[k.acaoMini, { borderColor: c.borderStrong }]}>
+                  <Text style={[k.b, { color: c.text }]}>Marcar as {mostradas.length} mostradas</Text>
+                </Pressable>
+                {cats.length ? (
+                  <Pressable accessibilityRole="button" onPress={() => setCats([])} style={[k.acaoMini, { borderColor: c.borderStrong }]}>
+                    <Text style={[k.b, { color: c.danger }]}>Desmarcar todas</Text>
+                  </Pressable>
+                ) : null}
+                <Text style={[k.cap, { color: c.textMuted }]}>{cats.length} marcada{cats.length === 1 ? '' : 's'}</Text>
+              </View>
+            </View>
+            {!produtos ? <ActivityIndicator style={{ margin: 16 }} color={c.textMuted} /> : mostradas.map(cat => {
               const on = cats.includes(cat.nome);
               return (
                 <Pressable key={cat.nome} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => setCats(cs => (on ? cs.filter(x => x !== cat.nome) : [...cs, cat.nome]))}
@@ -702,11 +723,14 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
                       return pct ? <Text style={[k.cap, { color: c.textMuted }]}>{pct}</Text> : null;
                     })()}
                   </View>
-                  <Text style={[k.cap, { color: c.textMuted }]}>{cat.itens.toLocaleString('pt-BR')} itens</Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[k.cap, { color: c.textMuted }]}>{cat.itens.toLocaleString('pt-BR')} itens</Text>
+                    {buscaCat.trim() || classes.length > 1 ? <Text style={[k.cap, k.b, { color: cat.classe === 'pista' ? c.accentText : c.textMuted }]}>{cat.classe === 'pista' ? 'Pista' : 'Conveniência'}</Text> : null}
+                  </View>
                 </Pressable>
               );
             })}
-            {produtos && !lista.length ? <Text style={[k.cap, { color: c.textMuted, padding: space.lg }]}>Nenhuma categoria com saldo nesta classificação.</Text> : null}
+            {produtos && !mostradas.length ? <Text style={[k.cap, { color: c.textMuted, padding: space.lg }]}>{buscaCat.trim() ? `Nenhuma categoria com "${buscaCat.trim()}".` : 'Nenhuma categoria com saldo nesta classificação.'}</Text> : null}
           </View>
         )}
       </Corpo>
