@@ -10,7 +10,7 @@ import {
 } from '../../ui/icons';
 import { Button, Card, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
-import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, linhaCompleta, type Medicao, pctVenda, resultado, resumo, total } from './model';
+import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
 import { linhaVazia, medicoesCol, novaMedicao, useTanques } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
@@ -151,14 +151,18 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }:
   const r = resumo(m);
   const salvar = (patch: Partial<Medicao>) => medicoesCol.put({ ...m, ...patch });
   const mudarLinha = (id: string, p: Partial<LinhaTanque>) => salvar({ tanques: m.tanques.map(l => (l.id === id ? { ...l, ...p } : l)) });
+  /** Venda e recebimento são do combustível (unificados), não do tanque. */
+  const mudarCombustivel = (c: string, p: Partial<ValoresCombustivel>) => salvar({ combustiveis: valoresPorCombustivel(m).map(v => (v.combustivel === c ? { ...v, ...p } : v)) });
   const tom = (v: number) => (v < 0 ? colors.danger : v > 0 ? colors.warning : colors.success);
 
   const finalizar = () => {
-    const incompletas = m.tanques.filter(l => !linhaCompleta(l) || !l.tanque.trim() || !l.combustivel);
     if (!m.tanques.length) { notify('Sem tanques', 'Adicione ao menos um tanque.'); return; }
-    if (incompletas.length) { notify('Tanques incompletos', `Preencha tanque, combustível, litros, venda, informada e recebimento em: ${incompletas.map(l => `tanque ${l.tanque || '?'}`).join(', ')}.`); return; }
+    const tanquesIncompletos = m.tanques.filter(l => !l.tanque.trim() || !l.combustivel || l.litros === null || l.informada === null);
+    if (tanquesIncompletos.length) { notify('Tanques incompletos', `Preencha tanque, combustível, litros e informada em: ${tanquesIncompletos.map(l => `tanque ${l.tanque || '?'}`).join(', ')}.`); return; }
+    const semValores = r.porCombustivel.filter(x => x.venda === null || x.recebimento === null);
+    if (semValores.length) { notify('Falta venda ou recebimento', `Informe a venda e o recebimento (0 se não houve) de: ${semValores.map(x => nomeComb(x.combustivel)).join(', ')}.`); return; }
     confirmAction('Finalizar medição?', `Resultado geral: ${fmtSinal(r.geral.resultado)} L (${r.geral.resultado < 0 ? 'falta' : r.geral.resultado > 0 ? 'sobra' : 'sem diferença'}). A medição fica registrada em seu nome (${usuario}).`, 'Finalizar',
-      () => salvar({ status: 'finalizada', medido_em: new Date().toISOString(), responsavel_nome: usuario }));
+      () => salvar({ status: 'finalizada', medido_em: new Date().toISOString(), responsavel_nome: usuario, combustiveis: valoresPorCombustivel(m) }));
   };
   const excluir = () => confirmAction('Excluir medição?', 'A medição sai do histórico em todos os aparelhos. Não dá para desfazer.', 'Excluir', () => { medicoesCol.remove(m.id); voltar(); });
 
@@ -171,50 +175,63 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }:
     </View>
     {!fin ? <Field label="Data da medição (AAAA-MM-DD)" value={m.data} onChangeText={v => salvar({ data: v })} /> : null}
 
-    {m.tanques.map(l => {
-      const res = resultado(l), pc = pctVenda(l, res);
-      return (
-        <Card key={l.id} style={{ borderLeftWidth: 4, borderLeftColor: corComb(l.combustivel) }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
-            <Field label="Tanque" value={l.tanque} editable={!fin} onChangeText={v => mudarLinha(l.id, { tanque: v })} style={{ width: 90 }} />
-            <Pressable accessibilityRole="button" disabled={fin} onPress={() => setCombDe(l.id)}
-              style={{ flex: 1, minHeight: 46, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.control, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface }}>
-              <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: corComb(l.combustivel) }} />
-              <Text style={[t.bodyStrong, { flex: 1 }]} numberOfLines={1}>{l.combustivel ? nomeComb(l.combustivel) : 'Combustível'}</Text>
-              {!fin ? <CaretDownIcon size={14} color={colors.textMuted} /> : null}
-            </Pressable>
-            {!fin ? <IconButton icon={XIcon} tone="danger" label="Remover tanque" onPress={() => confirmAction('Remover tanque?', `O tanque ${l.tanque || ''} sai desta medição.`, 'Remover', () => salvar({ tanques: m.tanques.filter(x => x.id !== l.id) }))} /> : null}
+    {/* 1. Tanques: o que se mede em cada um */}
+    <SectionHeader title={`Tanques (${m.tanques.length})`} />
+    {m.tanques.map(l => (
+      <Card key={l.id} style={{ borderLeftWidth: 4, borderLeftColor: corComb(l.combustivel) }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
+          <Field label="Tanque" value={l.tanque} editable={!fin} onChangeText={v => mudarLinha(l.id, { tanque: v })} style={{ width: 90 }} />
+          <Pressable accessibilityRole="button" disabled={fin} onPress={() => setCombDe(l.id)}
+            style={{ flex: 1, minHeight: 46, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.control, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface }}>
+            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: corComb(l.combustivel) }} />
+            <Text style={[t.bodyStrong, { flex: 1 }]} numberOfLines={1}>{l.combustivel ? nomeComb(l.combustivel) : 'Combustível'}</Text>
+            {!fin ? <CaretDownIcon size={14} color={colors.textMuted} /> : null}
+          </Pressable>
+          {!fin ? <IconButton icon={XIcon} tone="danger" label="Remover tanque" onPress={() => confirmAction('Remover tanque?', `O tanque ${l.tanque || ''} sai desta medição.`, 'Remover', () => salvar({ tanques: m.tanques.filter(x => x.id !== l.id) }))} /> : null}
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+          <NumeroCampo label="Metragem (cm)" valor={l.metragem} editavel={!fin} onChange={v => mudarLinha(l.id, { metragem: v })} />
+          <NumeroCampo label="Litros (medido)" valor={l.litros} editavel={!fin} onChange={v => mudarLinha(l.id, { litros: v })} />
+          <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
+            <NumeroCampo label="Informada (L)" valor={l.informada} editavel={!fin} onChange={v => mudarLinha(l.id, { informada: v, informadaDe: undefined })} />
+            <Text style={t.caption}>{l.informadaDe ? `da medição de ${dataBR(l.informadaDe)}` : 'digitada (sem medição anterior)'}</Text>
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-            <NumeroCampo label="Metragem (cm)" valor={l.metragem} editavel={!fin} onChange={v => mudarLinha(l.id, { metragem: v })} />
-            <NumeroCampo label="Litros (medido)" valor={l.litros} editavel={!fin} onChange={v => mudarLinha(l.id, { litros: v })} />
-            <NumeroCampo label="Venda (L)" valor={l.venda} editavel={!fin} onChange={v => mudarLinha(l.id, { venda: v })} />
-            <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
-              <NumeroCampo label="Informada (L)" valor={l.informada} editavel={!fin} onChange={v => mudarLinha(l.id, { informada: v, informadaDe: undefined })} />
-              <Text style={t.caption}>{l.informadaDe ? `da medição de ${dataBR(l.informadaDe)}` : 'digitada (sem medição anterior)'}</Text>
-            </View>
-            <NumeroCampo label="Recebimento (L)" valor={l.recebimento} editavel={!fin} onChange={v => mudarLinha(l.id, { recebimento: v })} />
-          </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.md, paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.border }}>
-            <Text style={t.body}>Total: <Text style={{ fontWeight: '800' }}>{fmtL(total(l))} L</Text></Text>
-            <Text style={t.body}>Resultado: <Text style={{ fontWeight: '800', color: tom(res) }}>{fmtSinal(res)} L</Text>{pc !== null ? <Text style={t.caption}> ({fmtSinal(Math.round(pc * 100) / 100)}% da venda)</Text> : null}</Text>
-          </View>
-        </Card>
-      );
-    })}
+        </View>
+      </Card>
+    ))}
     {!fin ? <Button title="Adicionar tanque" icon={PlusIcon} variant="secondary" onPress={() => salvar({ tanques: [...m.tanques, linhaVazia(String(m.tanques.length + 1))] })} /> : null}
-    <Text style={t.caption}>Total = litros medidos + venda. Resultado = informada + recebimento − total: negativo é falta, positivo é sobra. A informada vem dos litros da medição anterior de cada tanque; os litros são digitados a partir da tabela do tanque.</Text>
+
+    {/* 2. Conferência por combustível: a venda e o recebimento são unificados */}
+    <SectionHeader title="Conferência por combustível" />
+    <Text style={t.caption}>A venda é unificada por combustível (todas as bombas dele) — por isso a conta é por combustível, somando os tanques.</Text>
+    {r.porCombustivel.map(x => (
+      <Card key={x.combustivel} style={{ borderLeftWidth: 4, borderLeftColor: corComb(x.combustivel) }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: corComb(x.combustivel) }} />
+          <Text style={[t.section, { flex: 1 }]}>{nomeComb(x.combustivel)}</Text>
+          <Text style={t.caption}>Tanque{x.tanques.length === 1 ? '' : 's'} {x.tanques.join(', ')}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+          <NumeroCampo key={`v-${x.combustivel}`} label="Venda do combustível (L)" valor={x.venda} editavel={!fin} onChange={v => mudarCombustivel(x.combustivel, { venda: v })} />
+          <NumeroCampo key={`r-${x.combustivel}`} label="Recebimento (L)" valor={x.recebimento} editavel={!fin} onChange={v => mudarCombustivel(x.combustivel, { recebimento: v })} />
+        </View>
+        <Text style={t.body}>Litros medidos {fmtL(x.litros)} + venda {fmtL(x.venda)} = total <Text style={{ fontWeight: '800' }}>{fmtL(x.total)} L</Text></Text>
+        <Text style={t.body}>Informada {fmtL(x.informada)} + recebimento {fmtL(x.recebimento)} − total = <Text style={{ fontWeight: '800', color: tom(x.resultado) }}>{fmtSinal(x.resultado)} L</Text>{x.pct !== null ? <Text style={t.caption}> ({fmtSinal(Math.round(x.pct * 100) / 100)}% da venda)</Text> : null}</Text>
+      </Card>
+    ))}
+    {!r.porCombustivel.length ? <Text style={t.caption}>Escolha o combustível dos tanques para fazer a conferência.</Text> : null}
 
     <SectionHeader title="Resumo" />
     <Card>
       {[...r.porCombustivel, r.geral].map((x, i) => (
         <View key={x.combustivel + i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: i ? 1 : 0, borderTopColor: colors.border }}>
           {x.combustivel !== 'Total' ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: corComb(x.combustivel) }} /> : null}
-          <Text style={[x.combustivel === 'Total' ? t.bodyStrong : t.body, { flex: 1 }]}>{x.combustivel === 'Total' ? 'Total geral' : nomeComb(x.combustivel)} · {x.tanques} tanque(s)</Text>
+          <Text style={[x.combustivel === 'Total' ? t.bodyStrong : t.body, { flex: 1 }]}>{x.combustivel === 'Total' ? 'Total geral' : nomeComb(x.combustivel)} · {x.tanques.length} tanque(s)</Text>
           <Text style={[t.bodyStrong, { color: tom(x.resultado) }]}>{fmtSinal(x.resultado)} L{x.pct !== null ? ` (${fmtSinal(Math.round(x.pct * 100) / 100)}%)` : ''}</Text>
         </View>
       ))}
     </Card>
+    <Text style={t.caption}>Total = litros medidos + venda. Resultado = informada + recebimento − total: negativo é falta, positivo é sobra. A informada vem dos litros da medição anterior de cada tanque; os litros são digitados a partir da tabela do tanque.</Text>
     <Field label="Observações" value={m.obs} editable={!fin} multiline onChangeText={v => salvar({ obs: v })} placeholder="Ex.: régua conferida, descarga em andamento…" />
 
     {fin ? <>
@@ -237,17 +254,14 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }:
   </>;
 }
 
-/** Relatório da medição (A4 paisagem): mesmas colunas da planilha de conferência + resumo por combustível. */
+/** Relatório da medição (A4 paisagem): tanques medidos + conferência por combustível (venda unificada) + total geral. */
 function relatorioHtml(m: Medicao, filialNome: string, nomeComb: (id: string) => string) {
   const r = resumo(m);
   const n = (v: number | null) => fmtL(v);
   const cor = (v: number) => (v < 0 ? 'neg' : v > 0 ? 'pos' : '');
   const pc = (v: number | null) => (v === null ? '—' : `${fmtSinal(Math.round(v * 100) / 100)}%`);
-  const linhas = m.tanques.map(l => {
-    const res = resultado(l);
-    return `<tr><td>${esc(l.tanque)}</td><td>${esc(nomeComb(l.combustivel))}</td><td class="n">${n(l.metragem)}</td><td class="n">${n(l.litros)}</td><td class="n">${n(l.venda)}</td><td class="n"><b>${n(total(l))}</b></td><td class="n">${n(l.informada)}${l.informadaDe ? `<br><span class="peq">${dataBR(l.informadaDe)}</span>` : ''}</td><td class="n">${n(l.recebimento)}</td><td class="n ${cor(res)}"><b>${fmtSinal(res)}</b></td><td class="n">${pc(pctVenda(l, res))}</td></tr>`;
-  }).join('');
-  const resumoLinhas = [...r.porCombustivel, r.geral].map(x => `<tr${x.combustivel === 'Total' ? ' class="tot"' : ''}><td>${x.combustivel === 'Total' ? 'Total geral' : esc(nomeComb(x.combustivel))}</td><td class="n">${x.tanques}</td><td class="n">${n(x.litros)}</td><td class="n">${n(x.venda)}</td><td class="n">${n(x.total)}</td><td class="n">${n(x.informada)}</td><td class="n">${n(x.recebimento)}</td><td class="n ${cor(x.resultado)}"><b>${fmtSinal(x.resultado)}</b></td><td class="n">${pc(x.pct)}</td></tr>`).join('');
+  const tanques = m.tanques.map(l => `<tr><td>${esc(l.tanque)}</td><td>${esc(nomeComb(l.combustivel))}</td><td class="n">${n(l.metragem)}</td><td class="n">${n(l.litros)}</td><td class="n">${n(l.informada)}${l.informadaDe ? `<br><span class="peq">medição de ${dataBR(l.informadaDe)}</span>` : ''}</td></tr>`).join('');
+  const conferencia = [...r.porCombustivel, r.geral].map(x => `<tr${x.combustivel === 'Total' ? ' class="tot"' : ''}><td>${x.combustivel === 'Total' ? 'Total geral' : esc(nomeComb(x.combustivel))}</td><td>${esc(x.tanques.join(', '))}</td><td class="n">${n(x.litros)}</td><td class="n">${n(x.venda)}</td><td class="n"><b>${n(x.total)}</b></td><td class="n">${n(x.informada)}</td><td class="n">${n(x.recebimento)}</td><td class="n ${cor(x.resultado)}"><b>${fmtSinal(x.resultado)}</b></td><td class="n">${pc(x.pct)}</td></tr>`).join('');
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Medição de tanques · ${esc(filialNome)}</title><style>
 @page{size:A4 landscape;margin:10mm}body{font:11px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:17px;margin:0 0 2px;color:${AZUL}}.sub{color:#5b6475;margin-bottom:8px}
 h2{font-size:12.5px;margin:12px 0 4px;color:${AZUL}}table{width:100%;border-collapse:collapse}th{background:${AZUL};color:#fff;text-align:left;padding:4px 5px;font-size:10px}td{border-bottom:1px solid #e3e6ec;padding:3px 5px}
@@ -256,11 +270,12 @@ h2{font-size:12.5px;margin:12px 0 4px;color:${AZUL}}table{width:100%;border-coll
 .nota{color:#5b6475;font-size:10px;margin-top:6px}.peq{color:#5b6475;font-size:9px}</style></head><body>
 <h1>Medição de tanques · ${esc(filialNome)}</h1>
 <div class="sub">Data ${dataBR(m.data)}${m.medido_em ? ` · finalizada em ${new Date(m.medido_em).toLocaleString('pt-BR')}` : ''} · Responsável: ${esc(m.responsavel_nome || '—')} · Emitido em ${new Date().toLocaleString('pt-BR')}</div>
-<h2>Conferência por tanque</h2>
-<table><tr><th>Tanque</th><th>Combustível</th><th class="n">Metragem (cm)</th><th class="n">Litros</th><th class="n">Venda</th><th class="n">Total</th><th class="n">Informada</th><th class="n">Recebimento</th><th class="n">Resultado final</th><th class="n">% da venda</th></tr>${linhas}</table>
-<h2>Resumo por combustível</h2>
-<table><tr><th>Combustível</th><th class="n">Tanques</th><th class="n">Litros</th><th class="n">Venda</th><th class="n">Total</th><th class="n">Informada</th><th class="n">Recebimento</th><th class="n">Resultado</th><th class="n">% da venda</th></tr>${resumoLinhas}</table>
-<p class="nota">Total = litros medidos + venda. Resultado final = informada + recebimento − total (negativo = falta; positivo = sobra). Informada = litros da medição anterior do tanque (data abaixo do valor). Litros medidos lidos na tabela do tanque.</p>
+<h2>Conferência por combustível</h2>
+<table><tr><th>Combustível</th><th>Tanques</th><th class="n">Litros medidos</th><th class="n">Venda</th><th class="n">Total</th><th class="n">Informada</th><th class="n">Recebimento</th><th class="n">Resultado final</th><th class="n">% da venda</th></tr>${conferencia}</table>
+<p class="nota">A venda é unificada por combustível, por isso a conferência soma os tanques de cada combustível. Total = litros medidos + venda. Resultado final = informada + recebimento − total (negativo = falta; positivo = sobra).</p>
+<h2>Tanques medidos</h2>
+<table><tr><th>Tanque</th><th>Combustível</th><th class="n">Metragem (cm)</th><th class="n">Litros medidos</th><th class="n">Informada (medição anterior)</th></tr>${tanques}</table>
+<p class="nota">Litros lidos na tabela do tanque. Informada = litros da medição anterior do tanque.</p>
 <h2>Observações</h2><div class="obs">${esc(m.obs || '—')}</div>
 <div class="ass"><div>Responsável pela medição — ${esc(m.responsavel_nome || '')}</div><div>Gerente da filial</div></div>
 </body></html>`;

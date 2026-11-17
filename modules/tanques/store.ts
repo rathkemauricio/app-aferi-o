@@ -15,7 +15,7 @@ export function useTanques() {
   return { filiais: f.filiais, medicoes, combustiveis, loaded: f.loaded && m.loaded, status: combinedStatus([f.status, m.status]) };
 }
 
-export const linhaVazia = (tanque = '', combustivel = ''): LinhaTanque => ({ id: uid('tq'), tanque, combustivel, metragem: null, litros: null, venda: null, informada: null, recebimento: null });
+export const linhaVazia = (tanque = '', combustivel = ''): LinhaTanque => ({ id: uid('tq'), tanque, combustivel, metragem: null, litros: null, informada: null });
 
 /**
  * Nova medição da filial: já vem com os tanques (número e combustível) da última medição finalizada dela e com a
@@ -28,6 +28,6 @@ export function novaMedicao(filialId: string, responsavel: string, anteriores: M
     ? ultima.tanques.map(l => ({ ...linhaVazia(l.tanque, l.combustivel), informada: l.litros, ...(l.litros !== null ? { informadaDe: ultima.data } : {}) }))
     : [linhaVazia('1')];
   const id = uid('med');
-  medicoesCol.put({ id, filial_id: filialId, data: hojeIso(), medido_em: null, status: 'rascunho', tanques, obs: '', responsavel_nome: responsavel });
+  medicoesCol.put({ id, filial_id: filialId, data: hojeIso(), medido_em: null, status: 'rascunho', tanques, combustiveis: [], obs: '', responsavel_nome: responsavel });
   return id;
 }
