@@ -5,8 +5,9 @@
 //        dados = resumo montado no app (tempos cronometrados, demanda, turnos, dimensionamento; sem nomes de pessoas)
 //        → { ok, id, modelo, resultado } e grava em tm_analises_ia (com quem pediu)
 //
-// Secrets (npx supabase secrets set ...): GEMINI_API_KEY (obrigatório) e GEMINI_MODEL (opcional;
-// padrão gemini-3.8-flash — para o modelo mais avançado, gemini-4-argon).
+// Secrets (npx supabase secrets set ...): GEMINI_API_KEY (obrigatório) e GEMINI_MODEL (opcional; padrão
+// gemini-2.5-flash, que tem cota gratuita). Se um modelo responder "cota/créditos esgotados" (429), tenta o
+// gemini-2.5-flash-lite antes de desistir.
 // Publicar: npx supabase functions deploy analise-ia --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 
@@ -19,8 +20,8 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const CHAVE = Deno.env.get('GEMINI_API_KEY') ?? '';
-// Se o modelo configurado não existir para a chave (404), tenta os seguintes.
-const MODELOS = [...new Set([Deno.env.get('GEMINI_MODEL') ?? '', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-flash'].filter(Boolean))];
+// Se o modelo não existir para a chave (404) ou estiver sem cota/créditos (429), tenta o seguinte.
+const MODELOS = [...new Set([Deno.env.get('GEMINI_MODEL') ?? '', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'].filter(Boolean))];
 
 /** Perfis de negócio: hoje só postos de combustível; outros (lojas, oficinas…) entram aqui depois. */
 const PERFIS: Record<string, { nome: string; contexto: string }> = {
@@ -76,7 +77,8 @@ async function perguntarGemini(perfil: { nome: string; contexto: string }, dados
     if (!r.ok) {
       const msg = corpo?.error?.message ?? `HTTP ${r.status}`;
       if (r.status === 400 && /api key/i.test(msg)) throw new Error('A chave do Gemini (GEMINI_API_KEY) foi recusada. Confira a chave no servidor.');
-      if (r.status === 429) throw new Error('Limite de uso do Gemini atingido. Tente de novo em alguns minutos.');
+      // Sem cota ou créditos neste modelo: tenta o próximo da lista.
+      if (r.status === 429 || /quota|credit|exhausted|billing/i.test(msg)) { ultimoErro = `${modelo}: ${msg}`; continue; }
       throw new Error(`O Gemini respondeu com erro: ${msg}`);
     }
     const texto = (corpo?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('').trim();
@@ -85,7 +87,9 @@ async function perguntarGemini(perfil: { nome: string; contexto: string }, dados
     try { return { modelo, resultado: JSON.parse(limpo) as Resultado }; }
     catch { return { modelo, resultado: { resumo: texto, confianca: 'baixa', dados_faltantes: ['A resposta não veio no formato esperado; texto bruto no resumo.'] } }; }
   }
-  throw new Error(`Nenhum modelo do Gemini disponível para esta chave (${ultimoErro}). Configure GEMINI_MODEL no servidor.`);
+  throw new Error(/quota|credit|exhausted|billing|429/i.test(ultimoErro)
+    ? `A chave do Gemini está sem cota ou créditos nos modelos ${MODELOS.join(', ')}. Mensagem do Google: ${ultimoErro.slice(0, 300)}`
+    : `Nenhum modelo do Gemini disponível para esta chave (${ultimoErro}). Configure GEMINI_MODEL no servidor.`);
 }
 
 async function analisarTempos(body: { filial_id?: string; perfil?: string; dados?: unknown }, usuario: { id: string; nome: string }) {
