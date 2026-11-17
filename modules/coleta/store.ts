@@ -6,13 +6,23 @@ import { useFiliais } from '../../lib/data';
 import { supabase } from '../../lib/supabase';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
 import type { ItemBarras } from './barras';
-import { type BaseBarras, type Classe, type Coleta, type Contagem, horaAgora, type Inventario, type Produto, type Rodada } from './model';
+import { type BaseBarras, type Classe, type ClasseCategoria, type Coleta, type Contagem, horaAgora, type Inventario, type Produto, type Rodada } from './model';
 
 /* ---------- Coleções sincronizadas ---------- */
 export const inventariosCol = new Collection<Inventario>({ table: 'ce_inventarios', storageKey: 'nevoeiro.coleta.inventarios.v1' });
 export const contagensCol = new Collection<Contagem>({ table: 'ce_contagens', storageKey: 'nevoeiro.coleta.contagens.v1' });
 /** Situação da base de códigos de barra de cada filial (gravada só pela Edge Function). */
 export const basesCol = new Collection<BaseBarras>({ table: 'ce_bases', storageKey: 'nevoeiro.coleta.bases.v1' });
+/** Pista × Conveniência de cada categoria, escolhida pelo usuário (vale para a rede e os próximos inventários). */
+export const classesCol = new Collection<ClasseCategoria>({ table: 'ce_classes', storageKey: 'nevoeiro.coleta.classes.v1' });
+
+/** Classificação escolhida de cada categoria (nome → classe). */
+export function useClassesEscolhidas() {
+  const snap = useCollection(classesCol);
+  return useMemo(() => new Map(snap.list.map(x => [x.categoria || x.id, x.classe] as const)), [snap.list]);
+}
+/** Grava a classificação de uma categoria (Pista ou Conveniência). */
+export const escolherClasse = (categoria: string, classe: Classe) => classesCol.put({ id: categoria, categoria, classe });
 
 /** Leituras: uma coleção por inventário (só baixa as do inventário aberto). */
 const coletasPorInv = new Map<string, Collection<Coleta>>();

@@ -92,8 +92,14 @@ export function classeDaCategoria(categoria: string, classes: Classe[] = []): Cl
   return pista > classes.length - pista ? 'pista' : 'conveniencia';
 }
 
-/** Categorias com saldo, cada uma inteira numa classificação (Pista ou Conveniência). */
-export function categoriasDe(produtos: Produto[], classe?: Classe) {
+/** Classificação escolhida pelo usuário para uma categoria (vale para a rede toda; id = nome da categoria). */
+export type ClasseCategoria = SyncRow & { categoria: string; classe: Classe };
+
+/**
+ * Categorias com saldo, cada uma inteira numa classificação (Pista ou Conveniência): a escolhida pelo usuário
+ * (`escolhidas`) ou, sem escolha, a sugerida pelo nome da categoria.
+ */
+export function categoriasDe(produtos: Produto[], classe?: Classe, escolhidas?: Map<string, Classe>) {
   const m = new Map<string, { nome: string; classes: Classe[]; itens: number }>();
   produtos.forEach(p => {
     if (p.saldo === 0) return;
@@ -101,7 +107,7 @@ export function categoriasDe(produtos: Produto[], classe?: Classe) {
     c.itens++; c.classes.push(p.classe); m.set(p.categoria, c);
   });
   return [...m.values()]
-    .map(c => ({ nome: c.nome, itens: c.itens, classe: classeDaCategoria(c.nome, c.classes) }))
+    .map(c => ({ nome: c.nome, itens: c.itens, classe: escolhidas?.get(c.nome) ?? classeDaCategoria(c.nome, c.classes), escolhida: !!escolhidas?.has(c.nome) }))
     .filter(c => !classe || c.classe === classe)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }

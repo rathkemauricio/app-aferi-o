@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTela } from '../../ui/zoom';
 import { rotuloVersao } from '../../lib/versao';
+import { marcarUsoModulo, useOrdemRecentes } from '../../lib/recentes';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
@@ -27,7 +28,9 @@ export default function ModuleLauncher() {
     void supabase.from('profiles').select('user_id', { count: 'exact', head: true }).eq('ativo', false).eq('papel', 'usuario').eq('modulos', '{}')
       .then(({ count }) => setPendentes(count ?? 0));
   }, [isAdmin]);
-  const modulos = MODULES.filter(m => podeAcessar(m.id));
+  // No app, o módulo aberto por último fica em cima (na web, a ordem do catálogo).
+  const modulos = useOrdemRecentes(MODULES.filter(m => podeAcessar(m.id)));
+  const abrirModulo = (m: AppModule) => { marcarUsoModulo(m.id); router.push(m.route); };
   const { mode, colors, toggleTheme } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const s = useMemo(() => createStyles(colors, desktop), [colors, desktop]);
@@ -129,7 +132,7 @@ export default function ModuleLauncher() {
           <EmptyState icon={LockSimpleIcon} title="Nenhum módulo liberado" text="O administrador ainda não liberou módulos para a sua conta." />
         ) : null}
         <View style={s.grid}>
-          {modulos.map(m => <ModuleCard key={m.id} module={m} onOpen={() => router.push(m.route)} />)}
+          {modulos.map(m => <ModuleCard key={m.id} module={m} onOpen={() => abrirModulo(m)} />)}
           <View style={[s.tile, s.placeholder]}>
             <IconTile icon={SquaresFourIcon} tint="slate" size={44} />
             <Text style={t.bodyStrong}>Novos módulos</Text>

@@ -20,7 +20,7 @@ import {
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
 import {
-  apagarCopiaLocal, associarEan, basesCol, carregarErp, limparCopiasAntigas, salvarNoServidor, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, idDispositivo, indiceLeitura, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
+  apagarCopiaLocal, associarEan, basesCol, escolherClasse, useClassesEscolhidas, carregarErp, limparCopiasAntigas, salvarNoServidor, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, idDispositivo, indiceLeitura, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
 } from './store';
 import { lerPdfBarras } from './barras';
 import { htmlDivergencias, htmlDoInventario, type LinhaDivergente } from './impressao';
@@ -370,10 +370,10 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
         <Rotulo>Tipo de inventário</Rotulo>
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         <Cartao>
-          <Text style={[k.cTit, { color: c.text }]}>Classificação automática (Petros)</Text>
-          <Text style={[k.cTxt, { color: c.textMuted }]}>Produtos e categorias são separados pelo Petros entre Pista e Conveniência.</Text>
+          <Text style={[k.cTit, { color: c.text }]}>Pista e Conveniência</Text>
+          <Text style={[k.cTxt, { color: c.textMuted }]}>Importe o relatório de saldos com todas as categorias. Ao montar a contagem, cada categoria mostra se é Pista ou Conveniência: toque no rótulo para trocar. A escolha fica guardada para a rede e os próximos inventários.</Text>
           <View style={k.linha}><Pilula texto="Pista" tom="alerta" /><Pilula texto="Conveniência" tom="neutro" /></View>
-          <Text style={[k.cap, { color: c.textMuted }]}>Só entram itens com saldo diferente de zero na filial.</Text>
+          <Text style={[k.cap, { color: c.textMuted }]}>Sem escolha (marcadas com ?), o app sugere pelo nome: acessórios, aditivos, lubrificantes e filtros são Pista. Só entram itens com saldo diferente de zero na filial.</Text>
         </Cartao>
         <Rotulo>Saldos do Petros</Rotulo>
         <Segmentos opcoes={[{ id: 'arquivo', titulo: 'Arquivo exportado', sub: 'PDF ou CSV' }, { id: 'petros', titulo: 'API do Petros', sub: petros ? 'Conectada' : 'Em breve', desab: !petros }]} valor={fonte} onChange={setFonte} />
@@ -676,7 +676,8 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
   /** Completa sem nenhuma categoria marcada = todas as categorias; marcando, conta só as marcadas. */
   const todas = completa && !cats.length;
   const [buscaCat, setBuscaCat] = useState('');
-  const todasCats = useMemo(() => (produtos ? categoriasDe(produtos) : []), [produtos]);
+  const escolhidas = useClassesEscolhidas();
+  const todasCats = useMemo(() => (produtos ? categoriasDe(produtos, undefined, escolhidas) : []), [produtos, escolhidas]);
   const lista = useMemo(() => (completa ? todasCats : todasCats.filter(x => classes.includes(x.classe))), [todasCats, classes, completa]);
   // Pesquisando, procura em pista e conveniência; sem pesquisa, mostra as da classificação escolhida.
   const mostradas = useMemo(() => {
@@ -764,9 +765,14 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
                       return pct ? <Text style={[k.cap, { color: c.textMuted }]}>{pct}</Text> : null;
                     })()}
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <Text style={[k.cap, { color: c.textMuted }]}>{cat.itens.toLocaleString('pt-BR')} itens</Text>
-                    {buscaCat.trim() || classes.length > 1 || completa ? <Text style={[k.cap, k.b, { color: cat.classe === 'pista' ? c.accentText : c.textMuted }]}>{cat.classe === 'pista' ? 'Pista' : 'Conveniência'}</Text> : null}
+                    {/* Pista × Conveniência: toque para trocar (fica guardado para a rede e os próximos inventários) */}
+                    <Pressable accessibilityRole="button" accessibilityLabel={`${cat.nome}: ${cat.classe === 'pista' ? 'Pista' : 'Conveniência'}. Toque para trocar`} hitSlop={6}
+                      onPress={() => escolherClasse(cat.nome, cat.classe === 'pista' ? 'conveniencia' : 'pista')}
+                      style={[k.classeChip, { borderColor: cat.classe === 'pista' ? AMBER : c.borderStrong, backgroundColor: cat.classe === 'pista' ? c.warningSoft : c.surface }]}>
+                      <Text style={[k.cap, k.b, { color: c.text }]}>{cat.classe === 'pista' ? 'Pista' : 'Conveniência'}{cat.escolhida ? '' : ' ?'}</Text>
+                    </Pressable>
                   </View>
                 </Pressable>
               );
@@ -1769,5 +1775,6 @@ const k = StyleSheet.create({
   tile: { flex: 1, borderRadius: 12, borderTopWidth: 5, padding: 12, gap: 2, minHeight: 92 },
   tileN: { fontFamily: 'monospace', fontSize: 22, fontWeight: '700' },
   acaoMini: { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  classeChip: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
 });
 
