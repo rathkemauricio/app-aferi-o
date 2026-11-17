@@ -40,6 +40,8 @@ const SESSION_KEY = STORAGE_KEY + '.session.v1';
 const ULTIMO_AFERIDOR = 'nevoeiro.afericoes.ultimo-aferidor';
 const CRITERIA = ['Lenta', 'Rápida', 'Erro', 'Luz', 'Mangueira', 'BICO', 'Lacres', 'Sump', 'Vazão', 'Des. 60s'];
 const SCALE = ['Lenta', 'Rápida', 'Erro'];
+/** Lenta, Rápida e Erro com sinal: positivos aparecem como +20 (o valor guardado continua só o número). */
+const comSinal = (v: string | undefined) => { const x = String(v ?? '').trim(); const n = Number(x.replace(',', '.')); return x && !x.startsWith('+') && !Number.isNaN(n) && n > 0 ? `+${x}` : x; };
 const NUMERIC = ['Vazão', 'Des. 60s'];
 const EMPTY_DATA: DashboardData = { branches: [], audits: [] };
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
@@ -525,7 +527,7 @@ export default function AfericoesModule() {
                 {SCALE.includes(criterion) ? (
                   <View style={s.stepper}>
                     <Pressable accessibilityLabel="Diminuir 20" onPress={() => step(index, value, -20)} style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed]}><MinusIcon size={18} color={colors.text} weight="bold" /></Pressable>
-                    <Field estavel value={value} keyboardType="numeric" placeholder="0" textAlign="center" style={s.flex}
+                    <Field estavel value={comSinal(value)} keyboardType="numeric" placeholder="0" textAlign="center" style={s.flex}
                       onChangeText={v => { const parsed = Number(v.replace(',', '.')); setAuditCheck(index, v === '' || Number.isNaN(parsed) ? v : String(Math.max(-200, Math.min(200, Math.round(parsed / 20) * 20)))); }} />
                     <Pressable accessibilityLabel="Aumentar 20" onPress={() => step(index, value, 20)} style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed]}><PlusIcon size={18} color={colors.text} weight="bold" /></Pressable>
                   </View>
@@ -803,7 +805,7 @@ export default function AfericoesModule() {
             {r.done ? (
               <View style={s.critGrid}>
                 {CRITERIA.map((criterion, i) => {
-                  const v = r.checks[i] || '-';
+                  const v = (SCALE.includes(criterion) ? comSinal(r.checks[i]) : r.checks[i]) || '-';
                   const tone = codeTone(v);
                   return (
                     <View key={criterion} style={s.critCell}>
