@@ -15,7 +15,7 @@ import { ArrowRightIcon, BarcodeIcon, CaretDownIcon, FloppyDiskIcon, ClockCounte
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
-  bateBusca, categoriasDe, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
+  bateBusca, categoriasDe, progressoPorCategoria, type ClasseContagem, type Consolidado, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
   progressoContagem, progressoInventario, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
@@ -596,6 +596,18 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
   const completa = classes.includes('completa');
   const lista = useMemo(() => (produtos ? categoriasDe(produtos).filter(x => classes.includes(x.classe)) : []), [produtos, classes]);
   const itens = produtos ? escopo({ classe: completa ? 'completa' : 'mista', categorias: cats }, produtos).length : 0;
+  // Categorias que já têm contagem neste inventário (só aviso: dá para abrir outra com a mesma categoria) e o quanto já foi coletado de cada uma.
+  const col = useColetas(inv.id);
+  const progCat = useMemo(() => (produtos ? progressoPorCategoria(produtos, col.list) : new Map<string, { coletados: number; total: number; pct: number }>()), [produtos, col.list]);
+  const outras = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id && x.id !== editar?.id), [dados.contagens, inv.id, editar?.id]);
+  const jaEm = useMemo(() => {
+    const m = new Map<string, string[]>();
+    const todas = produtos ? categoriasDe(produtos).map(x => x.nome) : [];
+    outras.forEach(ct => (ct.classe === 'completa' ? todas : ct.categorias).forEach(cat => m.set(cat, [...(m.get(cat) ?? []), ct.nome])));
+    return m;
+  }, [outras, produtos]);
+  const completasAbertas = outras.filter(x => x.classe === 'completa');
+  const comContagem = lista.filter(x => jaEm.has(x.nome)).length;
   const alternarClasse = (v: ClasseContagem) => {
     if (!parcial) { setClasses([v]); setCats([]); return; }
     setClasses(cl => (cl.includes(v) ? (cl.length > 1 ? cl.filter(x => x !== v) : cl) : [...cl, v]));
@@ -628,16 +640,28 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
         <Segmentos opcoes={opcoes} valor={classes} multi onChange={alternarClasse} />
         {editar ? <Text style={[k.cap, { color: c.textMuted }]}>Incluir ou tirar categorias no meio da contagem: os itens das categorias novas entram como pendentes; o que já foi coletado continua salvo.</Text> : null}
         <Text style={[k.cap, { color: c.textMuted }]}>Completa: todas as categorias do ERP. Em inventário parcial, Pista e Conveniência podem ser combinadas.</Text>
+        {completasAbertas.length ? <Text style={[k.cap, k.b, { color: c.warning }]}>Já existe contagem completa neste inventário: {completasAbertas.map(x => x.nome).join(', ')}. Você ainda pode abrir outra.</Text> : null}
         {!completa && (
           <View style={[k.cartao, { padding: 0, backgroundColor: c.surface, borderColor: c.border, overflow: 'hidden' }]}>
-            <Text style={[k.cTit, { color: c.text, fontSize: 15, padding: space.lg, borderBottomWidth: 1, borderBottomColor: c.border }]}>Categorias de {classes.map(x => ROTULO_CLASSE[x]).join(' e ')}</Text>
+            <View style={{ padding: space.lg, borderBottomWidth: 1, borderBottomColor: c.border, gap: 2 }}>
+              <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Categorias de {classes.map(x => ROTULO_CLASSE[x]).join(' e ')}</Text>
+              {comContagem ? <Text style={[k.cap, { color: c.textMuted }]}>{comContagem} de {lista.length} já têm contagem neste inventário (em amarelo). Pode marcar de novo se quiser contar outra vez.</Text> : null}
+            </View>
             {!produtos ? <ActivityIndicator style={{ margin: 16 }} color={c.textMuted} /> : lista.map(cat => {
               const on = cats.includes(cat.nome);
               return (
                 <Pressable key={cat.nome} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => setCats(cs => (on ? cs.filter(x => x !== cat.nome) : [...cs, cat.nome]))}
                   style={[k.opcao, { borderBottomColor: c.border, paddingHorizontal: space.lg }]}>
                   <View style={[k.check, { borderColor: on ? NAVY : c.borderStrong, backgroundColor: on ? NAVY : 'transparent' }]}>{on ? <CheckIcon size={14} color="#fff" weight="bold" /> : null}</View>
-                  <Text style={[k.cTxt, { color: c.text, flex: 1 }]} numberOfLines={1}>{cat.nome}</Text>
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <Text style={[k.cTxt, { color: c.text }]} numberOfLines={1}>{cat.nome}</Text>
+                    {(() => {
+                      const em = jaEm.get(cat.nome), pg = progCat.get(cat.nome);
+                      const pct = pg && pg.coletados ? `${Math.round(pg.pct * 100)}% coletado` : '';
+                      if (em) return <Text style={[k.cap, k.b, { color: c.warning }]} numberOfLines={2}>Já em: {em.join(', ')}{pct ? ` · ${pct}` : ''}</Text>;
+                      return pct ? <Text style={[k.cap, { color: c.textMuted }]}>{pct}</Text> : null;
+                    })()}
+                  </View>
                   <Text style={[k.cap, { color: c.textMuted }]}>{cat.itens.toLocaleString('pt-BR')} itens</Text>
                 </Pressable>
               );
@@ -662,7 +686,8 @@ function ContagemTela({ c: ct, inv, dados, tela, nav }: { c: Contagem; inv: Inve
   const q = useMemo(() => quantidades(col.list, ct.id), [col.list, ct.id]);
   const itens = useMemo(() => (produtos ? escopo(ct, produtos, q) : []), [produtos, ct, q]);
   const lista = useMemo(() => itensDaRodada(r, itens, q), [r, itens, q]);
-  const prog = produtos ? progressoInventario(produtos, col.list).pct : 0;
+  // Percentual das categorias desta contagem (o mesmo do cartão da contagem), não do inventário inteiro.
+  const prog = produtos ? progressoContagem(ct, itens, q) : 0;
   const ativa = ct.rodadas[r - 1] === 'andamento' && inv.status !== 'encerrado' && !ct.pausada;
   const [sel, setSel] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);

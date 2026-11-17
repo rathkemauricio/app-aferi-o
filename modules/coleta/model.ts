@@ -175,6 +175,20 @@ export function progressoContagem(c: Contagem, itens: Produto[], q: Map<string, 
   return lista.length ? lista.filter(p => q.get(p.codigo)?.[r - 1] !== null && q.get(p.codigo)?.[r - 1] !== undefined).length / lista.length : 1;
 }
 
+/** Por categoria: itens com saldo e quantos deles já tiveram alguma coleta no inventário. */
+export function progressoPorCategoria(produtos: Produto[], coletas: Coleta[]) {
+  const coletados = new Set(coletas.map(c => c.codigo));
+  const m = new Map<string, { coletados: number; total: number; pct: number }>();
+  produtos.forEach(p => {
+    if (p.saldo === 0) return;
+    const x = m.get(p.categoria) ?? { coletados: 0, total: 0, pct: 0 };
+    x.total++; if (coletados.has(p.codigo)) x.coletados++;
+    x.pct = x.coletados / x.total;
+    m.set(p.categoria, x);
+  });
+  return m;
+}
+
 /** Itens distintos com alguma coleta, sobre o total de itens com saldo (não muda ao finalizar contagens). */
 export function progressoInventario(produtos: Produto[], coletas: Coleta[]) {
   const total = produtos.filter(p => p.saldo !== 0).length;
