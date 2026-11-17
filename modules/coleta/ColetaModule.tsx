@@ -1433,6 +1433,7 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
     if (!rel) return;
     // Mesmo formato do módulo Inventários: resumo, categorias e o detalhamento item a item das faltas e sobras.
     const cons = porCategoria(rel.linhas);
+    const geral = !soDela && produtos ? percentualGeral(produtos, contagens, col.list) : null;
     const n = (v: number) => fmtQ(v);
     const pct = (v: number | null) => (v === null ? '—' : `${fmtQ(v)}%`);
     const rs = (v: number, tem: boolean) => (tem ? brl(v) : '—');
@@ -1444,7 +1445,8 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
       metrica('Estoque sistema', n(t.sistema)), metrica('Contagem', n(t.contagem)), metrica('Falta', n(t.faltas), t.faltas ? 'neg' : ''), metrica('Sobra', n(t.sobras), t.sobras ? 'pos' : ''), metrica('Resultado', sinal(t.resultado), cor(t.resultado).trim()),
       metrica('Falta R$ (custo)', rs(t.custo.faltas, t.temCusto), 'neg'), metrica('Sobra R$ (custo)', rs(t.custo.sobras, t.temCusto), 'pos'), metrica('Resultado R$ (custo)', rs(t.custo.resultado, t.temCusto), cor(t.custo.resultado).trim()),
       metrica('Falta R$ (venda)', rs(t.venda.faltas, t.temVenda), 'neg'), metrica('Sobra R$ (venda)', rs(t.venda.sobras, t.temVenda), 'pos'), metrica('Resultado R$ (venda)', rs(t.venda.resultado, t.temVenda), cor(t.venda.resultado).trim()),
-      metrica('Acurácia', pct(t.acuracia)), metrica('Eficiência', pct(t.eficiencia)),
+      metrica(soDela ? 'Percentual da contagem (acurácia)' : 'Percentual contado (acurácia)', pct(t.acuracia)), metrica('Eficiência', pct(t.eficiencia)),
+      ...(geral ? [metrica('Percentual geral do arquivo', `${fmtQ(Math.round(geral.pct * 1000) / 10)}%`), metrica('Itens do arquivo coletados', `${geral.coletados.toLocaleString('pt-BR')} de ${geral.itens.toLocaleString('pt-BR')}`)] : []),
       metrica('Itens corretos', rel.corretos.toLocaleString('pt-BR')), metrica('Itens divergentes', rel.divergentes.toLocaleString('pt-BR')), metrica('Não encontrados', rel.naoEncontrados.toLocaleString('pt-BR')),
     ].join('');
     const linhaCat = (x: Consolidado, tot = false) => `<tr${tot ? ' class="tot"' : ''}><td>${esc(x.nome)}</td><td class="n">${n(x.itens)}</td><td class="n">${n(x.sistema)}</td><td class="n">${n(x.contagem)}</td><td class="n">${n(x.faltas)}</td><td class="n">${n(x.sobras)}</td><td class="n${cor(x.resultado)}">${sinal(x.resultado)}</td><td class="n">${rs(x.custo.faltas, x.temCusto)}</td><td class="n">${rs(x.custo.sobras, x.temCusto)}</td><td class="n${cor(x.custo.resultado)}">${rs(x.custo.resultado, x.temCusto)}</td><td class="n">${rs(x.venda.faltas, x.temVenda)}</td><td class="n">${rs(x.venda.sobras, x.temVenda)}</td><td class="n${cor(x.venda.resultado)}">${rs(x.venda.resultado, x.temVenda)}</td><td class="n">${pct(x.acuracia)}</td><td class="n">${pct(x.eficiencia)}</td></tr>`;
@@ -1454,7 +1456,7 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
     problemas.forEach(l => { const g = porCat.get(l.produto.categoria) ?? []; g.push(l); porCat.set(l.produto.categoria, g); });
     const detalhe = [...porCat.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')).map(([cat, g]) => `<tr class="grp"><td colspan="9">${esc(cat)}</td></tr>` + g.sort((a, b) => a.diferenca - b.diferenca).map(l =>
       `<tr><td>${esc(l.produto.codigo)}</td><td>${esc(l.produto.nome)}</td><td class="n">${n(l.produto.saldo)}</td><td class="n">${n(l.qtd)}</td><td class="n${cor(l.diferenca)}"><b>${sinal(l.diferenca)}</b></td><td class="n">${l.difCusto === null ? '—' : brl(l.difCusto)}</td><td class="n">${l.difVenda === null ? '—' : brl(l.difVenda)}</td><td>${l.status === 'divergente' ? (l.diferenca < 0 ? 'Falta' : 'Sobra') : 'Não encontrado'}</td><td>${esc(l.contagem)}</td></tr>`).join('')).join('');
-    const contagensTab = rel.porContagem.map(p => `<tr><td>${esc(p.contagem.nome)}</td><td class="n">${p.itens}</td><td class="n">${p.corretos}</td><td class="n">${p.divergentes}</td><td class="n">${p.naoEncontrados}</td></tr>`).join('');
+    const contagensTab = rel.porContagem.map(p => `<tr><td>${esc(p.contagem.nome)}</td><td class="n">${p.itens}</td><td class="n">${n(p.sistema)}</td><td class="n">${n(p.contado)}</td><td class="n"><b>${fmtQ(Math.round(p.pct * 1000) / 10)}%</b></td><td class="n">${p.corretos}</td><td class="n">${p.divergentes}</td><td class="n">${p.naoEncontrados}</td></tr>`).join('');
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Inventário ${esc(inv.codigo)}</title><style>
 @page{size:A4 landscape;margin:10mm}body{font:10px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:17px;margin:0 0 2px;color:${NAVY}}.sub{color:#5b6475;margin-bottom:8px}
 h2{font-size:12px;margin:12px 0 5px;color:${NAVY}}.grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}.m{background:#f2f4f7;border-radius:5px;padding:5px 6px}.m span{display:block;color:#5b6475;font-size:9px}.m b{font-size:13px;font-variant-numeric:tabular-nums}
@@ -1465,7 +1467,7 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
 <div class="sub">${esc(filial)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do ERP de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${esc(usuario)}` : ''}</div>
 <h2>Resumo</h2><div class="grid">${resumo}</div>
 <h2>Resultado por categoria</h2><table><tr><th>Categoria</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contagem</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">Resultado</th><th class="n">Falta R$ custo</th><th class="n">Sobra R$ custo</th><th class="n">Result. R$ custo</th><th class="n">Falta R$ venda</th><th class="n">Sobra R$ venda</th><th class="n">Result. R$ venda</th><th class="n">Acurácia</th><th class="n">Eficiência</th></tr>${categorias}</table>
-<h2>Resultado por contagem</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${contagensTab}</table>
+<h2>${soDela ? 'Resultado da contagem' : 'Resultado por contagem'}</h2><table><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contado</th><th class="n">Percentual</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr>${contagensTab}</table>
 <h2>Detalhamento: faltas e sobras (${problemas.length.toLocaleString('pt-BR')} itens)</h2><table><tr><th>Código</th><th>Produto</th><th class="n">Saldo</th><th class="n">Contado</th><th class="n">Dif.</th><th class="n">Dif. R$ custo</th><th class="n">Dif. R$ venda</th><th>Situação</th><th>Contagem</th></tr>${detalhe || '<tr><td colspan="9">Nenhuma falta ou sobra.</td></tr>'}</table>
 <p class="sub" style="margin-top:8px">Acurácia = contagem ÷ estoque sistema × 100. Eficiência = (1 − (falta + sobra) ÷ estoque sistema) × 100. Valores em R$ = diferença × preço unitário de custo ou de venda dos PDFs da carga.</p>
 </body></html>`;
@@ -1489,6 +1491,28 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
             {tile(rel.divergentes, 'Divergentes', [c.dangerSoft, c.danger])}
             {tile(rel.naoEncontrados, 'Não encontrados', [c.accentSoft, c.accent])}
           </View>
+          {(() => {
+            const t = porCategoria(rel.linhas).total;
+            const geralTela = !soDela && produtos ? percentualGeral(produtos, contagens, col.list) : null;
+            return (
+              <Cartao>
+                <View style={k.linha}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[k.cap, { color: c.textMuted }]}>{soDela ? 'Percentual da contagem' : 'Percentual contado'} (contado ÷ sistema)</Text>
+                    <Text style={[k.monoM, k.b, { color: c.text, fontSize: 22 }]}>{t.acuracia === null ? '—' : `${fmtQ(t.acuracia)}%`}</Text>
+                    <Text style={[k.cap, { color: c.textMuted }]}>{fmtQ(t.contagem)} de {fmtQ(t.sistema)} unidades</Text>
+                  </View>
+                  {geralTela ? (
+                    <View style={{ flex: 1 }}>
+                      <Text style={[k.cap, { color: c.textMuted }]}>Percentual geral do arquivo</Text>
+                      <Text style={[k.monoM, k.b, { color: c.text, fontSize: 22 }]}>{fmtQ(Math.round(geralTela.pct * 1000) / 10)}%</Text>
+                      <Text style={[k.cap, { color: c.textMuted }]}>{geralTela.coletados.toLocaleString('pt-BR')} de {geralTela.itens.toLocaleString('pt-BR')} itens coletados</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </Cartao>
+            );
+          })()}
           <Cartao>
             <Text style={[k.cTit, { color: c.text }]}>Resultado em R$</Text>
             {([['A preço de custo', rel.custo, rel.temCusto], ['A preço de venda', rel.venda, rel.temVenda]] as const).map(([t, v, tem]) => (
@@ -1524,10 +1548,10 @@ table{width:100%;border-collapse:collapse}th{background:${NAVY};color:#fff;text-
             </Cartao>
           ) : (
             <Cartao>
-              <Text style={[k.cTit, { color: c.text }]}>Resultado por contagem</Text>
+              <Text style={[k.cTit, { color: c.text }]}>{soDela ? 'Resultado da contagem' : 'Resultado por contagem'}</Text>
               {rel.porContagem.map((p, i) => (
                 <View key={p.contagem.id} style={[k.linha, { alignItems: 'flex-start', paddingVertical: 10, borderTopWidth: i ? 1 : 0, borderTopColor: c.border }]}>
-                  <View style={{ flex: 1 }}><Text style={[k.cTit, { color: c.text, fontSize: 16 }]}>{p.contagem.nome}</Text><Text style={[k.cap, { color: c.textMuted }]}>{p.itens.toLocaleString('pt-BR')} itens</Text></View>
+                  <View style={{ flex: 1 }}><Text style={[k.cTit, { color: c.text, fontSize: 16 }]}>{p.contagem.nome}</Text><Text style={[k.cap, { color: c.textMuted }]}>{p.itens.toLocaleString('pt-BR')} itens · {fmtQ(p.contado)} de {fmtQ(p.sistema)} unidades</Text><Text style={[k.monoM, k.b, { color: c.text }]}>{fmtQ(Math.round(p.pct * 1000) / 10)}% contado</Text></View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={[k.monoM, { color: c.text }]}>{p.corretos.toLocaleString('pt-BR')} corretos</Text>
                     <Text style={[k.monoM, { color: c.text }]}>{p.divergentes.toLocaleString('pt-BR')} divergentes</Text>

@@ -257,16 +257,18 @@ export function relatorio(produtos: Produto[], contagens: Contagem[], coletas: C
   const porItem = new Map<string, LinhaRelatorio>();
   const porContagem = ord.map(c => {
     const q = qPor.get(c.id)!, itens = escopo(c, produtos, q);
-    const r = { contagem: c, itens: itens.length, corretos: 0, divergentes: 0, naoEncontrados: 0 };
+    const r = { contagem: c, itens: itens.length, corretos: 0, divergentes: 0, naoEncontrados: 0, contado: 0, sistema: 0, pct: 0 };
     itens.forEach(p => {
       const f = resultadoFinal(p, q.get(p.codigo) ?? [null, null, null]);
       if (f.status === 'correto') r.corretos++; else if (f.status === 'divergente') r.divergentes++; else r.naoEncontrados++;
+      r.contado += f.qtd; r.sistema += Math.max(0, p.saldo);
       const ja = porItem.get(p.codigo);
       if (!ja || (!ja.coletado && f.coletado)) {
         const dif = f.qtd - p.saldo;
         porItem.set(p.codigo, { produto: p, qtd: f.qtd, status: f.status, contagem: c.nome, diferenca: dif, coletado: f.coletado, difCusto: vezes(dif, p.custo), difVenda: vezes(dif, p.venda) });
       }
     });
+    r.pct = fracao(r.contado, r.sistema); // unidades contadas ÷ saldo do sistema da contagem
     return r;
   });
   const linhas = [...porItem.values()].sort((a, b) => a.produto.nome.localeCompare(b.produto.nome, 'pt-BR'));
