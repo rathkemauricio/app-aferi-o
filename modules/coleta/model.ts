@@ -28,6 +28,8 @@ export type Inventario = SyncRow & {
   saldo_em?: string | null;
   /** Itens com saldo sem nenhum código de barras na base da filial. */
   sem_barras?: number;
+  /** Códigos de barra ligados a itens durante a coleta: { "<código de barras>": "<código interno>" }. */
+  eans_extra?: Record<string, string>;
 };
 /** Base fixa de códigos de barra da filial (id = filial_id). Os itens ficam no servidor (ce_barras). */
 export type BaseBarras = SyncRow & { arquivo: string; itens: number; eans: number; importado_em: string | null };
@@ -79,14 +81,29 @@ export function bateBusca(p: Produto, termo: string) {
   return t.split(/\s+/).every(w => nome.includes(w));
 }
 
+/**
+ * Categorias que são sempre da pista (acessórios, aditivos, lubrificantes, filtros…), qualquer que seja a
+ * classificação que veio com os itens. As demais seguem a maioria dos itens da categoria.
+ */
+const PISTA_CAT = /combust|lubrif|oleo|aditiv|acessor|arla|filtro|graxa|fluido|palheta|automotiv|pista/;
+export function classeDaCategoria(categoria: string, classes: Classe[] = []): Classe {
+  if (PISTA_CAT.test(normalizar(categoria))) return 'pista';
+  const pista = classes.filter(c => c === 'pista').length;
+  return pista > classes.length - pista ? 'pista' : 'conveniencia';
+}
+
+/** Categorias com saldo, cada uma inteira numa classificação (Pista ou Conveniência). */
 export function categoriasDe(produtos: Produto[], classe?: Classe) {
-  const m = new Map<string, { nome: string; classe: Classe; itens: number }>();
+  const m = new Map<string, { nome: string; classes: Classe[]; itens: number }>();
   produtos.forEach(p => {
-    if (p.saldo === 0 || (classe && p.classe !== classe)) return;
-    const c = m.get(p.categoria) ?? { nome: p.categoria, classe: p.classe, itens: 0 };
-    c.itens++; m.set(p.categoria, c);
+    if (p.saldo === 0) return;
+    const c = m.get(p.categoria) ?? { nome: p.categoria, classes: [], itens: 0 };
+    c.itens++; c.classes.push(p.classe); m.set(p.categoria, c);
   });
-  return [...m.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return [...m.values()]
+    .map(c => ({ nome: c.nome, itens: c.itens, classe: classeDaCategoria(c.nome, c.classes) }))
+    .filter(c => !classe || c.classe === classe)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 /* ---------- Quantidades por rodada ---------- */

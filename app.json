@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Postora",
+    "name": "EasyAudit",
     "slug": "postora",
     "scheme": "postora",
     "version": "1.0.12",
@@ -28,8 +28,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "O Postora usa suas fotos para definir a foto de perfil.",
-          "cameraPermission": "O Postora usa a câmera para tirar a foto de perfil."
+          "photosPermission": "O EasyAudit usa suas fotos para definir a foto de perfil.",
+          "cameraPermission": "O EasyAudit usa a câmera para tirar a foto de perfil."
         }
       ],
       "./plugins/withCmakeObjectPathMax.js",
@@ -45,8 +45,8 @@
     "web": {
       "output": "single",
       "favicon": "./assets/favicon.png",
-      "name": "Postora",
-      "shortName": "Postora",
+      "name": "EasyAudit",
+      "shortName": "EasyAudit",
       "themeColor": "#04142f",
       "backgroundColor": "#f5f6f8"
     },

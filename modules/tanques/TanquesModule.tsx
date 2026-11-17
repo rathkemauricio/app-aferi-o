@@ -11,7 +11,7 @@ import {
 import { Button, Card, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
-import { linhaVazia, medicoesCol, novaMedicao, useTanques } from './store';
+import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
 const AZUL = '#0e7490';
@@ -38,7 +38,7 @@ export default function TanquesModule() {
   const corpo = () => {
     if (tela.n === 'medicao') {
       const m = dados.medicoes.find(x => x.id === tela.id);
-      return m ? <MedicaoTela m={m} filialNome={rotuloDe(dados.filiais, m.filial_id)} combustiveis={dados.combustiveis} nomeComb={nomeComb} corComb={corComb} voltar={voltar} /> : <EmptyState icon={RulerIcon} title="Medição não encontrada" text="Ela pode ter sido excluída em outro aparelho." />;
+      return m ? <MedicaoTela m={m} filialNome={rotuloDe(dados.filiais, m.filial_id)} combustiveis={dados.combustiveis} nomeComb={nomeComb} corComb={corComb} voltar={voltar} anteriores={dados.medicoes} /> : <EmptyState icon={RulerIcon} title="Medição não encontrada" text="Ela pode ter sido excluída em outro aparelho." />;
     }
     if (tela.n === 'filial') return <FilialTela filialId={tela.id} dados={dados} abrir={id => ir({ n: 'medicao', id })} />;
     return <FiliaisTela dados={dados} abrir={id => ir({ n: 'filial', id })} />;
@@ -105,16 +105,19 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
   const filial = dados.filiais.find(f => f.id === filialId);
   const medicoes = dados.medicoes.filter(m => m.filial_id === filialId);
   const aberta = medicoes.find(m => m.status === 'rascunho');
+  const croqui = useTanquesDoCroqui(filialId);
   if (!filial) return <EmptyState icon={StorefrontIcon} title="Filial não encontrada" />;
   const nova = () => {
     if (aberta) { notify('Medição em andamento', `Já existe uma medição em andamento de ${dataBR(aberta.data)}. Termine ou exclua antes de abrir outra.`); abrir(aberta.id); return; }
-    abrir(novaMedicao(filialId, usuario, dados.medicoes));
+    abrir(novaMedicao(filialId, usuario, dados.medicoes, croqui));
   };
   return <>
     <Text style={t.title}>{filial.codigo} · {filial.nome}</Text>
     <Text style={t.caption}>{[filial.cidade, filial.uf].filter(Boolean).join(' / ')}</Text>
     <Button title={aberta ? 'Continuar medição em andamento' : 'Nova medição'} icon={aberta ? RulerIcon : PlusIcon} onPress={nova} />
-    <Text style={t.caption}>A nova medição já vem com os tanques da última medição desta filial.</Text>
+    <Text style={t.caption}>{croqui.length
+      ? `Tanques cadastrados no croqui: ${croqui.map(x => x.tanque).join(', ')}. A nova medição já vem com eles (número e combustível) e com a informada da última medição.`
+      : 'Esta filial não tem tanques no croqui: a nova medição vem com os tanques da última medição. Para cadastrá-los, desenhe os tanques no Croqui com o combustível de cada um.'}</Text>
     <SectionHeader title={`Medições (${medicoes.length})`} />
     {medicoes.length ? (
       <Card style={{ padding: space.xs, gap: 0 }}>
@@ -140,9 +143,10 @@ function NumeroCampo({ label, valor, onChange, editavel }: { label: string; valo
     onChangeText={v => { setTexto(v); const n = lerNumero(v); if (n !== null || !v.trim()) onChange(n); }} />;
 }
 
-function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }: {
-  m: Medicao; filialNome: string; combustiveis: Combustivel[]; nomeComb: (id: string) => string; corComb: (id: string) => string; voltar: () => void;
+function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, anteriores }: {
+  m: Medicao; filialNome: string; combustiveis: Combustivel[]; nomeComb: (id: string) => string; corComb: (id: string) => string; voltar: () => void; anteriores: Medicao[];
 }) {
+  const croqui = useTanquesDoCroqui(m.filial_id);
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const usuario = useUsuarioLogado();
@@ -200,6 +204,10 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }:
       </Card>
     ))}
     {!fin ? <Button title="Adicionar tanque" icon={PlusIcon} variant="secondary" onPress={() => salvar({ tanques: [...m.tanques, linhaVazia(String(m.tanques.length + 1))] })} /> : null}
+    {!fin && croqui.length && !confereComCroqui(m.tanques, croqui) ? (
+      <Button title={`Usar os tanques do croqui (${croqui.length})`} icon={ResetIcon} variant="secondary"
+        onPress={() => confirmAction('Usar os tanques do croqui?', `${croqui.map(x => `Tanque ${x.tanque}${x.combustivel ? ` · ${nomeComb(x.combustivel)}` : ''}`).join('\n')}\n\nTanques que já estão na medição mantêm o que foi digitado; os que não estão no croqui saem.`, 'Usar', () => aplicarCroqui(m, croqui, anteriores))} />
+    ) : null}
 
     {/* 2. Conferência por combustível: a venda e o recebimento são unificados */}
     <SectionHeader title="Conferência por combustível" />
@@ -254,8 +262,12 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar }:
   </>;
 }
 
+/** Os tanques da medição são os do croqui (mesmos números e combustíveis)? */
+const confereComCroqui = (linhas: LinhaTanque[], croqui: TanqueCroqui[]) =>
+  linhas.length === croqui.length && croqui.every(x => linhas.some(l => l.tanque.trim().toLowerCase() === x.tanque.trim().toLowerCase() && (!x.combustivel || l.combustivel === x.combustivel)));
+
 /** Relatório da medição (A4 paisagem): tanques medidos + conferência por combustível (venda unificada) + total geral. */
-function relatorioHtml(m: Medicao, filialNome: string, nomeComb: (id: string) => string) {
+export function relatorioHtml(m: Medicao, filialNome: string, nomeComb: (id: string) => string) {
   const r = resumo(m);
   const n = (v: number | null) => fmtL(v);
   const cor = (v: number) => (v < 0 ? 'neg' : v > 0 ? 'pos' : '');

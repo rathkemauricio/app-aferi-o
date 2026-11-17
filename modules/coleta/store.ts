@@ -98,6 +98,15 @@ async function baixarProdutos(inv: string): Promise<Produto[]> {
   return out;
 }
 
+/** Produtos do inventário (memória → aparelho → servidor), fora de um componente (ex.: PDF pela Agenda). */
+export async function carregarProdutos(inv: Inventario): Promise<Produto[]> {
+  const completo = (x: Produto[] | null): x is Produto[] => !!x && x.filter(p => p.saldo !== 0).length === inv.itens_total;
+  let l = memoria.get(inv.id) ?? null;
+  if (!completo(l)) l = await lerCache(inv.id);
+  if (!completo(l)) l = await baixarProdutos(inv.id);
+  return l;
+}
+
 /** Produtos do inventário: memória → aparelho → servidor. */
 export function useProdutos(inv: Inventario | undefined) {
   const [lista, setLista] = useState<Produto[] | null>(inv ? memoria.get(inv.id) ?? null : null);
@@ -119,7 +128,34 @@ export function useProdutos(inv: Inventario | undefined) {
     })();
     return () => { vivo = false; };
   }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { produtos: lista, erro };
+  // Códigos de barra cadastrados na coleta (em qualquer aparelho) entram nos itens sem baixar a carga de novo.
+  const extras = inv?.eans_extra;
+  const produtos = useMemo(() => {
+    if (!lista || !extras || !Object.keys(extras).length) return lista;
+    const por = new Map<string, string[]>();
+    Object.entries(extras).forEach(([ean, cod]) => por.set(cod, [...(por.get(cod) ?? []), ean]));
+    return lista.map(p => (por.has(p.codigo) ? { ...p, eans: [...new Set([...p.eans, ...por.get(p.codigo)!])] } : p));
+  }, [lista, extras]);
+  return { produtos, erro };
+}
+
+/**
+ * Liga um código de barras lido na coleta (não cadastrado) a um item da carga. No servidor ele entra no item e na
+ * base de códigos de barra em uso (vale para os próximos inventários); no inventário, sincroniza com os outros
+ * aparelhos. Sem internet, vale só para este inventário (devolve 'local').
+ */
+export async function associarEan(inventarioId: string, codigo: string, ean: string): Promise<'servidor' | 'local'> {
+  let onde: 'servidor' | 'local' = 'servidor';
+  try {
+    await chamar({ acao: 'associar_ean', inventario_id: inventarioId, codigo, ean });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '';
+    if (!/^(Não foi possível falar|Sem servidor)/.test(msg)) throw e; // recusado pelo servidor (ex.: código já é de outro item)
+    onde = 'local';
+  }
+  const atual = inventariosCol.get(inventarioId);
+  if (atual) inventariosCol.put({ ...atual, eans_extra: { ...(atual.eans_extra ?? {}), [ean]: codigo } });
+  return onde;
 }
 
 /**

@@ -237,7 +237,7 @@ const pagina = (titulo: string, texto: string, ok: boolean) => new Response(
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f6f8;font:16px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1b2230}
 main{max-width:420px;margin:16px;padding:28px;background:#fff;border:1px solid #e3e6ec;border-radius:16px;text-align:center}
 h1{font-size:20px;margin:0 0 8px;color:${ok ? '#16834a' : '#b42318'}}a{display:inline-block;margin-top:16px;padding:10px 18px;border-radius:10px;background:#4f46e5;color:#fff;text-decoration:none;font-weight:700}</style></head>
-<body><main><h1>${titulo}</h1><p>${texto}</p>${APP_URL ? `<a href="${APP_URL}/agenda">Voltar ao Postora</a>` : '<p>Pode fechar esta janela e voltar ao Postora.</p>'}</main></body></html>`,
+<body><main><h1>${titulo}</h1><p>${texto}</p>${APP_URL ? `<a href="${APP_URL}/agenda">Voltar ao EasyAudit</a>` : '<p>Pode fechar esta janela e voltar ao EasyAudit.</p>'}</main></body></html>`,
   { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
 );
 
@@ -245,14 +245,14 @@ async function retornoGoogle(url: URL) {
   if (url.searchParams.get('error')) return pagina('Conexão cancelada', 'A permissão do Google Agenda não foi concedida.', false);
   const userId = await lerEstado(url.searchParams.get('state') ?? '');
   const code = url.searchParams.get('code');
-  if (!userId || !code) return pagina('Link expirado', 'Volte ao Postora e toque em "Conectar Google Agenda" de novo.', false);
+  if (!userId || !code) return pagina('Link expirado', 'Volte ao EasyAudit e toque em "Conectar Google Agenda" de novo.', false);
   try {
     const t = await trocarToken({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI });
     let email = '';
     if (t.id_token) { try { email = JSON.parse(atob(t.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email ?? ''; } catch { /* sem e-mail */ } }
     const antiga = await conexaoDe(userId);
     const refresh = t.refresh_token ?? antiga?.refresh_token;
-    if (!refresh) return pagina('Não foi possível conectar', 'O Google não liberou o acesso contínuo. Remova o Postora em myaccount.google.com/permissions e conecte de novo.', false);
+    if (!refresh) return pagina('Não foi possível conectar', 'O Google não liberou o acesso contínuo. Remova o EasyAudit em myaccount.google.com/permissions e conecte de novo.', false);
     const { error } = await admin.from('agenda_google').upsert({
       user_id: userId, email, refresh_token: refresh, access_token: t.access_token,
       expira_em: new Date(Date.now() + t.expires_in * 1000).toISOString(), sync_token: null,
@@ -274,7 +274,7 @@ Deno.serve(async req => {
   try {
     const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
     const { data: u, error } = await admin.auth.getUser(token);
-    if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no Postora.' });
+    if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
     const { data: pode } = await admin.from('profiles').select('papel,ativo,modulos').eq('user_id', u.user.id).maybeSingle();
     if (!pode?.ativo || !(pode.papel === 'admin' || (pode.modulos ?? []).includes('agenda'))) return json(403, { erro: 'O módulo Agenda não está liberado para esta conta.' });
     const { acao } = await req.json().catch(() => ({ acao: '' }));

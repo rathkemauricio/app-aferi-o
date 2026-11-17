@@ -46,8 +46,8 @@ export function DesktopShell({ children }: { children: ReactNode }) {
     <View style={styles.shell}>
       <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
         <View style={[styles.brand, compact && styles.brandCompact]}>
-          <Image source={require('../assets/favicon.png')} style={styles.logo} accessibilityLabel="Postora" />
-          {!compact ? <View style={styles.brandCopy}><Text style={styles.brandName}>Postora</Text><Text style={styles.brandSub}>Rede Nevoeiro</Text></View> : null}
+          <Image source={require('../assets/favicon.png')} style={styles.logo} accessibilityLabel="EasyAudit" />
+          {!compact ? <View style={styles.brandCopy}><Text style={styles.brandName}>EasyAudit</Text><Text style={styles.brandSub}>Rede Nevoeiro</Text></View> : null}
           <IconButton icon={SidebarSimpleIcon} label={compact ? 'Expandir menu lateral' : 'Recolher menu lateral'} onPress={() => setCollapsed(value => !value)} />
         </View>
 

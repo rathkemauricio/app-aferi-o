@@ -8,7 +8,7 @@
 //
 // Publicar: npx supabase functions deploy notificar --no-verify-jwt
 // O JWT do usuário é conferido aqui dentro (as chaves novas do Supabase não são JWT, por isso --no-verify-jwt).
-// Secret opcional: APP_URL (endereço do Postora na web) para os links dos avisos.
+// Secret opcional: APP_URL (endereço do EasyAudit na web) para os links dos avisos.
 import { createClient, type User } from 'npm:@supabase/supabase-js@2.57.0';
 import { EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
 
@@ -55,11 +55,11 @@ async function contaPendente(user: User, perfil: Perfil | null) {
     html: layout({
       titulo: 'Nova conta aguardando aprovação',
       paragrafos: [
-        `<b>${esc(nomeDe(perfil))}</b>${perfil.nome ? ` (${esc(perfil.email)})` : ''} criou uma conta no Postora e confirmou o e-mail.`,
-        'A conta ainda não vê nenhum dado. Para liberar, abra o Postora em <b>Minha conta → Usuários e permissões</b> e escolha os módulos.',
+        `<b>${esc(nomeDe(perfil))}</b>${perfil.nome ? ` (${esc(perfil.email)})` : ''} criou uma conta no EasyAudit e confirmou o e-mail.`,
+        'A conta ainda não vê nenhum dado. Para liberar, abra o EasyAudit em <b>Minha conta → Usuários e permissões</b> e escolha os módulos.',
       ],
       botao: APP_URL ? { texto: 'Abrir usuários e permissões', url: `${APP_URL}/usuarios` } : undefined,
-      rodape: 'Você recebeu este aviso porque é administrador do Postora.',
+      rodape: 'Você recebeu este aviso porque é administrador do EasyAudit.',
     }),
   });
 
@@ -80,27 +80,27 @@ async function contaAlterada(perfil: Perfil | null, body: Record<string, unknown
       : (alvo.modulos ?? []).map(m => MODULOS[m] ?? m);
     await enviar({
       para: alvo.email,
-      assunto: 'Seu acesso ao Postora foi liberado',
+      assunto: 'Seu acesso ao EasyAudit foi liberado',
       html: layout({
         titulo: 'Acesso liberado',
         paragrafos: [
-          `Olá${alvo.nome ? `, ${esc(alvo.nome)}` : ''}! O administrador liberou a sua conta no Postora.`,
+          `Olá${alvo.nome ? `, ${esc(alvo.nome)}` : ''}! O administrador liberou a sua conta no EasyAudit.`,
           mods.length
             ? `Módulos liberados: <b>${mods.map(esc).join(', ')}</b>.`
             : 'Ainda não há módulos liberados para a sua conta. Fale com o administrador.',
           'Abra o app e entre com o seu e-mail e senha.',
         ],
-        botao: APP_URL ? { texto: 'Abrir o Postora', url: APP_URL } : undefined,
+        botao: APP_URL ? { texto: 'Abrir o EasyAudit', url: APP_URL } : undefined,
       }),
     });
   } else {
     await enviar({
       para: alvo.email,
-      assunto: 'Seu acesso ao Postora foi bloqueado',
+      assunto: 'Seu acesso ao EasyAudit foi bloqueado',
       html: layout({
         titulo: 'Acesso bloqueado',
         paragrafos: [
-          'O administrador bloqueou o acesso da sua conta no Postora. Os registros que você fez continuam guardados.',
+          'O administrador bloqueou o acesso da sua conta no EasyAudit. Os registros que você fez continuam guardados.',
           'Se achar que isso foi um engano, fale com o administrador.',
         ],
       }),
@@ -137,14 +137,14 @@ async function relatorio(user: User, perfil: Perfil | null, body: Record<string,
       responderPara: user.email,
       html: layout({
         titulo,
-        paragrafos: [`<b>${esc(remetente)}</b> enviou o ${nomeRelatorio} pelo Postora. O PDF está em anexo.`],
+        paragrafos: [`<b>${esc(remetente)}</b> enviou o ${nomeRelatorio} pelo EasyAudit. O PDF está em anexo.`],
         rodape: 'Para responder, use “Responder”: a resposta vai direto para quem enviou o relatório.',
       }),
       anexos: [{ filename: `${arquivo}.pdf`, content: pdf, encoding: 'base64', contentType: 'application/pdf' }],
     });
   } else {
     // Sem PDF (versão web): o próprio relatório vai no corpo do e-mail, com uma faixa de identificação.
-    const faixa = `<div style="font-family:Arial,sans-serif;font-size:13px;padding:10px 14px;margin-bottom:12px;background:#eef0ff;color:#3f37c9;border-radius:8px">Enviado por <b>${esc(remetente)}</b> pelo Postora.</div>`;
+    const faixa = `<div style="font-family:Arial,sans-serif;font-size:13px;padding:10px 14px;margin-bottom:12px;background:#eef0ff;color:#3f37c9;border-radius:8px">Enviado por <b>${esc(remetente)}</b> pelo EasyAudit.</div>`;
     const corpo = /<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, m => m + faixa) : faixa + html;
     await enviar({ para, assunto: titulo, responderPara: user.email, html: corpo });
   }

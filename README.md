@@ -1,4 +1,4 @@
-# Postora (Expo)
+# EasyAudit (Expo)
 
 Plataforma de módulos para gestão de postos de combustível, para celular (Android/iOS) e navegador. Depois do login, a central mostra os módulos liberados para a conta:
 
@@ -46,7 +46,7 @@ Tabelas: `profiles`, `filiais`, `filial_docs` (equipamentos, croqui e dimensiona
 
 Os e-mails saem de uma conta Gmail, via Nodemailer, por duas Edge Functions do Supabase (`supabase/functions/`):
 
-- `send-email`: Send Email Hook do Supabase Auth. Confirmação de cadastro, redefinição de senha, troca de e-mail, códigos e avisos de segurança, com o visual do Postora.
+- `send-email`: Send Email Hook do Supabase Auth. Confirmação de cadastro, redefinição de senha, troca de e-mail, códigos e avisos de segurança, com o visual do EasyAudit.
 - `notificar`: chamada pelo app. Avisa os administradores quando uma conta nova confirma o e-mail (uma vez por conta), avisa o usuário quando a conta é liberada ou bloqueada, e envia o relatório de aferição (PDF anexado no celular; no corpo do e-mail na web).
 
 Configurar (uma vez):

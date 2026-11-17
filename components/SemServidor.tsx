@@ -21,9 +21,9 @@ export function SemServidor() {
   };
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14, backgroundColor: '#0f1724' }}>
-      <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center' }}>Sem conexão com o servidor do Postora</Text>
+      <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center' }}>Sem conexão com o servidor do EasyAudit</Text>
       <Text style={{ color: '#c9d4e2', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
-        Este aparelho está sem a configuração do servidor, e o Postora não funciona sem login.{'\n'}
+        Este aparelho está sem a configuração do servidor, e o EasyAudit não funciona sem login.{'\n'}
         {nativo ? 'Toque abaixo para buscar a versão corrigida.' : 'Recarregue a página; se continuar, avise o administrador.'}
       </Text>
       {nativo ? (

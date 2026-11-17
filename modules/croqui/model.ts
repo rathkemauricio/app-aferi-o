@@ -48,8 +48,11 @@ export const elementosDoGrupo = (g: string) => (g === 'Bombas' ? bombasAtivas : 
  */
 export type Item = {
   id: string; type: string; x: number; y: number; w: number; h: number; rot: number; label: string;
+  /** Bomba: combustível de cada bico. Tanque: fuels[0] = combustível do tanque (usado pela Medição de Tanques). */
   bicos?: number; fuels?: string[]; ref?: string; bicosNum?: string[];
 };
+/** Combustível do tanque desenhado no croqui (id do catálogo), ou '' se ainda não foi escolhido. */
+export const combustivelDoTanque = (it: Item) => (it.fuels?.[0] && T[it.fuels[0]] ? it.fuels[0] : '');
 export type CroquiDoc = { items: Item[] };
 export const VW = 1000, VH = 640;
 
@@ -75,10 +78,12 @@ export function resumo(items: Item[]) {
 
 export function novoItem(type: string, items: Item[], x = 500, y = 320): Item {
   const t = T[type];
-  const comNome = ['ilha', 'loja', 'entrada', 'saida', 'lavagem', 'tanque'];
+  const comNome = ['ilha', 'loja', 'entrada', 'saida', 'lavagem'];
   return {
     id: novoItemId(), type, x: snap(x), y: snap(y), w: t.w, h: t.h, rot: 0,
-    label: t.k === 'b' ? String(items.filter(i => T[i.type]?.k === 'b').length + 1) : comNome.includes(type) ? t.n : '',
+    label: t.k === 'b' ? String(items.filter(i => T[i.type]?.k === 'b').length + 1)
+      : type === 'tanque' ? `Tanque ${items.filter(i => i.type === 'tanque').length + 1}`
+      : comNome.includes(type) ? t.n : '',
   };
 }
 
@@ -272,7 +277,7 @@ function shape(it: Item, bandeira: string) {
   switch (t.k) {
     case 'b': return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${c}" ${s}/><rect x="${x + 4}" y="${y + 4}" width="${w - 8}" height="${h * 0.28}" rx="3" fill="#fff" opacity="0.85"/><path d="M${w / 2} ${y + h * 0.5} q8 4 6 18" stroke="#222" stroke-width="3" fill="none" stroke-linecap="round"/>${dots(it)}`;
     case 'o': return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${c}" fill-opacity="0.18" stroke="${c}" stroke-width="2" stroke-dasharray="8 6"/>`;
-    case 't': return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${c}" fill-opacity="0.85" stroke="#222" stroke-dasharray="5 4"/>`;
+    case 't': { const f = combustivelDoTanque(it); return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${f ? T[f].c : c}" fill-opacity="0.85" stroke="#222" stroke-dasharray="5 4"/>`; }
     case 'm': {
       const f = BANDEIRAS[bandeira] ?? BANDEIRAS.branca;
       return `<rect x="-4" y="${y + h * 0.45}" width="8" height="${h * 0.55}" fill="#555"/><rect x="${x}" y="${y}" width="${w}" height="${h * 0.5}" rx="5" fill="${f.c}" stroke="#000" stroke-opacity="0.4" stroke-width="1.5"/>` +
@@ -292,6 +297,11 @@ function rotulo(it: Item, t: TipoInfo, cor: string) {
   if (t.k === 'b') {
     const y = -it.h / 2 + 4 + it.h * 0.14;
     return `<text x="0" y="${y}" transform="rotate(${-it.rot} 0 ${y})" text-anchor="middle" dy="0.35em" font-size="10.5" font-weight="800" fill="#1b1f24">${esc(it.label)}</text>`;
+  }
+  const comb = t.k === 't' ? combustivelDoTanque(it) : '';
+  if (comb) {
+    // Tanque: número em cima e o combustível embaixo.
+    return `<g transform="rotate(${-it.rot})"><text text-anchor="middle" dy="-0.15em" font-size="12" font-weight="700" fill="${cor}">${esc(it.label)}</text><text text-anchor="middle" dy="1.05em" font-size="9.5" fill="${cor}">${esc(T[comb].n)}</text></g>`;
   }
   return `<text transform="rotate(${-it.rot})" text-anchor="middle" dy="0.35em" font-size="12" font-weight="600" fill="${cor}">${esc(it.label)}</text>`;
 }

@@ -50,33 +50,33 @@ function montar(payload: HookPayload): Envio[] {
   // Link que volta para o app instalado (postora://, exp://): só abre no celular.
   const destino = d.redirect_to || d.site_url;
   const dicaApp = destino && !/^https?:\/\//i.test(destino)
-    ? ['<i>Abra este e-mail no celular em que o Postora está instalado: o botão abre o app direto na tela certa.</i>']
+    ? ['<i>Abra este e-mail no celular em que o EasyAudit está instalado: o botão abre o app direto na tela certa.</i>']
     : [];
 
   switch (tipo) {
     case 'signup':
       return [{
         para: email,
-        assunto: 'Confirme seu e-mail no Postora',
+        assunto: 'Confirme seu e-mail no EasyAudit',
         html: layout({
           titulo: 'Confirme seu e-mail',
           paragrafos: [
-            'Você criou uma conta no Postora com este endereço. Confirme o e-mail para continuar.',
+            'Você criou uma conta no EasyAudit com este endereço. Confirme o e-mail para continuar.',
             'Depois da confirmação, o administrador precisa liberar o seu acesso e escolher os módulos que você vai usar.',
             ...dicaApp,
           ],
           botao: { texto: 'Confirmar e-mail', url: link(d.token_hash) },
-          rodape: 'Se você não criou uma conta no Postora, ignore este e-mail.',
+          rodape: 'Se você não criou uma conta no EasyAudit, ignore este e-mail.',
         }),
       }];
 
     case 'recovery':
       return [{
         para: email,
-        assunto: 'Redefinir sua senha do Postora',
+        assunto: 'Redefinir sua senha do EasyAudit',
         html: layout({
           titulo: 'Redefinir senha',
-          paragrafos: ['Recebemos um pedido para redefinir a senha da sua conta no Postora. Toque no botão para criar uma nova senha.', ...dicaApp],
+          paragrafos: ['Recebemos um pedido para redefinir a senha da sua conta no EasyAudit. Toque no botão para criar uma nova senha.', ...dicaApp],
           botao: { texto: 'Criar nova senha', url: link(d.token_hash) },
           rodape: 'Se você não pediu a redefinição, ignore este e-mail: sua senha continua a mesma.',
         }),
@@ -85,10 +85,10 @@ function montar(payload: HookPayload): Envio[] {
     case 'invite':
       return [{
         para: email,
-        assunto: 'Você foi convidado para o Postora',
+        assunto: 'Você foi convidado para o EasyAudit',
         html: layout({
-          titulo: 'Convite para o Postora',
-          paragrafos: ['Você recebeu um convite para usar o Postora. Aceite pelo botão abaixo e defina sua senha.', ...dicaApp],
+          titulo: 'Convite para o EasyAudit',
+          paragrafos: ['Você recebeu um convite para usar o EasyAudit. Aceite pelo botão abaixo e defina sua senha.', ...dicaApp],
           botao: { texto: 'Aceitar convite', url: link(d.token_hash) },
         }),
       }];
@@ -96,30 +96,30 @@ function montar(payload: HookPayload): Envio[] {
     case 'magiclink':
       return [{
         para: email,
-        assunto: 'Seu link de acesso ao Postora',
+        assunto: 'Seu link de acesso ao EasyAudit',
         html: layout({
-          titulo: 'Entrar no Postora',
+          titulo: 'Entrar no EasyAudit',
           paragrafos: ['Use o botão abaixo para entrar na sua conta. O link vale por pouco tempo e só pode ser usado uma vez.', ...dicaApp],
-          botao: { texto: 'Entrar no Postora', url: link(d.token_hash) },
+          botao: { texto: 'Entrar no EasyAudit', url: link(d.token_hash) },
         }),
       }];
 
     case 'email':
       return [{
         para: email,
-        assunto: 'Seu código de acesso ao Postora',
+        assunto: 'Seu código de acesso ao EasyAudit',
         html: layout({
           titulo: 'Código de acesso',
-          paragrafos: ['Use este código para entrar no Postora:'],
+          paragrafos: ['Use este código para entrar no EasyAudit:'],
           codigo: d.token,
-          botao: d.token_hash ? { texto: 'Entrar no Postora', url: link(d.token_hash) } : undefined,
+          botao: d.token_hash ? { texto: 'Entrar no EasyAudit', url: link(d.token_hash) } : undefined,
         }),
       }];
 
     case 'reauthentication':
       return [{
         para: email,
-        assunto: 'Código de confirmação do Postora',
+        assunto: 'Código de confirmação do EasyAudit',
         html: layout({
           titulo: 'Confirme que é você',
           paragrafos: ['Use este código para confirmar a alteração na sua conta:'],
@@ -135,10 +135,10 @@ function montar(payload: HookPayload): Envio[] {
       if (d.token_hash_new && email && email !== novo) {
         envios.push({
           para: email,
-          assunto: 'Confirme a troca de e-mail no Postora',
+          assunto: 'Confirme a troca de e-mail no EasyAudit',
           html: layout({
             titulo: 'Confirme a troca de e-mail',
-            paragrafos: [`Foi pedida a troca do e-mail da sua conta no Postora para <b>${esc(novo)}</b>. Confirme pelo botão abaixo.`, ...dicaApp],
+            paragrafos: [`Foi pedida a troca do e-mail da sua conta no EasyAudit para <b>${esc(novo)}</b>. Confirme pelo botão abaixo.`, ...dicaApp],
             botao: { texto: 'Confirmar troca', url: link(d.token_hash_new) },
             rodape: 'Se você não pediu esta troca, não confirme e altere a sua senha.',
           }),
@@ -146,10 +146,10 @@ function montar(payload: HookPayload): Envio[] {
       }
       envios.push({
         para: novo,
-        assunto: 'Confirme seu novo e-mail no Postora',
+        assunto: 'Confirme seu novo e-mail no EasyAudit',
         html: layout({
           titulo: 'Confirme seu novo e-mail',
-          paragrafos: [`Este endereço foi informado como o novo e-mail da conta${email && email !== novo ? ` <b>${esc(email)}</b>` : ''} no Postora. Confirme pelo botão abaixo.`, ...dicaApp],
+          paragrafos: [`Este endereço foi informado como o novo e-mail da conta${email && email !== novo ? ` <b>${esc(email)}</b>` : ''} no EasyAudit. Confirme pelo botão abaixo.`, ...dicaApp],
           botao: { texto: 'Confirmar novo e-mail', url: link(d.token_hash) },
         }),
       });
@@ -157,27 +157,27 @@ function montar(payload: HookPayload): Envio[] {
     }
 
     case 'password_changed_notification':
-      return [aviso(email, 'Sua senha do Postora foi alterada', 'Senha alterada', 'A senha da sua conta no Postora acabou de ser alterada.')];
+      return [aviso(email, 'Sua senha do EasyAudit foi alterada', 'Senha alterada', 'A senha da sua conta no EasyAudit acabou de ser alterada.')];
     case 'email_changed_notification':
-      return [aviso(d.old_email || email, 'O e-mail da sua conta no Postora foi alterado', 'E-mail alterado',
-        `O e-mail da sua conta no Postora foi alterado${user.email ? ` para <b>${esc(user.email)}</b>` : ''}.`)];
+      return [aviso(d.old_email || email, 'O e-mail da sua conta no EasyAudit foi alterado', 'E-mail alterado',
+        `O e-mail da sua conta no EasyAudit foi alterado${user.email ? ` para <b>${esc(user.email)}</b>` : ''}.`)];
     case 'phone_changed_notification':
-      return [aviso(email, 'O telefone da sua conta no Postora foi alterado', 'Telefone alterado', 'O telefone da sua conta no Postora foi alterado.')];
+      return [aviso(email, 'O telefone da sua conta no EasyAudit foi alterado', 'Telefone alterado', 'O telefone da sua conta no EasyAudit foi alterado.')];
     case 'identity_linked_notification':
     case 'identity_unlinked_notification':
-      return [aviso(email, 'Forma de login alterada no Postora', 'Forma de login alterada', 'Uma forma de login foi vinculada ou desvinculada da sua conta no Postora.')];
+      return [aviso(email, 'Forma de login alterada no EasyAudit', 'Forma de login alterada', 'Uma forma de login foi vinculada ou desvinculada da sua conta no EasyAudit.')];
     case 'mfa_factor_enrolled_notification':
     case 'mfa_factor_unenrolled_notification':
-      return [aviso(email, 'Verificação em duas etapas alterada no Postora', 'Verificação em duas etapas', 'A verificação em duas etapas da sua conta no Postora foi alterada.')];
+      return [aviso(email, 'Verificação em duas etapas alterada no EasyAudit', 'Verificação em duas etapas', 'A verificação em duas etapas da sua conta no EasyAudit foi alterada.')];
 
     default:
       // Tipo novo/desconhecido: envia um e-mail genérico com link (se houver) para não travar o login.
       return [{
         para: email,
-        assunto: 'Ação na sua conta do Postora',
+        assunto: 'Ação na sua conta do EasyAudit',
         html: layout({
           titulo: 'Ação na sua conta',
-          paragrafos: ['Recebemos uma solicitação para a sua conta no Postora.'],
+          paragrafos: ['Recebemos uma solicitação para a sua conta no EasyAudit.'],
           codigo: d.token_hash ? undefined : d.token || undefined,
           botao: d.token_hash ? { texto: 'Continuar', url: link(d.token_hash) } : undefined,
         }),
@@ -189,7 +189,7 @@ function aviso(para: string, assunto: string, titulo: string, texto: string): En
   return {
     para,
     assunto,
-    html: layout({ titulo, paragrafos: [texto], rodape: 'Se não foi você, altere sua senha imediatamente e fale com o administrador do Postora.' }),
+    html: layout({ titulo, paragrafos: [texto], rodape: 'Se não foi você, altere sua senha imediatamente e fale com o administrador do EasyAudit.' }),
   };
 }
 

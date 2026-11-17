@@ -22,7 +22,7 @@ function situacao(a: AuditRelatorio) {
   return { texto: 'Conforme', cls: 'st-c' };
 }
 
-export function auditReportHtml(a: AuditRelatorio, marca = 'Postora') {
+export function auditReportHtml(a: AuditRelatorio, marca = 'EasyAudit') {
   const st = situacao(a);
   const feitos = a.results.filter(r => r.done);
   const cont = { C: 0, OB: 0, NC: 0, NA: 0 } as Record<string, number>;

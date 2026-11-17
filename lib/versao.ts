@@ -10,5 +10,5 @@ export const BUILD = Platform.OS === 'android' ? Constants.expoConfig?.android?.
 const atualizadoEm = (() => {
   try { return Platform.OS !== 'web' && Updates.isEnabled && !Updates.isEmbeddedLaunch ? Updates.createdAt : null; } catch { return null; }
 })();
-/** Ex.: "Postora 1.0.12 (13) · atualização 16/11 18:40" no app, "Postora 1.0.12 · web" no painel. */
-export const rotuloVersao = `Postora ${VERSAO}${BUILD ? ` (${BUILD})` : ''}${Platform.OS === 'web' ? ' · web' : ''}${atualizadoEm ? ` · atualização ${atualizadoEm.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}`;
+/** Ex.: "EasyAudit 1.0.12 (13) · atualização 16/11 18:40" no app, "EasyAudit 1.0.12 · web" no painel. */
+export const rotuloVersao = `EasyAudit ${VERSAO}${BUILD ? ` (${BUILD})` : ''}${Platform.OS === 'web' ? ' · web' : ''}${atualizadoEm ? ` · atualização ${atualizadoEm.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}`;

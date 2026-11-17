@@ -114,7 +114,7 @@ Deno.serve(async req => {
   try {
     const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
     const { data: u, error } = await admin.auth.getUser(token);
-    if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no Postora.' });
+    if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
     const { data: p } = await admin.from('profiles').select('papel,ativo').eq('user_id', u.user.id).maybeSingle();
     if (!p?.ativo || p.papel !== 'admin') return json(403, { erro: 'Somente o administrador cadastra usuários.' });
     const body = await req.json().catch(() => ({}));

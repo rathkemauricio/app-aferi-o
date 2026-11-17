@@ -271,9 +271,9 @@ function Brand() {
   return (
     <Animated.View entering={FadeIn.duration(500).delay(120)} style={p.brandRow}>
       <View style={p.logoWrap}>
-        <Image source={require('../assets/favicon.png')} style={{ width: 30, height: 30 }} accessibilityLabel="Postora" />
+        <Image source={require('../assets/favicon.png')} style={{ width: 30, height: 30 }} accessibilityLabel="EasyAudit" />
       </View>
-      <Text style={p.brandText}>postora</Text>
+      <Text style={p.brandText}>EasyAudit</Text>
     </Animated.View>
   );
 }
@@ -404,7 +404,7 @@ export function traduzirErro(e: { message?: string; status?: number; code?: stri
   if (!e) return '';
   if (msg.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
   if (msg.includes('email not confirmed')) return 'Este e-mail ainda não foi confirmado. Abra o link que enviamos ou reenvie a confirmação.';
-  if (msg.includes('banned') || e.code === 'user_banned') return 'Este usuário está inativo. Fale com o administrador do Postora.';
+  if (msg.includes('banned') || e.code === 'user_banned') return 'Este usuário está inativo. Fale com o administrador do EasyAudit.';
   if (msg.includes('user already registered') || e.code === 'user_already_exists') return 'Já existe uma conta com este e-mail. Use Entrar ou Esqueci a senha.';
   if (e.status === 429 || msg.includes('rate limit') || msg.includes('security purposes')) return 'Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo.';
   if (msg.includes('password') && (msg.includes('weak') || msg.includes('should'))) return 'A senha não atende à política de segurança do servidor. Use uma senha mais forte.';

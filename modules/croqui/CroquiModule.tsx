@@ -233,6 +233,23 @@ export default function CroquiModule() {
                     <Field estavel label="Altura" style={s.flex} keyboardType="numeric" value={String(item.h)} onChangeText={v => patch(item.id, { h: Math.max(10, Math.min(640, Number(v) || 10)) })} />
                   </View>
                 </>}
+                {item.type === 'tanque' && (
+                  <View style={s.group}>
+                    <Text style={t.label}>Combustível do tanque</Text>
+                    <View style={s.fuels}>
+                      {tiposBomba().map(k => {
+                        const on = item.fuels?.[0] === k;
+                        return (
+                          <Pressable key={k} onPress={() => patch(item.id, { fuels: [k] })}
+                            style={[s.fuel, on && { borderColor: T[k].c, borderWidth: 2 }]} accessibilityLabel={T[k].n} accessibilityState={{ selected: on }}>
+                            <View style={[s.swatch, { backgroundColor: T[k].c }]} /><Text style={[t.caption, on && { color: colors.text, fontWeight: '700' }]}>{T[k].n}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Text style={t.caption}>Os tanques do croqui (número e combustível) entram prontos na Medição de Tanques desta filial.</Text>
+                  </View>
+                )}
                 {T[item.type]?.k === 'b' && !espelhada(item) && <>
                   <View style={s.group}>
                     <Text style={t.label}>Bicos</Text>

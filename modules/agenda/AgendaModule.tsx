@@ -12,6 +12,7 @@ import { createTypography, pageMaxWidth, radius, space, ThemeContext, type Theme
 import {
   dataDe, dataValida, diaLongo, type Evento, excluirEvento, hojeIso, horaValida, horario, isoDe, MESES, ocorreEm, salvarEvento, SEMANA, uid, useAgenda, useGoogleAgenda,
 } from './store';
+import { FiltroFilial, RealizadoNoDia, useRealizados } from './Realizados';
 
 const dataHora = (iso: string | null) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
 
@@ -26,6 +27,9 @@ export default function AgendaModule() {
   const [mes, setMes] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [editando, setEditando] = useState<Evento | null>(null);
   const [busca, setBusca] = useState('');
+  /** Filial do "Realizado neste dia" ('' = todas). */
+  const [filialRealizado, setFilialRealizado] = useState('');
+  const realizados = useRealizados(filiais, filialRealizado);
 
   const voltar = () => { if (router.canGoBack()) router.back(); else router.replace('/'); };
   const nomeFilial = (id: string | null) => { const f = id ? filiais.find(x => x.id === id) : undefined; return f ? `${f.codigo} · ${f.nome}` : ''; };
@@ -119,7 +123,10 @@ export default function AgendaModule() {
                     <View style={[s.diaBola, sel && { backgroundColor: colors.accent }, !sel && hoje && { borderWidth: 1.5, borderColor: colors.accent }]}>
                       <Text style={[t.body, { fontVariant: ['tabular-nums'] }, fora && { color: colors.textFaint }, sel && { color: colors.primaryText ?? '#fff', fontWeight: '800' }]}>{dataDe(c).getDate()}</Text>
                     </View>
-                    <View style={[s.ponto, { backgroundColor: comEvento.has(c) ? (sel ? colors.accent : colors.textMuted) : 'transparent' }]} />
+                    <View style={{ flexDirection: 'row', gap: 2 }}>
+                      <View style={[s.ponto, { backgroundColor: comEvento.has(c) ? (sel ? colors.accent : colors.textMuted) : 'transparent' }]} />
+                      {realizados.porDia.has(c) ? <View style={[s.ponto, { backgroundColor: colors.success }]} /> : null}
+                    </View>
                   </Pressable>
                 );
               })}
@@ -133,6 +140,12 @@ export default function AgendaModule() {
           </View>
           {doDia.length ? <Card style={s.lista}>{doDia.map(linhaEvento)}</Card>
             : <EmptyState icon={CalendarBlankIcon} title={q ? 'Nenhum evento encontrado' : 'Nada marcado neste dia'} text={q ? 'Confira o que foi digitado.' : 'Toque em "Novo evento" para marcar uma visita, auditoria ou reunião.'} />}
+          {!q && realizados.algum ? <>
+            <SectionHeader title={`Realizado neste dia (${(realizados.porDia.get(dia) ?? []).length})`} />
+            <FiltroFilial filiais={filiais} valor={filialRealizado} onChange={setFilialRealizado} />
+            <Text style={t.caption}>Inventários encerrados, medições de tanques, aferições e auditorias concluídos neste dia. Toque para abrir o relatório em PDF. Os dias com atividade concluída têm um ponto verde no calendário.</Text>
+            <RealizadoNoDia itens={realizados.porDia.get(dia) ?? []} nome={realizados.nome} mostrarFilial={!filialRealizado} />
+          </> : null}
           {!q && proximos.length ? <>
             <SectionHeader title="Próximos" />
             <Card style={s.lista}>{proximos.map(linhaEvento)}</Card>

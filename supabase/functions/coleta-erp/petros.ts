@@ -41,7 +41,7 @@ function paraProduto(x: any): ProdutoErp {
   };
 }
 
-/** Produtos com saldo da filial (código da filial no cadastro do Postora = código da filial no Petros). */
+/** Produtos com saldo da filial (código da filial no cadastro do EasyAudit = código da filial no Petros). */
 export async function saldosPetros(filialCodigo: string): Promise<ProdutoErp[]> {
   if (!petrosConfigurado()) throw new Error('A API do Petros ainda não foi configurada no servidor. Use o arquivo exportado pelo Petros.');
   const out: ProdutoErp[] = [];

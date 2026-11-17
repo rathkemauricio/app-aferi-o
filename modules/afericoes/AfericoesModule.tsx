@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useAuth, useUsuarioLogado } from '../../lib/auth';
 import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
+import { afericoesCol } from './registros';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { CroquiCanvas } from '../croqui/Canvas';
 import { Bico3D, BicoFlutuante, Brilho } from './BicoEmFoco';
@@ -34,7 +35,7 @@ const MIGRATED_KEY = STORAGE_KEY + '.migrado.v2';
 type AuditRow = SyncRow & { branch: string; service_date: string; status: string; payload: { kind: 'audit'; value: Audit } };
 type Equipamentos = { pumps: Pump[] };
 // Inspeções continuam em service_records. Filiais e equipamentos vêm do cadastro compartilhado (lib/data).
-const auditsCol = new Collection<AuditRow>({ table: 'service_records', storageKey: 'nevoeiro.afericoes.audits.v2', softDelete: false, filter: q => q.eq('payload->>kind', 'audit') });
+const auditsCol = afericoesCol as unknown as Collection<AuditRow>; // mesma coleção usada pela Agenda (registros.ts)
 function auditRow(a: Audit): AuditRow { return ({ id: a.id, branch: a.branchName, service_date: a.date || today(), status: 'done', payload: { kind: 'audit', value: a } }); }
 const SESSION_KEY = STORAGE_KEY + '.session.v1';
 const ULTIMO_AFERIDOR = 'nevoeiro.afericoes.ultimo-aferidor';
@@ -266,7 +267,7 @@ export default function AfericoesModule() {
   const filteredAudits = useMemo(() => data.audits.filter(a => (!historyBranch || (a.branchName + ' ' + a.branchCode).toLowerCase().includes(historyBranch.toLowerCase())) && (!historyFrom || a.date >= historyFrom) && (!historyTo || a.date <= historyTo)).sort((a, b) => b.date.localeCompare(a.date)), [data.audits, historyBranch, historyFrom, historyTo]);
   const pumpCount = data.branches.reduce((sum, b) => sum + b.pumps.length, 0);
   const nozzleCount = data.branches.reduce((sum, b) => sum + b.pumps.reduce((n, p) => n + p.nozzles.length, 0), 0);
-  const exportBackup = () => Share.share({ title: 'Backup Postora', message: JSON.stringify(data, null, 2) });
+  const exportBackup = () => Share.share({ title: 'Backup EasyAudit', message: JSON.stringify(data, null, 2) });
   const importBackup = (replace: boolean) => {
     try {
       const parsed = JSON.parse(importText) as DashboardData;

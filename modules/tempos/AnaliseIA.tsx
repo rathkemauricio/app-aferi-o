@@ -82,7 +82,7 @@ ul{margin:0;padding-left:16px}.aviso{margin-top:10px;color:#5b6475;font-size:10p
 <h2>Resumo</h2><p>${esc(a.resumo ?? '')}</p>${a.comparacao?.comentario ? `<p>${esc(a.comparacao.comentario)}</p>` : ''}
 ${linhas ? `<h2>Por turno e setor</h2><table><tr><th>Turno</th><th>Setor</th><th class="n">Funcionários</th><th>Observação</th></tr>${linhas}</table>` : ''}
 <h2>Justificativa</h2><ul>${li(a.justificativa)}</ul><h2>Riscos</h2><ul>${li(a.riscos)}</ul><h2>Recomendações</h2><ul>${li(a.recomendacoes)}</ul><h2>Dados que faltam</h2><ul>${li(a.dados_faltantes)}</ul>
-<div class="aviso">Análise gerada por inteligência artificial (Google Gemini) a partir dos tempos cronometrados no Postora. Confira antes de decidir.</div></body></html>`;
+<div class="aviso">Análise gerada por inteligência artificial (Google Gemini) a partir dos tempos cronometrados no EasyAudit. Confira antes de decidir.</div></body></html>`;
 }
 
 export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial; dim: ResumoDimensionamento }) {

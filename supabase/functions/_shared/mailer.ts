@@ -1,4 +1,4 @@
-// Envio de e-mails com Nodemailer, usado pelas Edge Functions do Postora.
+// Envio de e-mails com Nodemailer, usado pelas Edge Functions do EasyAudit.
 //
 // SMTP padrão: Gmail com senha de app (smtp.gmail.com, porta 465 com SSL). As Edge Functions do
 // Supabase bloqueiam as portas 25 e 587, então use sempre um servidor SMTP que aceite a 465.
@@ -9,7 +9,7 @@ const host = Deno.env.get('SMTP_HOST') || 'smtp.gmail.com';
 const port = Number(Deno.env.get('SMTP_PORT') || '465');
 const user = Deno.env.get('SMTP_USER') || '';
 const pass = Deno.env.get('SMTP_PASS') || '';
-const fromName = Deno.env.get('MAIL_FROM_NAME') || 'Postora';
+const fromName = Deno.env.get('MAIL_FROM_NAME') || 'EasyAudit';
 
 let transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
 
@@ -67,7 +67,7 @@ const textoDe = (html: string) =>
 const COR = { fundo: '#f5f6f8', cartao: '#ffffff', borda: '#e3e6ec', texto: '#1b2230', suave: '#5b6475', destaque: '#4f46e5' };
 
 /**
- * Layout padrão dos e-mails do Postora. `paragrafos` aceita HTML: escape com `esc()` tudo o que vier do usuário.
+ * Layout padrão dos e-mails do EasyAudit. `paragrafos` aceita HTML: escape com `esc()` tudo o que vier do usuário.
  */
 export function layout(o: {
   titulo: string;
@@ -86,13 +86,13 @@ export function layout(o: {
   const codigo = o.codigo
     ? `<p style="margin:4px 0 18px;font-size:28px;font-weight:800;letter-spacing:6px;color:${COR.texto}">${esc(o.codigo)}</p>`
     : '';
-  const rodape = o.rodape ?? 'Este é um e-mail automático do Postora. Se você não esperava esta mensagem, pode ignorá-la.';
+  const rodape = o.rodape ?? 'Este é um e-mail automático do EasyAudit. Se você não esperava esta mensagem, pode ignorá-la.';
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(o.titulo)}</title></head>
 <body style="margin:0;padding:0;background:${COR.fundo};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${COR.fundo};padding:28px 12px"><tr><td align="center">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px">
-      <tr><td style="padding:0 4px 14px;font-size:18px;font-weight:800;color:${COR.destaque}">Postora</td></tr>
+      <tr><td style="padding:0 4px 14px;font-size:18px;font-weight:800;color:${COR.destaque}">EasyAudit</td></tr>
       <tr><td style="background:${COR.cartao};border:1px solid ${COR.borda};border-radius:16px;padding:28px 26px">
         <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:${COR.texto}">${esc(o.titulo)}</h1>
         ${o.paragrafos.map(p).join('\n        ')}

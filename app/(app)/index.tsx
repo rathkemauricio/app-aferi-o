@@ -91,9 +91,9 @@ export default function ModuleLauncher() {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <Image source={require('../../assets/favicon.png')} style={{ width: 36, height: 36 }} accessibilityLabel="Postora" />
+        <Image source={require('../../assets/favicon.png')} style={{ width: 36, height: 36 }} accessibilityLabel="EasyAudit" />
         <View style={s.flex}>
-          <Text style={s.brandName}>Postora</Text>
+          <Text style={s.brandName}>EasyAudit</Text>
           <Text style={s.brandSub}>Central de módulos</Text>
         </View>
         <IconButton icon={mode === 'dark' ? SunIcon : MoonIcon} label={mode === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'} onPress={toggleTheme} />

@@ -107,7 +107,7 @@ export default function UsuariosScreen() {
       aviso = r.ok ? `\n\n${email} recebeu um e-mail avisando que a conta está liberada.` : `\n\nO aviso por e-mail não foi enviado: ${r.erro}`;
     }
     setCriando(false); setNovo(null); void carregar();
-    notify('Usuário criado', `${novo.nome.trim()} já pode entrar no Postora com o e-mail ${email} e a senha que você definiu. Passe a senha para a pessoa; ela pode trocar depois em Minha conta → Alterar senha.${aviso}`);
+    notify('Usuário criado', `${novo.nome.trim()} já pode entrar no EasyAudit com o e-mail ${email} e a senha que você definiu. Passe a senha para a pessoa; ela pode trocar depois em Minha conta → Alterar senha.${aviso}`);
   };
 
   const lista = (perfis ?? []).filter(p => `${p.email} ${p.nome}`.toLowerCase().includes(busca.toLowerCase()));
@@ -163,8 +163,8 @@ export default function UsuariosScreen() {
           </>}
           <Button title={p.ativo ? 'Inativar usuário' : 'Reativar usuário'} variant={p.ativo ? 'danger' : 'secondary'} size="sm"
             onPress={() => (p.ativo
-              ? confirmAction('Inativar usuário?', `${p.nome || p.email} não conseguirá mais entrar no Postora nem ver ou enviar dados. Tudo o que essa pessoa já registrou continua guardado, com o nome dela. Dá para reativar depois.`, 'Inativar', () => void mudarStatus(p, false))
-              : confirmAction('Reativar usuário?', `${p.nome || p.email} volta a entrar no Postora com o mesmo e-mail e senha, e a ver os módulos marcados.`, 'Reativar', () => void mudarStatus(p, true)))} />
+              ? confirmAction('Inativar usuário?', `${p.nome || p.email} não conseguirá mais entrar no EasyAudit nem ver ou enviar dados. Tudo o que essa pessoa já registrou continua guardado, com o nome dela. Dá para reativar depois.`, 'Inativar', () => void mudarStatus(p, false))
+              : confirmAction('Reativar usuário?', `${p.nome || p.email} volta a entrar no EasyAudit com o mesmo e-mail e senha, e a ver os módulos marcados.`, 'Reativar', () => void mudarStatus(p, true)))} />
         </>}
       </Card>
     );
