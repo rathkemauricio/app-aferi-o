@@ -2,7 +2,7 @@
 
 type Resultado = { pump: string; nozzle: string; fuel: string; done: boolean; checks: string[]; notes: string[] };
 export type AuditRelatorio = {
-  branchName: string; branchCode: string; branchCity: string; branchState: string; date: string; auditor: string;
+  branchName: string; branchCode: string; branchCity: string; branchState: string; date: string; auditor: string; aferidor?: string;
   seal: string; inmetro: string; panels: string; rodilhas: string; generalNotes: string; observations: string; results: Resultado[];
 };
 
@@ -51,7 +51,7 @@ export function auditReportHtml(a: AuditRelatorio, marca = 'Postora') {
   const obs = [a.observations, a.generalNotes && a.generalNotes !== a.observations ? `Observação geral: ${a.generalNotes}` : ''].filter(Boolean);
   const meta = [
     ['Filial', `${a.branchName} #${a.branchCode}`], ['Cidade / UF', [a.branchCity, a.branchState].filter(Boolean).join(' / ')],
-    ['Data da aferição', dataBR(a.date)], ['Aferidor', a.auditor],
+    ['Data da aferição', dataBR(a.date)], ['Responsável pela aferição', a.auditor], ['Aferidor (instrumento)', a.aferidor ?? ''],
     ['Lacre geral', a.seal], ['Selo Inmetro', a.inmetro], ['Painéis das bombas', a.panels], ['Rodilhas', a.rodilhas],
   ];
   const agora = new Date().toLocaleString('pt-BR');
@@ -111,7 +111,7 @@ footer{margin-top:8px;text-align:right;color:#5b6b80;font-size:8px}
 <section class="duas">
 <div><h2>Não conformidades e observações (OB / NC)</h2>${tabelaOcorrencias}</div>
 <div><h2>Observações / irregularidades encontradas</h2><div class="obs">${obs.length ? obs.map(esc).join('\n') : '—'}</div>
-<section class="ass"><div>Aferidor — ${vazio(a.auditor)}</div><div>Responsável pela filial</div></section></div>
+<section class="ass"><div>Responsável pela aferição — ${vazio(a.auditor)}</div><div>Responsável pela filial</div></section></div>
 </section>
 <footer>Gerado em ${esc(agora)} • Códigos NC: NC00 erro fora do limite • NC01 lacre violado • NC02 selo vencido • NC03 vazamento</footer>
 </div>

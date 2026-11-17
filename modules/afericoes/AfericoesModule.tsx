@@ -22,7 +22,7 @@ type Nozzle = { id: string; number: string; fuel: string };
 type Pump = { id: string; number: string; nozzles: Nozzle[] };
 type Branch = { id: string; code: string; name: string; city: string; state: string; pumps: Pump[] };
 type NozzleResult = { pumpId: string; nozzleId: string; pump: string; nozzle: string; fuel: string; done: boolean; checks: string[]; notes: string[] };
-type Audit = { id: string; branchId: string; branchName: string; branchCode: string; branchCity: string; branchState: string; date: string; auditor: string; seal: string; inmetro: string; panels: string; rodilhas: string; condBombas?: string; condBombasObs?: string; condIlhas?: string; condIlhasObs?: string; generalNotes: string; observations: string; results: NozzleResult[] };
+type Audit = { id: string; branchId: string; branchName: string; branchCode: string; branchCity: string; branchState: string; date: string; auditor: string; aferidor?: string; seal: string; inmetro: string; panels: string; rodilhas: string; condBombas?: string; condBombasObs?: string; condIlhas?: string; condIlhasObs?: string; generalNotes: string; observations: string; results: NozzleResult[] };
 type DashboardData = { branches: Branch[]; audits: Audit[] };
 type ModuleSession = { tab: Tab; branchSearch: string; historyBranch: string; historyFrom: string; historyTo: string; draft: AuditDraft; auditStage: 'branch' | 'equipment' | 'nozzle' | 'final'; selectedPumpId: string; selectedNozzleId: string; auditMeta: Record<string, string>; formKind: FormKind | null; form: Record<string, string>; editingId: string; formBranchId: string; formPumpId: string; flowStarted: number | null };
 type AuditDraft = { branchId: string; data: Record<string, { checks: string[]; notes: string[] }> };
@@ -37,6 +37,7 @@ type Equipamentos = { pumps: Pump[] };
 const auditsCol = new Collection<AuditRow>({ table: 'service_records', storageKey: 'nevoeiro.afericoes.audits.v2', softDelete: false, filter: q => q.eq('payload->>kind', 'audit') });
 function auditRow(a: Audit): AuditRow { return ({ id: a.id, branch: a.branchName, service_date: a.date || today(), status: 'done', payload: { kind: 'audit', value: a } }); }
 const SESSION_KEY = STORAGE_KEY + '.session.v1';
+const ULTIMO_AFERIDOR = 'nevoeiro.afericoes.ultimo-aferidor';
 const CRITERIA = ['Lenta', 'Rápida', 'Erro', 'Luz', 'Mangueira', 'BICO', 'Lacres', 'Sump', 'Vazão', 'Des. 60s'];
 const SCALE = ['Lenta', 'Rápida', 'Erro'];
 const NUMERIC = ['Vazão', 'Des. 60s'];
@@ -56,8 +57,10 @@ const htmlEscape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c
 
 export default function AfericoesModule() {
   const { isAdmin, podeAcessar } = useAuth();
-  // Aferidor = usuário logado (dá para editar).
+  // Quem aferiu = usuário logado (registrado sozinho). "Aferidor" é o instrumento de aferição (medida-padrão).
   const usuario = useUsuarioLogado();
+  const ultimoAferidor = useRef('');
+  useEffect(() => { void AsyncStorage.getItem(ULTIMO_AFERIDOR).then(v => { if (v) { ultimoAferidor.current = v; setAuditMeta(m => (m.aferidor ? m : { ...m, aferidor: v })); } }).catch(() => undefined); }, []);
   const router = useRouter();
   // Combustíveis do catálogo único (Central → Cadastros → Combustíveis).
   const catalogoCombustiveis = useCombustiveis();
@@ -92,7 +95,7 @@ export default function AfericoesModule() {
   const [auditStage, setAuditStage] = useState<'branch' | 'equipment' | 'nozzle' | 'final'>('branch');
   const [selectedPumpId, setSelectedPumpId] = useState('');
   const [selectedNozzleId, setSelectedNozzleId] = useState('');
-  const [auditMeta, setAuditMeta] = useState<Record<string, string>>({ date: today(), auditor: usuario, seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' });
+  const [auditMeta, setAuditMeta] = useState<Record<string, string>>({ date: today(), auditor: usuario, aferidor: '', seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' });
   const [detailAudit, setDetailAudit] = useState<Audit | null>(null);
   const [emailAudit, setEmailAudit] = useState<Audit | null>(null); // relatório sendo enviado por e-mail
   const [emailPara, setEmailPara] = useState('');
@@ -232,7 +235,7 @@ export default function AfericoesModule() {
 
   const beginAudit = () => {
     const hasWork = !!draft.branchId || Object.keys(draft.data).length > 0;
-    const start = () => { setDraft(emptyDraft()); setAuditStage('branch'); setSelectedPumpId(''); setSelectedNozzleId(''); setAuditMeta({ date: today(), auditor: usuario, seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' }); setTab('auditoria'); };
+    const start = () => { setDraft(emptyDraft()); setAuditStage('branch'); setSelectedPumpId(''); setSelectedNozzleId(''); setAuditMeta({ date: today(), auditor: usuario, aferidor: ultimoAferidor.current, seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' }); setTab('auditoria'); };
     if (hasWork) { confirmAction('Iniciar nova afericao?', 'O rascunho atual sera descartado. Deseja continuar?', 'Descartar e iniciar', start); return; }
     start();
   };
@@ -251,7 +254,8 @@ export default function AfericoesModule() {
     branch.pumps.forEach(p => p.nozzles.forEach(n => { const entry = draft.data[n.id]; results.push({ pumpId: p.id, nozzleId: n.id, pump: p.number, nozzle: n.number, fuel: n.fuel, done: !!entry, checks: entry?.checks ?? CRITERIA.map(() => ''), notes: entry?.notes ?? CRITERIA.map(() => '') }); }));
     if (!results.some(r => r.done)) { notify('Nenhum bico aferido', 'Registre ao menos um bico antes de salvar.'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(auditMeta.date)) { notify('Data inválida', 'Informe a data no formato AAAA-MM-DD.'); return; }
-    const audit: Audit = { id: uid('afericao'), branchId: branch.id, branchName: branch.name, branchCode: branch.code, branchCity: branch.city, branchState: branch.state, date: auditMeta.date, auditor: auditMeta.auditor, seal: auditMeta.seal, inmetro: auditMeta.inmetro, panels: auditMeta.panels, rodilhas: auditMeta.rodilhas, condBombas: auditMeta.condBombas ?? '', condBombasObs: auditMeta.condBombasObs ?? '', condIlhas: auditMeta.condIlhas ?? '', condIlhasObs: auditMeta.condIlhasObs ?? '', generalNotes: auditMeta.generalNotes, observations: auditMeta.observations, results };
+    const audit: Audit = { id: uid('afericao'), branchId: branch.id, branchName: branch.name, branchCode: branch.code, branchCity: branch.city, branchState: branch.state, date: auditMeta.date, auditor: usuario, aferidor: (auditMeta.aferidor ?? '').trim(), seal: auditMeta.seal, inmetro: auditMeta.inmetro, panels: auditMeta.panels, rodilhas: auditMeta.rodilhas, condBombas: auditMeta.condBombas ?? '', condBombasObs: auditMeta.condBombasObs ?? '', condIlhas: auditMeta.condIlhas ?? '', condIlhasObs: auditMeta.condIlhasObs ?? '', generalNotes: auditMeta.generalNotes, observations: auditMeta.observations, results };
+    if (audit.aferidor) { ultimoAferidor.current = audit.aferidor; void AsyncStorage.setItem(ULTIMO_AFERIDOR, audit.aferidor).catch(() => undefined); }
     void persist({ ...data, audits: [audit, ...data.audits] }); setDraft(emptyDraft()); setAuditStage('branch'); setTab('historico');
     notify('Aferição salva', 'O resultado está disponível no histórico.');
   };
@@ -302,8 +306,8 @@ export default function AfericoesModule() {
     finally { setEnviandoEmail(false); }
   };
   const exportCsv = () => {
-    const header = ['Filial', 'Código', 'Data', 'Aferidor', 'Bomba', 'Bico', 'Combustível', ...CRITERIA, 'Situação'];
-    const rows = filteredAudits.flatMap(a => a.results.map(r => [a.branchName, a.branchCode, a.date, a.auditor, r.pump, r.nozzle, r.fuel, ...r.checks, r.done ? auditStatus(a) : 'Não realizado']));
+    const header = ['Filial', 'Código', 'Data', 'Responsável', 'Aferidor (instrumento)', 'Bomba', 'Bico', 'Combustível', ...CRITERIA, 'Situação'];
+    const rows = filteredAudits.flatMap(a => a.results.map(r => [a.branchName, a.branchCode, a.date, a.auditor, a.aferidor ?? '', r.pump, r.nozzle, r.fuel, ...r.checks, r.done ? auditStatus(a) : 'Não realizado']));
     const csv = [header, ...rows].map(row => row.map(value => '"' + String(value ?? '').replace(/"/g, '""') + '"').join(';')).join('\n');
     void Share.share({ title: 'Histórico de aferições CSV', message: csv });
   };
@@ -573,7 +577,8 @@ export default function AfericoesModule() {
       <SectionHeader title="Dados da aferição" />
       <Card>
         <Field label="Data da aferição" helper="Formato AAAA-MM-DD" icon={CalendarBlankIcon} value={auditMeta.date} onChangeText={v => setAuditMeta(m => ({ ...m, date: v }))} />
-        <Field label="Aferidor" value={auditMeta.auditor} onChangeText={v => setAuditMeta(m => ({ ...m, auditor: v }))} placeholder="Nome do responsável" />
+        <Text style={textStyles.caption}>Responsável pela aferição: <Text style={{ fontWeight: '800', color: colors.text }}>{usuario || '—'}</Text> (usuário logado)</Text>
+        <Field label="Aferidor (instrumento de aferição)" value={auditMeta.aferidor ?? ''} onChangeText={v => setAuditMeta(m => ({ ...m, aferidor: v }))} placeholder="Ex.: Medida-padrão 20 L nº 1234 / Inmetro" />
         <View style={s.twoCol}>
           <Field label="Lacre geral" style={s.flex} value={auditMeta.seal} onChangeText={v => setAuditMeta(m => ({ ...m, seal: v }))} placeholder="Identificação" />
           <Field label="Selo Inmetro" style={s.flex} value={auditMeta.inmetro} onChangeText={v => setAuditMeta(m => ({ ...m, inmetro: v }))} placeholder="Número ou validade" />
@@ -784,7 +789,7 @@ export default function AfericoesModule() {
       >
         <AuditStatusPill audit={detailAudit} />
         <View style={s.metaGrid}>
-          {([['Data', dateLabel(detailAudit.date)], ['Aferidor', detailAudit.auditor], ['Lacre geral', detailAudit.seal], ['Selo Inmetro', detailAudit.inmetro], ['Painéis', detailAudit.panels], ['Rodilhas', detailAudit.rodilhas], ['Condições das bombas', [detailAudit.condBombas, detailAudit.condBombasObs].filter(Boolean).join(' · ')], ['Condições das ilhas', [detailAudit.condIlhas, detailAudit.condIlhasObs].filter(Boolean).join(' · ')]] as [string, string][]).map(([label, value]) => (
+          {([['Data', dateLabel(detailAudit.date)], ['Responsável', detailAudit.auditor], ['Aferidor (instrumento)', detailAudit.aferidor ?? ''], ['Lacre geral', detailAudit.seal], ['Selo Inmetro', detailAudit.inmetro], ['Painéis', detailAudit.panels], ['Rodilhas', detailAudit.rodilhas], ['Condições das bombas', [detailAudit.condBombas, detailAudit.condBombasObs].filter(Boolean).join(' · ')], ['Condições das ilhas', [detailAudit.condIlhas, detailAudit.condIlhasObs].filter(Boolean).join(' · ')]] as [string, string][]).map(([label, value]) => (
             <View key={label} style={s.metaCell}><Text style={textStyles.caption}>{label}</Text><Text style={textStyles.bodyStrong} numberOfLines={1}>{value || '-'}</Text></View>
           ))}
         </View>
