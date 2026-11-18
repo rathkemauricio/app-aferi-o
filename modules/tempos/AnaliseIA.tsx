@@ -133,7 +133,7 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
       {a ? <>
         <View style={[s.row, { gap: 8, flexWrap: 'wrap' }]}>
           {([['Necessários (IA)', nf(a.funcionarios_necessarios)], ['Faixa', `${nf(a.faixa?.minimo)} a ${nf(a.faixa?.maximo)}`], ['Planilha', nf(a.comparacao?.planilha ?? dim.total_funcionarios_planilha)], ['Quadro atual', nf(a.comparacao?.quadro_atual ?? dim.quadro_atual)]] as const).map(([r, v]) => (
-            <View key={r} style={{ flexGrow: 1, flexBasis: 120, backgroundColor: colors.bg, borderRadius: 10, padding: 10 }}>
+            <View key={r} style={{ flexGrow: 1, flexBasis: 120, backgroundColor: colors.campo, borderRadius: 10, padding: 10 }}>
               <Text style={t.caption}>{r}</Text><Text style={[t.section, { fontSize: 20 }]}>{v}</Text>
             </View>
           ))}

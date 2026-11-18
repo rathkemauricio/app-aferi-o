@@ -69,7 +69,7 @@ export function Field({ label, helper, icon: IconCmp, multiline = false, style, 
   return (
     <View style={[k.field, style as ViewStyle]}>
       {label ? <Text style={[t.label, { color: colors.textMuted }]}>{label}</Text> : null}
-      <View style={[k.inputWrap, { backgroundColor: colors.bg, borderColor: colors.borderStrong }, multiline && k.inputWrapMulti, focused && { borderColor: colors.accent }]}>
+      <View style={[k.inputWrap, { backgroundColor: colors.campo, borderColor: colors.borderStrong }, multiline && k.inputWrapMulti, focused && { borderColor: colors.accent }]}>
         {IconCmp ? <IconCmp size={18} color={colors.textFaint} /> : null}
         <TextInput
           {...input}
@@ -279,9 +279,9 @@ function SheetView({ title, onClose, children, footer, centro = false }: SheetPr
   return (
     <Animated.View style={[k.backdrop, centro && k.backdropCentro, { opacity: o }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar" />
-      <Animated.View style={[k.sheet, centro && k.sheetCentro, { backgroundColor: colors.bg, transform: [{ translateY: y }] }]}>
+      <Animated.View style={[k.sheet, centro && k.sheetCentro, { backgroundColor: colors.folha, transform: [{ translateY: y }] }]}>
         {centro ? null : <View style={k.grabber} />}
-        <View style={[k.sheetHead, { backgroundColor: colors.bg }]}>
+        <View style={[k.sheetHead, { backgroundColor: colors.folha }]}>
           <Text style={[t.section, k.flex, { color: colors.text }]}>{title}</Text>
           <IconButton icon={XIcon} label="Fechar" onPress={onClose} />
         </View>

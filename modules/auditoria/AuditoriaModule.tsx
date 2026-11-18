@@ -740,7 +740,7 @@ const ItemAcordeao = memo(function ItemAcordeao({ item, aberto, links, enviando,
           const on = st === x;
           return (
             <Pressable key={x} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={cat.nome(x)} onPress={() => escolher(x)}
-              style={({ pressed }) => [s.botaoStatus, { borderColor: cat.cor(x), backgroundColor: on ? cat.cor(x) : colors.bg }, on && brilho(cat, x), pressed && { transform: [{ scale: 0.96 }] }]}>
+              style={({ pressed }) => [s.botaoStatus, { borderColor: cat.cor(x), backgroundColor: on ? cat.cor(x) : colors.campo }, on && brilho(cat, x), pressed && { transform: [{ scale: 0.96 }] }]}>
               <Text style={[s.botaoStatusTxt, { color: on ? '#ffffff' : cat.cor(x) }]}>{x}</Text>
             </Pressable>
           );

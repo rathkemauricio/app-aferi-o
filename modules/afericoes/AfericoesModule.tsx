@@ -603,7 +603,7 @@ export default function AfericoesModule() {
                     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: value === 'NA' }} accessibilityLabel="Des. 60s não se aplica"
                       onPress={() => { setFlowStarted(null); setAuditCheck(index, value === 'NA' ? '' : 'NA'); }}
                       style={[s.naBtn, value === 'NA' && { backgroundColor: colors.textMuted, borderColor: colors.textMuted }]}>
-                      <Text style={[s.naTxt, value === 'NA' && { color: colors.bg }]}>N/A</Text>
+                      <Text style={[s.naTxt, value === 'NA' && { color: colors.campo }]}>N/A</Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -1027,8 +1027,8 @@ const createScreenStyles = (colors: ThemeColors) => StyleSheet.create({
   naBtn: { marginLeft: 6, borderWidth: 1.5, borderColor: colors.borderStrong, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
   naTxt: { fontSize: 12, fontWeight: '800', color: colors.textMuted },
   naCampo: { minHeight: 64, alignItems: 'center', justifyContent: 'center', padding: space.md },
-  roletaCampo: { borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, overflow: 'hidden' },
-  valorBox: { minHeight: 46, borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.md },
+  roletaCampo: { borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.campo, overflow: 'hidden' },
+  valorBox: { minHeight: 46, borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.campo, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.md },
   valorTxt: { fontSize: 17, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   stepBtn: { width: 46, height: 46, borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },

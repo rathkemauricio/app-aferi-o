@@ -1333,7 +1333,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   const corAviso = aviso ? (aviso.tom === 'ok' ? c.success : c.danger) : c.textMuted;
   const dif = p && ja !== null ? ja - p.saldo : null;
   const mini = (rotulo: string, valor: string, cor?: string) => (
-    <View style={[k.cMini, { backgroundColor: c.bg }]}>
+    <View style={[k.cMini, { backgroundColor: c.campo }]}>
       <Text style={[k.cMiniRot, { color: c.textMuted }]}>{rotulo}</Text>
       <Text style={[k.cMiniVal, { color: cor ?? c.text }]} numberOfLines={1}>{valor}</Text>
     </View>
@@ -1386,7 +1386,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
               {/* Quantidade de cada contagem (1ª, 2ª e 3ª) — a atual em destaque */}
               <View style={[k.linha, { gap: 6 }]}>
                 {porRodada.map((v, i) => (
-                  <View key={i} style={[k.cMini, { backgroundColor: c.bg, borderWidth: 1, borderColor: i + 1 === r ? AMBER : 'transparent' }]}>
+                  <View key={i} style={[k.cMini, { backgroundColor: c.campo, borderWidth: 1, borderColor: i + 1 === r ? AMBER : 'transparent' }]}>
                     <Text style={[k.cMiniRot, { color: c.textMuted }]}>{i + 1}ª contagem</Text>
                     <Text style={[k.cMiniVal, { color: v === null ? c.textFaint : c.text }]} numberOfLines={1}>{v === null ? '—' : fmtQ(v)}</Text>
                   </View>

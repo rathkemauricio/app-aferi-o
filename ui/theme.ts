@@ -37,6 +37,11 @@ export const color = {
    *  escuro, é diferente do `text` (que é o texto dos cartões). */
   onBg: '#0f1f3d',
   onBgMuted: '#3f4d68',
+
+  /** Fundo dos campos de digitação e das caixinhas dentro dos cartões (contrasta com `text`). */
+  campo: '#eef1f6',
+  /** Fundo das janelas que sobem de baixo (contrasta com `text`). */
+  folha: '#eef1f6',
 };
 
 // Tons de categoria para os quadradinhos de ícone (filiais, bombas, bicos, aferições).
@@ -82,7 +87,7 @@ export const darkColor: ThemeColors = {
   text: '#eef2f8', textMuted: '#b6c1d3', textFaint: '#8d99b0', accent: '#5fd39a', accentPressed: '#4cc189',
   accentSoft: '#1b3a36', accentText: '#7fe0b0', primaryText: '#0f1f3d', success: '#5dcc88', successSoft: '#173326', warning: '#f1bd65',
   warningSoft: '#382d19', danger: '#ff8278', dangerSoft: '#3b2224', neutralSoft: '#26344d', mint: '#5fd39a', onMint: '#0f1f3d',
-  onBg: '#eef2f8', onBgMuted: '#b6c1d3',
+  onBg: '#eef2f8', onBgMuted: '#b6c1d3', campo: '#0d1628', folha: '#0d1628',
 };
 /* ---------- Temas de preferência ---------- */
 // Cada tema é uma paleta completa e sólida (fundo, cartões, botões e destaques preenchidos), não só ícones e
@@ -90,12 +95,16 @@ export const darkColor: ThemeColors = {
 export type Tema = { id: string; nome: string; modo: ThemeMode; par: string; cores: ThemeColors };
 const completar = (base: ThemeColors, c: Partial<ThemeColors>): ThemeColors => {
   const r = { ...base, ...c };
-  return { ...r, onBg: c.onBg ?? r.text, onBgMuted: c.onBgMuted ?? r.textMuted };
+  // Campos e janelas usam o fundo da página, que nesses temas contrasta com a letra.
+  return { ...r, onBg: c.onBg ?? r.text, onBgMuted: c.onBgMuted ?? r.textMuted, campo: c.campo ?? r.bg, folha: c.folha ?? r.bg };
 };
 const claro = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'light', par, cores: completar(color, c) });
 const escuro = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'dark', par, cores: completar(darkColor, c) });
-/** Fundo escuro com cartões claros: o texto dos cartões é escuro e o texto sobre o fundo (`onBg`) é claro. */
-const misto = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'light', par, cores: completar(color, c) });
+/**
+ * Fundo escuro com cartões claros: o texto dos cartões é escuro e o texto sobre o fundo (`onBg`) é claro.
+ * Campos de digitação ficam brancos e as janelas na cor dos cartões, para a letra escura aparecer sempre.
+ */
+const misto = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'light', par, cores: completar(color, { campo: '#ffffff', folha: c.surface, ...c }) });
 
 export const TEMAS: Tema[] = [
   claro('claro', 'EasyAudit claro', 'escuro', {}),
@@ -127,7 +136,7 @@ export const TEMAS: Tema[] = [
   }),
   misto('grafite-vermelho', 'Grafite, Branco e Vermelho', 'azul-vermelho', {
     bg: '#222224', surface: '#f1f1f2', surfaceMuted: '#e2e2e5', border: '#d2d2d6', borderStrong: '#b4b4bb',
-    text: '#1d1d1f', textMuted: '#74747c', textFaint: '#8b8b92', onBg: '#f4f4f4', onBgMuted: '#c4c4c8',
+    text: '#1d1d1f', textMuted: '#5f5f67', textFaint: '#8b8b92', onBg: '#f4f4f4', onBgMuted: '#c4c4c8',
     accent: '#ef3b2d', accentPressed: '#d42f22', accentSoft: '#fbd5d1', accentText: '#c9261a', primaryText: '#ffffff', neutralSoft: '#e7e7ea', mint: '#ef3b2d', onMint: '#ffffff',
   }),
   escuro('petroleo', 'Petróleo (Teal)', 'claro', {
@@ -137,7 +146,7 @@ export const TEMAS: Tema[] = [
   }),
   misto('roxo-ambar', 'Roxo, Bege e Amarelo', 'cinza-roxo', {
     bg: '#1b1530', surface: '#f3e1c8', surfaceMuted: '#e8d2b2', border: '#dcc29e', borderStrong: '#c9aa7f',
-    text: '#2a2040', textMuted: '#7a6c80', textFaint: '#8e8299', onBg: '#f5eedf', onBgMuted: '#c9bfd9',
+    text: '#2a2040', textMuted: '#625568', textFaint: '#8e8299', onBg: '#f5eedf', onBgMuted: '#c9bfd9',
     accent: '#8b4ee8', accentPressed: '#7a3fd4', accentSoft: '#e6d8fb', accentText: '#6a2fc9', primaryText: '#ffffff', neutralSoft: '#eedcc0', mint: '#8b4ee8', onMint: '#ffffff',
   }),
   escuro('grafite-laranja', 'Escura, Cinza e Laranja', 'creme-laranja', {
@@ -147,12 +156,12 @@ export const TEMAS: Tema[] = [
   }),
   misto('roxo-lima', 'Escuro, Creme e Verde-Lima', 'areia-oliva', {
     bg: '#2a1637', surface: '#f3eedd', surfaceMuted: '#e8e1c9', border: '#dcd3b5', borderStrong: '#c6bb98',
-    text: '#2a1637', textMuted: '#7a6c84', textFaint: '#91859a', onBg: '#f6f0dc', onBgMuted: '#cdbfd8',
+    text: '#2a1637', textMuted: '#62546c', textFaint: '#91859a', onBg: '#f6f0dc', onBgMuted: '#cdbfd8',
     accent: '#a8e23c', accentPressed: '#95cf2a', accentSoft: '#e3f3c0', accentText: '#4f7a0a', primaryText: '#2a1637', neutralSoft: '#ede6d0', mint: '#a8e23c', onMint: '#2a1637',
   }),
   misto('azul-laranja', 'Azul, Off-White e Laranja', 'creme-laranja', {
     bg: '#1b44a0', surface: '#f5f1e8', surfaceMuted: '#ebe4d4', border: '#ddd4c0', borderStrong: '#c7bca4',
-    text: '#16213d', textMuted: '#6d7390', textFaint: '#858aa2', onBg: '#ffffff', onBgMuted: '#d5e1fa',
+    text: '#16213d', textMuted: '#585e78', textFaint: '#858aa2', onBg: '#ffffff', onBgMuted: '#d5e1fa',
     accent: '#ff6a13', accentPressed: '#e85c08', accentSoft: '#fde0cc', accentText: '#c24f05', primaryText: '#ffffff', neutralSoft: '#efe9dc', mint: '#ff6a13', onMint: '#ffffff',
   }),
 ];
