@@ -16,6 +16,8 @@ export type LinhaTanque = {
   metragem: number | null;
   /** Estoque medido em litros (lido na tabela do tanque). */
   litros: number | null;
+  /** Nome da tabela de arqueação de onde saíram os litros (calculados pela altura); some se os litros forem digitados. */
+  litrosTabela?: string;
   /** Estoque informado (litros): os litros medidos na medição anterior do mesmo tanque (preenchido sozinho, editável). */
   informada: number | null;
   /** Data (AAAA-MM-DD) da medição anterior de onde veio a informada; some se ela for digitada à mão. */

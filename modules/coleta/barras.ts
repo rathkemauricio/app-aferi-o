@@ -113,10 +113,10 @@ async function lerArquivoBase64(uri: string) {
   const dataUri = await new Promise<string>((ok, falha) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.onerror = () => falha(new Error('Não foi possível ler o arquivo.')); fr.readAsDataURL(blob); });
   return dataUri.slice(dataUri.indexOf(',') + 1);
 }
-async function lerNoServidor(uri: string, progresso?: Progresso) {
+async function lerNoServidor(uri: string, progresso?: Progresso, pasta: 'barras' | 'arqueacao' = 'barras') {
   if (!supabase) throw new Error('O app está em modo local: a importação precisa do servidor.');
   progresso?.('Enviando o PDF ao servidor…');
-  const caminho = `barras/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.pdf`;
+  const caminho = `${pasta}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.pdf`;
   const { error } = await supabase.storage.from(BUCKET).upload(caminho, base64ParaBytes(await lerArquivoBase64(uri)), { contentType: 'application/pdf', upsert: false });
   if (error) throw new Error(`Não foi possível enviar o PDF: ${error.message}`);
   try {
@@ -141,6 +141,10 @@ async function lerNoServidor(uri: string, progresso?: Progresso) {
 }
 
 type Progresso = (texto: string) => void;
+
+/** Textos de cada página de um PDF (com posição): no navegador, localmente; no app, pelo servidor. */
+export const lerTextosPdf = (arquivo: { uri: string; file?: Blob }, pasta: 'barras' | 'arqueacao', progresso?: Progresso) =>
+  (Platform.OS === 'web' && arquivo.file ? lerNoNavegador(arquivo.file, progresso) : lerNoServidor(arquivo.uri, progresso, pasta));
 
 /** Lê a relação de códigos de barra (PDF do Petros): no navegador, localmente; no app, pelo servidor. */
 export async function lerPdfBarras(arquivo: { uri: string; file?: Blob }, progresso?: Progresso) {

@@ -108,7 +108,7 @@ async function gravarBarras(body: { filial_id: string; arquivo: string; itens: I
 const BUCKET = 'coleta-arquivos';
 async function extrairPdf(body: { caminho: string; de: number; ate: number }) {
   const caminho = String(body.caminho ?? '');
-  if (!/^barras\/[\w.-]+\.pdf$/.test(caminho)) return json(400, { erro: 'Arquivo inválido.' });
+  if (!/^(barras|arqueacao)\/[\w.-]+\.pdf$/.test(caminho)) return json(400, { erro: 'Arquivo inválido.' });
   const { data, error } = await admin.storage.from(BUCKET).download(caminho);
   if (error || !data) return json(400, { erro: 'O PDF enviado não foi encontrado no servidor. Tente importar de novo.' });
   const de = Math.max(1, Math.floor(Number(body.de) || 1));
@@ -256,8 +256,11 @@ Deno.serve(async req => {
     const { data: u, error } = await admin.auth.getUser(token);
     if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
     const { data: p } = await admin.from('profiles').select('papel,ativo,modulos').eq('user_id', u.user.id).maybeSingle();
-    if (!p?.ativo || !(p.papel === 'admin' || (p.modulos ?? []).includes('coleta'))) return json(403, { erro: 'O módulo Coleta não está liberado para esta conta.' });
+    const libera = (m: string) => !!p?.ativo && (p.papel === 'admin' || (p.modulos ?? []).includes(m));
     const body = await req.json().catch(() => ({}));
+    // A leitura de PDF também serve às tabelas de arqueação da Medição de Tanques (pasta arqueacao/).
+    const tabelaTanque = body.acao === 'extrair_pdf' && String(body.caminho ?? '').startsWith('arqueacao/');
+    if (tabelaTanque ? !libera('tanques') : !libera('coleta')) return json(403, { erro: tabelaTanque ? 'O módulo Medição de Tanques não está liberado para esta conta.' : 'O módulo Coleta não está liberado para esta conta.' });
     switch (body.acao) {
       case 'status': return json(200, { ok: true, petros: petrosConfigurado() });
       case 'carregar': return await carregar(body);

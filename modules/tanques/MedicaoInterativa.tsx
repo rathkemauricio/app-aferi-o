@@ -8,35 +8,38 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { ArrowRightIcon, CheckIcon, XIcon } from '../../ui/icons';
 import { darkColor, ThemeContext } from '../../ui/theme';
 import { faixa, Roleta } from '../afericoes/Roleta';
+import { alturaMaxima, litrosPelaTabela, type TabelaArqueacao, volumeTotal } from './arqueacao';
 import { fmtL, lerNumero, type LinhaTanque } from './model';
 
 /*
  * Medição de tanques interativa (opcional; a tela normal continua igual):
  * o tanque subterrâneo em corte, com a régua entrando pela boca de visita. Arraste para cima ou para baixo
  * (no desenho) para marcar a altura em cm, ou gire a roleta ao lado para o ajuste fino; o combustível sobe
- * e desce junto e a régua mostra a parte molhada. Os litros vêm da tabela do tanque e são digitados.
+ * e desce junto e a régua mostra a parte molhada. Com tabela de arqueação, a régua vai até o diâmetro do tanque e os
+ * litros saem sozinhos da tabela; sem tabela, a escala é de referência (0 a 260 cm) e os litros são digitados.
  */
 
 const NAVY = '#0b1426', PAINEL = '#13213b', PAINEL2 = '#1b2c4b', LINHA = '#2a3d62', FG = '#eef2f8', MUTED = '#9fb0c9', MINT = '#5fd39a';
-/** Diâmetro de referência do desenho (cm): a escala da régua vai de 0 a 260 cm. */
-const DIAM = 260;
-const VALORES_CM = faixa(0, 300, 1);
+/** Diâmetro de referência do desenho (cm) para tanque sem tabela de arqueação. */
+const DIAM_REF = 260;
 // Desenho (viewBox 340 × 320): tanque subterrâneo horizontal visto de lado (cilindro com tampos abaulados),
 // do x 20 ao 320, topo em y 100 e fundo em y 300; boca de visita e régua no meio (x 170).
 const VB_W = 340, VB_H = 320, CX = 170, TOPO = 100, FUNDO = 300, ALTURA = FUNDO - TOPO, X0 = 20, X1 = 320;
 /** Contorno do tanque: corpo cilíndrico com tampos (calotas) elípticos nas pontas. */
 const CASCO = `M70 ${TOPO} H270 A50 ${ALTURA / 2} 0 0 1 270 ${FUNDO} H70 A50 ${ALTURA / 2} 0 0 1 70 ${TOPO} Z`;
-const yDoCm = (cm: number) => { 'worklet'; return FUNDO - (Math.min(cm, DIAM) / DIAM) * ALTURA; };
+const yDoCm = (cm: number, diam: number) => { 'worklet'; return FUNDO - (Math.min(cm, diam) / diam) * ALTURA; };
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedLine = Animated.createAnimatedComponent(Line);
 
-export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar, onFechar }: {
+export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe, onMudar, onFechar }: {
   tanques: LinhaTanque[];
   filial: string;
   nomeComb: (id: string) => string;
   corComb: (id: string) => string;
+  /** Tabela de arqueação do tanque (pelo número), se houver. */
+  tabelaDe: (tanque: string) => TabelaArqueacao | undefined;
   onMudar: (id: string, patch: Partial<LinhaTanque>) => void;
   onFechar: () => void;
 }) {
@@ -46,6 +49,11 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
   const [atual, setAtual] = useState(primeiroPendente);
   const t = tanques[atual];
   const cor = t ? corComb(t.combustivel) : MINT;
+  const tab = t ? tabelaDe(t.tanque) : undefined;
+  const DIAM = tab ? Math.max(1, Math.ceil(alturaMaxima(tab))) : DIAM_REF;
+  const valoresCm = useMemo(() => faixa(0, DIAM, 1), [DIAM]);
+  const diam = useSharedValue(DIAM);
+  useEffect(() => { diam.set(DIAM); }, [DIAM, diam]);
 
   /* ----- Nível (cm): arraste no desenho ou roleta ----- */
   const nivel = useSharedValue(t?.metragem ?? 0);
@@ -63,8 +71,16 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
     return () => cancelAnimation(fase);
   }, [reduz, fase]);
 
-  const gravarRef = useRef((v: number) => { if (t) onMudar(t.id, { metragem: v }); });
-  gravarRef.current = (v: number) => { if (t) onMudar(t.id, { metragem: v }); };
+  /** Grava a altura; com tabela, também os litros dela (e mostra no campo). */
+  const gravarAltura = (v: number) => {
+    if (!t) return;
+    if (!tab) { onMudar(t.id, { metragem: v }); return; }
+    const l = litrosPelaTabela(tab, v);
+    onMudar(t.id, { metragem: v, litros: l, litrosTabela: tab.nome });
+    setLitrosTxt(l === null ? '' : String(l).replace('.', ','));
+  };
+  const gravarRef = useRef(gravarAltura);
+  gravarRef.current = gravarAltura;
   const gravar = useCallback((v: number) => gravarRef.current(v), []);
   const definir = (v: number) => { setCm(v); nivel.set(reduz ? v : withTiming(v, { duration: 220, easing: Easing.out(Easing.cubic) })); gravar(v); };
 
@@ -74,34 +90,34 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
     onBegin: ev => {
       'worklet';
       const y = (ev.y / alturaDesenho.get()) * VB_H;
-      const v = Math.max(0, Math.min(DIAM, Math.round(((FUNDO - y) / ALTURA) * DIAM)));
+      const v = Math.max(0, Math.min(diam.get(), Math.round(((FUNDO - y) / ALTURA) * diam.get())));
       nivel.set(v); ultimo.set(v); scheduleOnRN(setCm, v);
     },
     onUpdate: ev => {
       'worklet';
       const y = (ev.y / alturaDesenho.get()) * VB_H;
-      const v = Math.max(0, Math.min(DIAM, Math.round(((FUNDO - y) / ALTURA) * DIAM)));
+      const v = Math.max(0, Math.min(diam.get(), Math.round(((FUNDO - y) / ALTURA) * diam.get())));
       nivel.set(v);
       if (v !== ultimo.get()) { ultimo.set(v); scheduleOnRN(setCm, v); }
     },
     onFinalize: () => { 'worklet'; if (ultimo.get() >= 0) scheduleOnRN(gravar, ultimo.get()); },
-  }), [alturaDesenho, nivel, ultimo, gravar]);
+  }), [alturaDesenho, nivel, ultimo, gravar, diam]);
   const pan = usePanGesture(configPan);
 
   /* ----- Desenho animado ----- */
-  const liqProps = useAnimatedProps(() => { const y = yDoCm(nivel.get()); return { y, height: Math.max(0, FUNDO + 4 - y) }; });
+  const liqProps = useAnimatedProps(() => { const y = yDoCm(nivel.get(), diam.get()); return { y, height: Math.max(0, FUNDO + 4 - y) }; });
   const ondaProps = useAnimatedProps(() => {
-    const y = yDoCm(nivel.get());
+    const y = yDoCm(nivel.get(), diam.get());
     const amp = nivel.get() > 1 ? 2.2 : 0;
     let d = `M${X0} ${y + 6}`;
     for (let x = X0; x <= X1; x += 10) d += ` L${x} ${y + Math.sin(x / 15 + fase.get()) * amp}`;
     return { d: `${d} L${X1} ${FUNDO + 6} L${X0} ${FUNDO + 6} Z` };
   });
-  const molhadoProps = useAnimatedProps(() => { const y = yDoCm(nivel.get()); return { y, height: Math.max(0, FUNDO - y) }; });
-  const linhaProps = useAnimatedProps(() => { const y = yDoCm(nivel.get()); return { y1: y, y2: y }; });
+  const molhadoProps = useAnimatedProps(() => { const y = yDoCm(nivel.get(), diam.get()); return { y, height: Math.max(0, FUNDO - y) }; });
+  const linhaProps = useAnimatedProps(() => { const y = yDoCm(nivel.get(), diam.get()); return { y1: y, y2: y }; });
 
   /* ----- Litros (tabela do tanque) ----- */
-  const mudarLitros = (txt: string) => { setLitrosTxt(txt); if (!t) return; const n = lerNumero(txt); if (n !== null || !txt.trim()) onMudar(t.id, { litros: n }); };
+  const mudarLitros = (txt: string) => { setLitrosTxt(txt); if (!t) return; const n = lerNumero(txt); if (n !== null || !txt.trim()) onMudar(t.id, { litros: n, litrosTabela: undefined }); };
 
   const medidos = tanques.filter(l => l.metragem !== null && l.litros !== null).length;
   const proximo = () => {
@@ -112,7 +128,8 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
   const ctxTema = useContext(ThemeContext);
   const temaEscuro = useMemo(() => ({ ...ctxTema, mode: 'dark' as const, colors: { ...darkColor, bg: NAVY, surface: PAINEL, surfaceMuted: PAINEL2, accent: MINT, primaryText: NAVY, campo: NAVY } }), [ctxTema]);
   if (!t) return null;
-  const pct = cm === null ? null : Math.round((Math.min(cm, DIAM) / DIAM) * 100);
+  const litrosAgora = lerNumero(litrosTxt);
+  const pct = tab && litrosAgora !== null && volumeTotal(tab) ? Math.round((litrosAgora / volumeTotal(tab)) * 100) : cm === null ? null : Math.round((Math.min(cm, DIAM) / DIAM) * 100);
 
   return (
     <Modal visible animationType={reduz ? 'none' : 'slide'} presentationStyle="fullScreen" statusBarTranslucent onRequestClose={onFechar}>
@@ -153,7 +170,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
                 <View style={{ flex: 1 }} onLayout={ev => alturaDesenho.set(ev.nativeEvent.layout.height)}
                   accessibilityRole="adjustable" accessibilityLabel={`Altura do combustível: ${cm === null ? 'não medida' : `${cm} centímetros`}`}
                   accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-                  onAccessibilityAction={ev => definir(Math.max(0, Math.min(300, (cm ?? 0) + (ev.nativeEvent.actionName === 'increment' ? 1 : -1))))}>
+                  onAccessibilityAction={ev => definir(Math.max(0, Math.min(DIAM, (cm ?? 0) + (ev.nativeEvent.actionName === 'increment' ? 1 : -1))))}>
                   <Svg viewBox={`0 0 ${VB_W} ${VB_H}`} style={{ width: '100%', aspectRatio: VB_W / VB_H }}>
                     <Defs>
                       <ClipPath id="casco"><Path d={CASCO} /></ClipPath>
@@ -189,8 +206,8 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
                     {/* régua pela boca de visita: parte molhada na cor do combustível */}
                     <Rect x={CX - 6} y={16} width={12} height={FUNDO - 16} rx={3} fill="#e8d9a8" />
                     <AnimatedRect x={CX - 6} width={12} fill={cor} opacity={0.9} animatedProps={molhadoProps} />
-                    {Array.from({ length: DIAM / 10 + 1 }, (_, k) => {
-                      const v = k * 10, y = yDoCm(v), forte = v % 50 === 0;
+                    {Array.from({ length: Math.floor(DIAM / 10) + 1 }, (_, k) => {
+                      const v = k * 10, y = yDoCm(v, DIAM), forte = v % 50 === 0;
                       return (
                         <G key={v}>
                           <Line x1={CX - 6} x2={forte ? CX + 2 : CX - 2} y1={y} y2={y} stroke="#3a2f12" strokeWidth={forte ? 1.4 : 0.9} />
@@ -206,7 +223,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
                 <View style={{ width: 92, gap: 6, justifyContent: 'center' }}>
                   <Text style={[e.sub, { textAlign: 'center' }]}>Ajuste fino</Text>
                   <View style={e.campoRoleta}>
-                    <Roleta rotulo="Altura em centímetros" valores={VALORES_CM} valor={cm === null ? '' : String(cm)} vazio={cm === null} formatar={v => `${v} cm`}
+                    <Roleta rotulo="Altura em centímetros" valores={valoresCm} valor={cm === null ? '' : String(cm)} vazio={cm === null} formatar={v => `${v} cm`}
                       onChange={v => definir(Number(v))} altura={42} visiveis={3} />
                   </View>
                 </View>
@@ -217,15 +234,18 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
             <View style={e.leitura}>
               <Text style={[e.num, { color: cm === null ? MUTED : FG }]}>{cm === null ? '—' : cm}</Text>
               <Text style={e.un}>cm</Text>
-              {pct !== null ? <View style={e.tag}><Text style={e.tagTxt}>{pct}% da régua</Text></View> : null}
+              {pct !== null ? <View style={e.tag}><Text style={e.tagTxt}>{pct}% {tab ? 'do tanque' : 'da régua'}</Text></View> : null}
             </View>
-            <Text style={e.sub}>Arraste no tanque para marcar a altura do combustível; use a roleta para o ajuste fino. Escala do desenho: 0 a {DIAM} cm (diâmetro de referência, até chegarem as tabelas de arqueação).</Text>
+            <Text style={e.sub}>Arraste no tanque para marcar a altura do combustível; use a roleta para o ajuste fino. {tab
+              ? `Régua de 0 a ${DIAM} cm, pela tabela ${tab.nome}.`
+              : `Sem tabela de arqueação: escala de referência de 0 a ${DIAM} cm (importe a tabela na tela da filial).`}</Text>
 
             {/* Litros */}
             <View style={e.caixa}>
-              <Text style={e.rot}>Litros (tabela do tanque)</Text>
+              <Text style={e.rot}>{tab ? `Litros pela tabela ${tab.nome}` : 'Litros (tabela do tanque)'}</Text>
               <TextInput value={litrosTxt} onChangeText={mudarLitros} keyboardType="decimal-pad" placeholder="0" placeholderTextColor="#6b7891"
                 style={e.litros} accessibilityLabel="Litros pela tabela do tanque" />
+              {tab ? <Text style={e.sub}>{t.litrosTabela ? 'Calculado pela altura (dá para corrigir digitando).' : 'Digitado à mão; mexa na régua para calcular pela tabela.'}</Text> : null}
               <Text style={e.sub}>Informada (medição anterior): <Text style={{ color: FG, fontWeight: '800' }}>{fmtL(t.informada)} L</Text></Text>
             </View>
 

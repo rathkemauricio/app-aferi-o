@@ -13,6 +13,8 @@ import { createTypography, pageMaxWidth, radius, space, ThemeContext, type Theme
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
 import { Deslizavel } from '../tempos/Deslizavel';
 import { MedicaoInterativa } from './MedicaoInterativa';
+import { litrosPelaTabela, type TabelaArqueacao, tabelaDoTanque, useTabelas, vincularTanque } from './arqueacao';
+import { TabelasArqueacao } from './TabelasArqueacao';
 import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
@@ -151,6 +153,8 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
         <Text style={t.captionBg}>Arraste uma medição: para a direita edita (ou reabre a finalizada); para a esquerda exclui.</Text>
       </View>
     ) : <EmptyState icon={RulerIcon} title="Nenhuma medição nesta filial" text="Toque em Nova medição para conferir os tanques." />}
+    <TabelasArqueacao filialId={filialId} filialCodigo={String(filial.codigo)} filialNome={`${filial.codigo} · ${filial.nome}`}
+      tanquesConhecidos={[...new Set([...croqui.map(x => x.tanque), ...(medicoes[0]?.tanques.map(l => l.tanque.trim()).filter(Boolean) ?? [])])]} />
   </>;
 }
 
@@ -171,6 +175,8 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
   const t = useMemo(() => createTypography(colors), [colors]);
   const usuario = useUsuarioLogado();
   const [combDe, setCombDe] = useState<string | null>(null);
+  const [tabelaDe, setTabelaDe] = useState<string | null>(null);
+  const tabelas = useTabelas(m.filial_id);
   const fin = m.status === 'finalizada';
   const r = resumo(m);
   const salvar = (patch: Partial<Medicao>) => medicoesCol.put({ ...m, ...patch });
@@ -181,6 +187,14 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
     medicoesCol.put({ ...atual, tanques: atual.tanques.map(l => (l.id === id ? { ...l, ...p } : l)) });
   };
   const [interativa, setInterativa] = useState(false);
+  /** Altura medida: com tabela de arqueação, os litros saem da tabela; sem tabela, só grava a altura. */
+  const mudarMetragem = (l: LinhaTanque, cm: number | null) => mudarLinha(l.id, comTabela(l, cm, tabelaDoTanque(tabelas, l.tanque)));
+  /** Troca a tabela do tanque e recalcula os litros pela altura já medida. */
+  const escolherTabela = (l: LinhaTanque, tab: TabelaArqueacao | null) => {
+    vincularTanque(tabelas, l.tanque, tab?.id ?? null);
+    if (tab && l.metragem !== null) mudarLinha(l.id, comTabela(l, l.metragem, tab));
+    else if (!tab && l.litrosTabela) mudarLinha(l.id, { litrosTabela: undefined });
+  };
   /** Venda e recebimento são do combustível (unificados), não do tanque. */
   const mudarCombustivel = (c: string, p: Partial<ValoresCombustivel>) => salvar({ combustiveis: valoresPorCombustivel(m).map(v => (v.combustivel === c ? { ...v, ...p } : v)) });
   const tom = (v: number) => (v < 0 ? colors.danger : v > 0 ? colors.warning : colors.success);
@@ -220,17 +234,33 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
           {!fin ? <IconButton icon={XIcon} tone="danger" label="Remover tanque" onPress={() => confirmAction('Remover tanque?', `O tanque ${l.tanque || ''} sai desta medição.`, 'Remover', () => salvar({ tanques: m.tanques.filter(x => x.id !== l.id) }))} /> : null}
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-          <NumeroCampo label="Metragem (cm)" valor={l.metragem} editavel={!fin} onChange={v => mudarLinha(l.id, { metragem: v })} />
-          <NumeroCampo label="Litros (medido)" valor={l.litros} editavel={!fin} onChange={v => mudarLinha(l.id, { litros: v })} />
+          <NumeroCampo label="Metragem (cm)" valor={l.metragem} editavel={!fin} onChange={v => mudarMetragem(l, v)} />
+          <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
+            <NumeroCampo label="Litros (medido)" valor={l.litros} editavel={!fin} onChange={v => mudarLinha(l.id, { litros: v, litrosTabela: undefined })} />
+            <Text style={t.caption}>{l.litrosTabela ? 'pela tabela de arqueação' : l.litros !== null ? 'digitado' : ''}</Text>
+          </View>
           <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
             <NumeroCampo label="Informada (L)" valor={l.informada} editavel={!fin} onChange={v => mudarLinha(l.id, { informada: v, informadaDe: undefined })} />
             <Text style={t.caption}>{l.informadaDe ? `da medição de ${dataBR(l.informadaDe)}` : 'digitada (sem medição anterior)'}</Text>
           </View>
         </View>
+        {(() => {
+          const tab = tabelaDoTanque(tabelas, l.tanque);
+          return (
+            <Pressable accessibilityRole="button" disabled={fin || !l.tanque.trim() || !tabelas.length} onPress={() => setTabelaDe(l.id)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.control, borderWidth: 1, borderColor: tab ? colors.accent : colors.border, backgroundColor: tab ? colors.accentSoft : colors.campo, alignSelf: 'flex-start', maxWidth: '100%' }}>
+              <RulerIcon size={14} color={tab ? colors.accentText : colors.textMuted} />
+              <Text style={[t.caption, { fontWeight: '700', color: tab ? colors.accentText : colors.textMuted, flexShrink: 1 }]} numberOfLines={1}>
+                {tab ? `Tabela: ${tab.nome}` : tabelas.length ? 'Sem tabela de arqueação (escolher)' : 'Sem tabela de arqueação: importe na tela da filial'}
+              </Text>
+              {!fin && tabelas.length ? <CaretDownIcon size={12} color={tab ? colors.accentText : colors.textMuted} /> : null}
+            </Pressable>
+          );
+        })()}
       </Card>
     ))}
     {!fin && m.tanques.length ? <Button title="Medição interativa (régua no tanque)" icon={RulerIcon} onPress={() => setInterativa(true)} /> : null}
-    {interativa ? <MedicaoInterativa tanques={m.tanques} filial={filialNome} nomeComb={nomeComb} corComb={corComb} onMudar={mudarLinhaAtual} onFechar={() => setInterativa(false)} /> : null}
+    {interativa ? <MedicaoInterativa tanques={m.tanques} filial={filialNome} nomeComb={nomeComb} corComb={corComb} tabelaDe={tq => tabelaDoTanque(tabelas, tq)} onMudar={mudarLinhaAtual} onFechar={() => setInterativa(false)} /> : null}
     {!fin ? <Button title="Adicionar tanque" icon={PlusIcon} variant="secondary" onPress={() => salvar({ tanques: [...m.tanques, linhaVazia(String(m.tanques.length + 1))] })} /> : null}
     {!fin && croqui.length && !confereComCroqui(m.tanques, croqui) ? (
       <Button title={`Usar os tanques do croqui (${croqui.length})`} icon={ResetIcon} variant="secondary"
@@ -267,7 +297,7 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
         </View>
       ))}
     </Card>
-    <Text style={t.caption}>Total = litros medidos + venda. Resultado = informada + recebimento − total: negativo é falta, positivo é sobra. A informada vem dos litros da medição anterior de cada tanque; os litros são digitados a partir da tabela do tanque.</Text>
+    <Text style={t.caption}>Total = litros medidos + venda. Resultado = informada + recebimento − total: negativo é falta, positivo é sobra. A informada vem dos litros da medição anterior de cada tanque; os litros saem da tabela de arqueação do tanque pela altura medida (ou são digitados, sem tabela).</Text>
     <Field label="Observações" value={m.obs} editable={!fin} multiline onChangeText={v => salvar({ obs: v })} placeholder="Ex.: régua conferida, descarga em andamento…" />
 
     {fin ? <>
@@ -275,6 +305,29 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
       <Button title="Reabrir medição" icon={ResetIcon} variant="secondary" onPress={() => confirmAction('Reabrir medição?', 'A medição volta a aceitar alterações.', 'Reabrir', () => salvar({ status: 'rascunho' }))} />
     </> : <Button title="Finalizar medição" icon={CheckIcon} onPress={finalizar} />}
     <Button title="Excluir medição" icon={TrashIcon} variant="danger" size="sm" style={{ alignSelf: 'flex-start' }} onPress={excluir} />
+
+    {tabelaDe ? (() => {
+      const l = m.tanques.find(x => x.id === tabelaDe);
+      if (!l) return null;
+      const atual = tabelaDoTanque(tabelas, l.tanque)?.id ?? null;
+      return (
+        <Sheet title={`Tabela de arqueação do tanque ${l.tanque}`} onClose={() => setTabelaDe(null)}>
+          <Text style={t.caption}>A escolha fica guardada para as próximas medições deste tanque. As tabelas são importadas na tela da filial.</Text>
+          {[...tabelas, null].map(tab => {
+            const on = atual === (tab?.id ?? null);
+            return (
+              <Pressable key={tab?.id ?? 'nenhuma'} accessibilityRole="radio" accessibilityState={{ selected: on }}
+                onPress={() => { escolherTabela(l, tab); setTabelaDe(null); }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                <Text style={[t.body, { flex: 1 }, on && { fontWeight: '800' }]}>{tab ? tab.nome : 'Sem tabela (digitar os litros)'}</Text>
+                {tab?.tanques.length ? <Text style={t.caption}>tanque{tab.tanques.length === 1 ? '' : 's'} {tab.tanques.join(', ')}</Text> : null}
+                {on ? <CheckIcon size={16} color={colors.accentText} /> : null}
+              </Pressable>
+            );
+          })}
+        </Sheet>
+      );
+    })() : null}
 
     {combDe ? (
       <Sheet title="Combustível do tanque" onClose={() => setCombDe(null)}>
@@ -290,6 +343,13 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
   </>;
 }
 
+/** Altura medida + litros pela tabela de arqueação (sem tabela: só a altura; altura apagada: litros da tabela também). */
+function comTabela(l: LinhaTanque, cm: number | null, tab: TabelaArqueacao | undefined): Partial<LinhaTanque> {
+  if (!tab) return { metragem: cm };
+  if (cm === null) return l.litrosTabela ? { metragem: null, litros: null, litrosTabela: undefined } : { metragem: null };
+  return { metragem: cm, litros: litrosPelaTabela(tab, cm), litrosTabela: tab.nome };
+}
+
 /** Os tanques da medição são os do croqui (mesmos números e combustíveis)? */
 const confereComCroqui = (linhas: LinhaTanque[], croqui: TanqueCroqui[]) =>
   linhas.length === croqui.length && croqui.every(x => linhas.some(l => l.tanque.trim().toLowerCase() === x.tanque.trim().toLowerCase() && (!x.combustivel || l.combustivel === x.combustivel)));
@@ -300,7 +360,7 @@ export function relatorioHtml(m: Medicao, filialNome: string, nomeComb: (id: str
   const n = (v: number | null) => fmtL(v);
   const cor = (v: number) => (v < 0 ? 'neg' : v > 0 ? 'pos' : '');
   const pc = (v: number | null) => (v === null ? '—' : `${fmtSinal(Math.round(v * 100) / 100)}%`);
-  const tanques = m.tanques.map(l => `<tr><td>${esc(l.tanque)}</td><td>${esc(nomeComb(l.combustivel))}</td><td class="n">${n(l.metragem)}</td><td class="n">${n(l.litros)}</td><td class="n">${n(l.informada)}${l.informadaDe ? `<br><span class="peq">medição de ${dataBR(l.informadaDe)}</span>` : ''}</td></tr>`).join('');
+  const tanques = m.tanques.map(l => `<tr><td>${esc(l.tanque)}</td><td>${esc(nomeComb(l.combustivel))}</td><td class="n">${n(l.metragem)}</td><td class="n">${n(l.litros)}${l.litros === null ? '' : `<br><span class="peq">${l.litrosTabela ? `tabela ${esc(l.litrosTabela)}` : 'digitado'}</span>`}</td><td class="n">${n(l.informada)}${l.informadaDe ? `<br><span class="peq">medição de ${dataBR(l.informadaDe)}</span>` : ''}</td></tr>`).join('');
   const conferencia = [...r.porCombustivel, r.geral].map(x => `<tr${x.combustivel === 'Total' ? ' class="tot"' : ''}><td>${x.combustivel === 'Total' ? 'Total geral' : esc(nomeComb(x.combustivel))}</td><td>${esc(x.tanques.join(', '))}</td><td class="n">${n(x.litros)}</td><td class="n">${n(x.venda)}</td><td class="n"><b>${n(x.total)}</b></td><td class="n">${n(x.informada)}</td><td class="n">${n(x.recebimento)}</td><td class="n ${cor(x.resultado)}"><b>${fmtSinal(x.resultado)}</b></td><td class="n">${pc(x.pct)}</td></tr>`).join('');
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Medição de tanques · ${esc(filialNome)}</title><style>
 @page{size:A4 landscape;margin:10mm}body{font:11px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:17px;margin:0 0 2px;color:${AZUL}}.sub{color:#5b6475;margin-bottom:8px}
@@ -315,7 +375,7 @@ h2{font-size:12.5px;margin:12px 0 4px;color:${AZUL}}table{width:100%;border-coll
 <p class="nota">A venda é unificada por combustível, por isso a conferência soma os tanques de cada combustível. Total = litros medidos + venda. Resultado final = informada + recebimento − total (negativo = falta; positivo = sobra).</p>
 <h2>Tanques medidos</h2>
 <table><tr><th>Tanque</th><th>Combustível</th><th class="n">Metragem (cm)</th><th class="n">Litros medidos</th><th class="n">Informada (medição anterior)</th></tr>${tanques}</table>
-<p class="nota">Litros lidos na tabela do tanque. Informada = litros da medição anterior do tanque.</p>
+<p class="nota">Litros calculados pela tabela de arqueação do tanque a partir da metragem (entre dois centímetros, em linha reta) ou digitados. Informada = litros da medição anterior do tanque.</p>
 <h2>Observações</h2><div class="obs">${esc(m.obs || '—')}</div>
 <div class="ass"><div>Responsável pela medição — ${esc(m.responsavel_nome || '')}</div><div>Gerente da filial</div></div>
 </body></html>`;
