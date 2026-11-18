@@ -10,7 +10,7 @@ import { radius, ThemeContext } from '../../ui/theme';
 const ALTURA = 40;
 const VISIVEIS = 5;
 
-export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = false, rotulo }: {
+export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = false, rotulo, altura: alt = ALTURA, visiveis: vis = VISIVEIS }: {
   valores: string[];
   /** Valor escolhido ('' = ainda não medido: a roleta fica no valor `inicial`, sem destaque de escolhido). */
   valor: string;
@@ -19,6 +19,9 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
   /** Mostra que ainda não foi medido. */
   vazio?: boolean;
   rotulo: string;
+  /** Altura de cada valor e quantos aparecem (dentro de um campo: 3 valores mais baixos). */
+  altura?: number;
+  visiveis?: number;
 }) {
   const { colors } = useContext(ThemeContext);
   const ref = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -32,7 +35,7 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
   const mexeu = useRef(false);
   const rolarPara = (i: number, animado: boolean) => {
     rolagemDoApp.current = Date.now();
-    ref.current?.scrollTo({ y: i * ALTURA, animated: animado });
+    ref.current?.scrollTo({ y: i * alt, animated: animado });
   };
 
   // Vai até o valor quando ele muda por fora (cronômetro, troca de bico). Ao aparecer, vai direto (sem animar).
@@ -54,7 +57,7 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
   const doGesto = () => mexeu.current && Date.now() - rolagemDoApp.current > 450;
   const aoParar = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!doGesto()) return;
-    const i = Math.round(e.nativeEvent.contentOffset.y / ALTURA);
+    const i = Math.round(e.nativeEvent.contentOffset.y / alt);
     if (i !== ultimo.current || vazio) escolher(i);
   };
   // Na web não há "fim do arremesso": escolhe quando a rolagem para.
@@ -62,7 +65,7 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
     if (Platform.OS !== 'web') return;
     const y = e.nativeEvent.contentOffset.y;
     if (espera.current) clearTimeout(espera.current);
-    espera.current = setTimeout(() => { if (!doGesto()) return; const i = Math.round(y / ALTURA); if (i !== ultimo.current) escolher(i); }, 160);
+    espera.current = setTimeout(() => { if (!doGesto()) return; const i = Math.round(y / alt); if (i !== ultimo.current) escolher(i); }, 160);
   };
   // Posiciona no valor atual assim que a roleta tem tamanho (dentro da janela, o primeiro rolar pode se perder).
   const aoMedir = () => {
@@ -71,7 +74,7 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
     [80, 200, 400].forEach(ms => setTimeout(() => { if (!mexeu.current) rolarPara(ultimo.current, false); }, ms));
   };
   const marcarGesto = () => { mexeu.current = true; rolagemDoApp.current = 0; };
-  const s = useMemo(() => estilos(colors.accent), [colors.accent]);
+  const s = useMemo(() => estilos(colors.accent, alt, vis), [colors.accent, alt, vis]);
 
   return (
     <View style={s.caixa} accessibilityRole="adjustable" accessibilityLabel={`${rotulo}: ${vazio ? 'não medido' : formatar(valor)}`}
@@ -81,10 +84,10 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
       <View pointerEvents="none" style={[s.faixa, { backgroundColor: vazio ? colors.surfaceMuted : colors.accent, borderColor: colors.accent }]} />
       <ScrollView
         ref={ref}
-        style={{ height: ALTURA * VISIVEIS }}
-        contentContainerStyle={{ paddingVertical: ALTURA * Math.floor(VISIVEIS / 2) }}
+        style={{ height: alt * vis }}
+        contentContainerStyle={{ paddingVertical: alt * Math.floor(vis / 2) }}
         showsVerticalScrollIndicator={false}
-        snapToInterval={ALTURA}
+        snapToInterval={alt}
         decelerationRate="fast"
         nestedScrollEnabled
         onLayout={aoMedir}
@@ -96,7 +99,7 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
         onScrollEndDrag={e => { if (Platform.OS === 'android' && !e.nativeEvent.velocity?.y) aoParar(e); }}
         onScroll={aoRolar}
         scrollEventThrottle={32}
-        {...(Platform.OS === 'web' ? {} : { contentOffset: { x: 0, y: atual * ALTURA } })}
+        {...(Platform.OS === 'web' ? {} : { contentOffset: { x: 0, y: atual * alt } })}
       >
         {valores.map((v, i) => {
           const centro = i === atual;
@@ -113,10 +116,10 @@ export function Roleta({ valores, valor, onChange, formatar = v => v, vazio = fa
   );
 }
 
-const estilos = (acc: string) => StyleSheet.create({
-  caixa: { height: ALTURA * VISIVEIS, borderRadius: radius.control, overflow: 'hidden' },
-  faixa: { position: 'absolute', left: 4, right: 4, top: ALTURA * Math.floor(VISIVEIS / 2), height: ALTURA, borderRadius: radius.control, borderWidth: 1.5, opacity: 1, shadowColor: acc },
-  item: { height: ALTURA, alignItems: 'center', justifyContent: 'center' },
+const estilos = (acc: string, alt = ALTURA, vis = VISIVEIS) => StyleSheet.create({
+  caixa: { height: alt * vis, borderRadius: radius.control, overflow: 'hidden' },
+  faixa: { position: 'absolute', left: 4, right: 4, top: alt * Math.floor(vis / 2), height: alt, borderRadius: radius.control, borderWidth: 1.5, opacity: 1, shadowColor: acc },
+  item: { height: alt, alignItems: 'center', justifyContent: 'center' },
   txt: { fontVariant: ['tabular-nums'] },
 });
 

@@ -11,7 +11,8 @@ import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
 import { afericoesCol } from './registros';
 import { Deslizavel } from '../tempos/Deslizavel';
-import { faixa, RoletaFlutuante } from './Roleta';
+import { faixa, Roleta } from './Roleta';
+import { AfericaoInterativa, type BicoInterativo } from './AfericaoInterativa';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { CroquiCanvas } from '../croqui/Canvas';
 import { Bico3D, BicoFlutuante, Brilho } from './BicoEmFoco';
@@ -108,8 +109,8 @@ export default function AfericoesModule() {
   const [selectedNozzleId, setSelectedNozzleId] = useState('');
   const [auditMeta, setAuditMeta] = useState<Record<string, string>>({ date: today(), auditor: usuario, aferidor: '', seal: '', inmetro: '', panels: '', rodilhas: '', condBombas: '', condBombasObs: '', condIlhas: '', condIlhasObs: '', generalNotes: '', observations: '' });
   const [detailAudit, setDetailAudit] = useState<Audit | null>(null);
-  /** Roleta aberta por cima do valor tocado (critério, rótulo e valores prontos). */
-  const [roleta, setRoleta] = useState<{ index: number; rotulo: string; valores: string[]; formatar?: (v: string) => string } | null>(null);
+  /** Aferição interativa em tela cheia (opcional; o modo normal continua igual). */
+  const [interativa, setInterativa] = useState(false);
   const [emailAudit, setEmailAudit] = useState<Audit | null>(null); // relatório sendo enviado por e-mail
   const [emailPara, setEmailPara] = useState('');
   const [enviandoEmail, setEnviandoEmail] = useState(false);
@@ -275,6 +276,14 @@ export default function AfericoesModule() {
   const apagarBico = (nozzleId: string, nome: string) => confirmAction(`Apagar a aferição do ${nome}?`, 'O bico volta a ficar pendente nesta aferição.', 'Apagar', () => {
     setDraft(d => { const dados = { ...d.data }; delete dados[nozzleId]; return { ...d, data: dados }; });
   });
+
+  /** Grava um critério de um bico qualquer da aferição em andamento (tela interativa). */
+  const setCheckBico = useCallback((nozzleId: string, index: number, value: string) => setDraft(d => {
+    const old = d.data[nozzleId] ?? { checks: CRITERIA.map(() => ''), notes: CRITERIA.map(() => '') };
+    const checks = [...old.checks]; checks[index] = value;
+    const notes = [...old.notes]; if (value !== 'NC' && value !== 'OB') notes[index] = '';
+    return { ...d, data: { ...d.data, [nozzleId]: { checks, notes } } };
+  }), []);
 
   const branch = data.branches.find(b => b.id === draft.branchId);
   const currentPump = branch?.pumps.find(p => p.id === selectedPumpId);
@@ -517,7 +526,20 @@ export default function AfericoesModule() {
       return <>
         <Button title="Trocar filial" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => setAuditStage('branch')} />
         {croquiDaAfericao(false)}
-        <Text style={textStyles.caption}>Toque em cada bico para registrar a inspeção. Bico já aferido: arraste para a direita para editar ou para a esquerda para apagar. Bicos sem registro entram como não realizados.</Text>
+        <Button title="Aferição interativa (tela cheia)" icon={GasPumpIcon} onPress={() => setInterativa(true)} disabled={!branch.pumps.some(p => p.nozzles.length)} />
+        {interativa ? (
+          <AfericaoInterativa
+            filial={`${branch.name} #${branch.code}`}
+            bicos={branch.pumps.flatMap(p => p.nozzles.map((n): BicoInterativo => ({ id: n.id, numero: String(n.number), bomba: p.number, combustivel: n.fuel, cor: catalogoCombustiveis.find(c => c.nome === n.fuel)?.cor ?? '#7a8594' })))}
+            dados={draft.data}
+            criteriosCodigo={['Luz', 'Mangueira', 'BICO', 'Lacres', 'Sump']}
+            indiceCodigo={c => CRITERIA.indexOf(c)}
+            onCheck={setCheckBico}
+            onFechar={() => setInterativa(false)}
+            onModoNormal={id => { const p = branch.pumps.find(x => x.nozzles.some(n => n.id === id)); setInterativa(false); if (p) openNozzle(p.id, id); }}
+          />
+        ) : null}
+        <Text style={textStyles.caption}>Ou faça no modo normal: toque em cada bico para registrar a inspeção. Bico já aferido: arraste para a direita para editar ou para a esquerda para apagar. Bicos sem registro entram como não realizados.</Text>
         {branch.pumps.map(p => (
           <Card key={p.id} style={s.listCard}>
             <View style={[s.rowCenter, s.cardHead]}>
@@ -545,7 +567,6 @@ export default function AfericoesModule() {
 
     if (auditStage === 'nozzle' && currentNozzle) {
       const entry = draft.data[currentNozzle.id] ?? { checks: [], notes: [] };
-      const step = (index: number, value: string, delta: number) => setAuditCheck(index, String(Math.max(-200, Math.min(200, (Number(value) || 0) + delta))));
       return <>
         <Button title="Voltar aos bicos" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => { setAuditStage('equipment'); setFlowStarted(null); }} />
         <View style={s.rowCenter}>
@@ -557,39 +578,31 @@ export default function AfericoesModule() {
         </View>
         {croquiDaAfericao(true)}
         <View style={s.note}>
-          <Text style={s.noteText}>Lenta e Rápida: use − e + (passos de 20 mL) ou toque no valor para escolher na roleta, de −200 a +200 mL. Vazão e Des. 60s também pela roleta. Em OB ou NC, descreva a observação ou o local do erro.</Text>
+          <Text style={s.noteText}>Lenta, Rápida, Vazão e Des. 60s: deslize o dedo dentro do campo para girar a roleta (fora do campo, a tela rola normalmente). Lenta e Rápida de 20 em 20 mL. Em OB ou NC, descreva a observação ou o local do erro.</Text>
         </View>
         <Card style={s.listCard}>
           {CRITERIA.map((criterion, index) => {
             if (FORA_DA_COLETA.includes(criterion)) return null;
             const value = entry.checks[index] ?? '';
             const unit = SCALE.includes(criterion) ? 'mL' : NUMERIC.includes(criterion) ? (criterion === 'Vazão' ? 'L/min' : 's') : '';
-            // Toque no valor: abre a roleta transparente por cima, com os valores prontos (sem teclado).
-            const caixaValor = (texto: string, vazio: string, rotulo: string, valores: string[], formatar?: (v: string) => string) => (
-              <Pressable accessibilityRole="button" accessibilityLabel={`${rotulo}: ${value === '' ? 'não medido' : texto}. Toque para escolher`}
-                onPress={() => setRoleta({ index, rotulo, valores, formatar })}
-                style={({ pressed }) => [s.valorBox, s.flex, pressed && { opacity: 0.75 }]}>
-                <Text style={[s.valorTxt, value === '' && { color: colors.textFaint, fontWeight: '600' }]}>{value === '' ? vazio : texto}</Text>
-              </Pressable>
+            // Roleta dentro do campo: deslizar o dedo no campo gira a roleta (não a tela); tocar num valor escolhe.
+            const campoRoleta = (rotulo: string, valores: string[], formatar?: (v: string) => string) => (
+              <View style={s.roletaCampo}>
+                <Roleta rotulo={rotulo} valores={valores} valor={value} vazio={value === ''} formatar={formatar} onChange={v => setAuditCheck(index, v)} altura={42} visiveis={3} />
+              </View>
             );
             return (
               <View key={criterion} style={[s.criterion, index > 0 && s.divided]}>
                 <View style={s.rowCenter}>
                   <Text style={[textStyles.bodyStrong, s.flex]}>{criterion}</Text>
+                  {(SCALE.includes(criterion) || NUMERIC.includes(criterion)) && value === '' ? <Text style={textStyles.caption}>não medido · </Text> : null}
                   {unit ? <Text style={textStyles.caption}>{unit}</Text> : null}
                 </View>
-                {SCALE.includes(criterion) ? (
-                  <View style={s.stepper}>
-                    <Pressable accessibilityLabel="Diminuir 20" onPress={() => step(index, value, -20)} style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed]}><MinusIcon size={18} color={colors.text} weight="bold" /></Pressable>
-                    {caixaValor(comSinal(value), '0', `${criterion} em mL`, VALORES_ML, comSinal)}
-                    <Pressable accessibilityLabel="Aumentar 20" onPress={() => step(index, value, 20)} style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed]}><PlusIcon size={18} color={colors.text} weight="bold" /></Pressable>
-                  </View>
-                ) : NUMERIC.includes(criterion) ? <>
-                  <View style={s.stepper}>
-                    {criterion === 'Vazão'
-                      ? caixaValor(value, 'Litros em 6 s × 10', 'Vazão em litros por minuto', VALORES_VAZAO)
-                      : caixaValor(`${value} s`, 'Segundos até desligar', 'Tempo até desligar, em segundos', VALORES_SEGUNDOS, v => `${v} s`)}
-                  </View>
+                {SCALE.includes(criterion) ? campoRoleta(`${criterion} em mL`, VALORES_ML, comSinal)
+                : NUMERIC.includes(criterion) ? <>
+                  {criterion === 'Vazão'
+                    ? campoRoleta('Vazão em litros por minuto', VALORES_VAZAO)
+                    : campoRoleta('Tempo até desligar, em segundos', VALORES_SEGUNDOS, v => `${v} s`)}
                   {criterion === 'Des. 60s' && (
                     <View style={s.timer}>
                       <TimerIcon size={20} color={colors.textMuted} />
@@ -613,10 +626,6 @@ export default function AfericoesModule() {
             );
           })}
         </Card>
-        {roleta ? (
-          <RoletaFlutuante titulo={roleta.rotulo} valores={roleta.valores} formatar={roleta.formatar}
-            valor={entry.checks[roleta.index] ?? ''} onChange={v => setAuditCheck(roleta.index, v)} onFechar={() => setRoleta(null)} />
-        ) : null}
         <Card style={s.mutedCard}>
           <Text style={textStyles.label}>Códigos de não conformidade</Text>
           {[['NC00', 'Erro fora do limite'], ['NC01', 'Lacre violado'], ['NC02', 'Selo vencido'], ['NC03', 'Vazamento']].map(([code, label]) => (
@@ -1004,6 +1013,7 @@ const createScreenStyles = (colors: ThemeColors) => StyleSheet.create({
   note: { padding: space.md, borderRadius: radius.control, backgroundColor: colors.accentSoft },
   noteText: { fontSize: 13, lineHeight: 19, color: colors.accentText },
   criterion: { gap: space.sm, padding: space.md },
+  roletaCampo: { borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, overflow: 'hidden' },
   valorBox: { minHeight: 46, borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.md },
   valorTxt: { fontSize: 17, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
