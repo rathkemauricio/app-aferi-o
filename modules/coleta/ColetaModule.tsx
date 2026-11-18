@@ -29,7 +29,8 @@ import { Deslizavel } from '../tempos/Deslizavel';
 // Cores do design da Contagem de Estoque (cabeçalho azul-marinho, ação principal âmbar).
 /** A coleta (leitura dos códigos) é feita só no app do celular; no painel web as contagens ficam para consulta. */
 const COLETA_AQUI = Platform.OS !== 'web';
-const NAVY = '#102a46', AMBER = '#f3a200', AMBER_TXT = '#1b2230', VERDE = '#1e9e55';
+// Marca EasyAudit: azul-marinho e verde-menta (destaques e botão Salvar); VERDE = topo da coleta no layout simples.
+const NAVY = '#0f1f3d', AMBER = '#5fd39a', AMBER_TXT = '#0f1f3d', VERDE = '#17865a';
 
 type Tela =
   | { n: 'lista' } | { n: 'abrir' } | { n: 'editarInv'; id: string } | { n: 'bases'; filial?: string } | { n: 'inventario'; id: string } | { n: 'nova'; inv: string; editar?: string }

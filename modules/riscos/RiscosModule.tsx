@@ -49,7 +49,7 @@ export default function RiscosModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={[e.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
-        <View style={e.marca}><ShieldWarningIcon size={18} color="#fff" weight="bold" /></View>
+        <View style={e.marca}><ShieldWarningIcon size={18} color="#5fd39a" weight="bold" /></View>
         <View style={s.flex}>
           <Text style={[e.nome, { color: colors.text }]}>Mapa de Risco</Text>
           <Text style={t.caption}>Prevenção de Perdas · Filial Destaque</Text>
@@ -82,7 +82,7 @@ export default function RiscosModule() {
 
 const e = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: 1 },
-  marca: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#c43d48', alignItems: 'center', justifyContent: 'center' },
+  marca: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   nome: { fontSize: 15.5, fontWeight: '800' },
   abasWrap: { borderBottomWidth: 1 },
   abas: { paddingHorizontal: space.md, gap: 4 },

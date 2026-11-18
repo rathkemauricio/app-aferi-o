@@ -55,7 +55,7 @@ export default function AuditoriaModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
-        <View style={s.brandMark}><ClipboardTextIcon size={18} color="#fff" weight="bold" /></View>
+        <View style={s.brandMark}><ClipboardTextIcon size={18} color="#5fd39a" weight="bold" /></View>
         <View style={s.flex}>
           <Text style={s.brandName}>Auditoria</Text>
           <Text style={t.caption}>Sistema de Gestão Integrada</Text>
@@ -589,7 +589,7 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   stack: { gap: space.md },
   alignStart: { alignSelf: 'flex-start' },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#c17a13', alignItems: 'center', justifyContent: 'center' },
+  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text },
   content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: pageMaxWidth(900), alignSelf: 'center' },
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },

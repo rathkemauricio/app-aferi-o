@@ -14,7 +14,7 @@ import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resu
 import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
-const AZUL = '#0e7490';
+const AZUL = '#0f1f3d'; // azul-marinho da marca (topo e relatório)
 
 export default function TanquesModule() {
   const router = useRouter();
@@ -48,7 +48,7 @@ export default function TanquesModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label={pilha.length > 1 ? 'Voltar' : 'Voltar aos módulos'} onPress={voltar} />
-        <View style={s.brandMark}><RulerIcon size={18} color="#fff" weight="bold" /></View>
+        <View style={s.brandMark}><RulerIcon size={18} color="#5fd39a" weight="bold" /></View>
         <View style={s.flex}><Text style={s.brandName}>Medição de Tanques</Text><Text style={t.caption}>Conferência do estoque de combustível</Text></View>
         {dados.status === 'error' ? <StatusPill icon={CloudSlashIcon} label="Sem sincronizar" tone="warning" /> : <StatusPill icon={CloudCheckIcon} label="Sincronizado" tone="success" />}
       </View>

@@ -20,7 +20,7 @@ export function SemServidor() {
     } catch { setMsg('Não foi possível procurar. Confira a internet e tente de novo.'); } finally { setProcurando(false); }
   };
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14, backgroundColor: '#0f1724' }}>
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14, backgroundColor: '#0f1f3d' }}>
       <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center' }}>Sem conexão com o servidor do EasyAudit</Text>
       <Text style={{ color: '#c9d4e2', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
         Este aparelho está sem a configuração do servidor, e o EasyAudit não funciona sem login.{'\n'}
@@ -28,8 +28,8 @@ export function SemServidor() {
       </Text>
       {nativo ? (
         <Pressable accessibilityRole="button" onPress={() => void procurar()} disabled={procurando}
-          style={({ pressed }) => ({ backgroundColor: '#f3a200', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 22, opacity: procurando ? 0.6 : pressed ? 0.85 : 1 })}>
-          {procurando ? <ActivityIndicator color="#1b2230" /> : <Text style={{ color: '#1b2230', fontSize: 16, fontWeight: '800' }}>Procurar atualização</Text>}
+          style={({ pressed }) => ({ backgroundColor: '#5fd39a', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 22, opacity: procurando ? 0.6 : pressed ? 0.85 : 1 })}>
+          {procurando ? <ActivityIndicator color="#0f1f3d" /> : <Text style={{ color: '#0f1f3d', fontSize: 16, fontWeight: '800' }}>Procurar atualização</Text>}
         </Pressable>
       ) : null}
       {msg ? <Text style={{ color: '#ffb4ae', fontSize: 14, textAlign: 'center' }}>{msg}</Text> : null}

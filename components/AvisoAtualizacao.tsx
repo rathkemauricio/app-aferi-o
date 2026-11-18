@@ -44,7 +44,7 @@ export function AvisoAtualizacao() {
 }
 
 const st = StyleSheet.create({
-  faixa: { backgroundColor: '#1e9e55', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  faixa: { backgroundColor: '#5fd39a', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   tit: { color: '#fff', fontSize: 17, fontWeight: '800' },
-  txt: { color: '#eafff2', fontSize: 14, fontWeight: '600' },
+  txt: { color: '#0f1f3d', fontSize: 14, fontWeight: '600' },
 });

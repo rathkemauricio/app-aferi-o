@@ -624,7 +624,7 @@ export default function AfericoesModule() {
   return <SafeAreaView style={s.safe} edges={['top']}>
     <View style={s.header}>
       <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} />
-      <View style={s.brandMark}><GasPumpIcon size={18} color="#fff" weight="bold" /></View>
+      <View style={s.brandMark}><GasPumpIcon size={18} color="#5fd39a" weight="bold" /></View>
       <View style={s.flex}>
         <Text style={s.brandName}>Aferições</Text>
         <Text style={s.brandSub}>Módulo</Text>
@@ -908,7 +908,7 @@ const createScreenStyles = (colors: ThemeColors) => StyleSheet.create({
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  brandMark: { width: 34, height: 34, borderRadius: radius.tile, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  brandMark: { width: 34, height: 34, borderRadius: radius.tile, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
   brandSub: { fontSize: 12, color: colors.textMuted },
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 10, backgroundColor: colors.warningSoft },

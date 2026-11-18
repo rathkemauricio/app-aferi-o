@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTela } from '../../ui/zoom';
 import { rotuloVersao } from '../../lib/versao';
 import { marcarUsoModulo, useOrdemRecentes } from '../../lib/recentes';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
+import { LogoSimbolo } from '../../components/Logo';
 import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useFiliais } from '../../lib/data';
@@ -94,7 +95,7 @@ export default function ModuleLauncher() {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <Image source={require('../../assets/favicon.png')} style={{ width: 36, height: 36 }} accessibilityLabel="EasyAudit" />
+        <LogoSimbolo altura={26} cor={mode === 'dark' ? '#ffffff' : colors.text} />
         <View style={s.flex}>
           <Text style={s.brandName}>EasyAudit</Text>
           <Text style={s.brandSub}>Central de módulos</Text>
@@ -114,7 +115,7 @@ export default function ModuleLauncher() {
           <Text style={t.caption} numberOfLines={1}>
             {nome || userEmail || (isSupabaseConfigured ? 'Sessão sem e-mail' : 'Modo local, sem conta conectada')}
           </Text>
-          {isAdmin && isSupabaseConfigured ? <StatusPill label="Administrador" tone="accent" /> : null}
+          {isAdmin && isSupabaseConfigured ? <View style={[s.aviso, { marginTop: 0 }]}><Text style={s.avisoTxt}>Administrador</Text></View> : null}
         </Pressable>
 
         {pendentes > 0 ? (
@@ -154,7 +155,8 @@ export default function ModuleLauncher() {
 }
 
 function ModuleCard({ module: m, onOpen, desktop = false }: { module: AppModule; onOpen: () => void; desktop?: boolean }) {
-  const { colors } = useContext(ThemeContext);
+  const { colors, mode } = useContext(ThemeContext);
+  const Icone = m.icon;
   const t = useMemo(() => createTypography(colors), [colors]);
   const s = useMemo(() => createStyles(colors, desktop), [colors, desktop]);
   const aviso = m.useAviso?.() ?? null;
@@ -166,12 +168,15 @@ function ModuleCard({ module: m, onOpen, desktop = false }: { module: AppModule;
       style={({ pressed }) => [s.tile, s.card, pressed && s.pressed]}
     >
       <View style={s.tileTop}>
-        <IconTile icon={m.icon} tint={m.tint} size={48} />
-        <View style={s.open}><ArrowRightIcon size={16} color={colors.accentText} weight="bold" /></View>
+        {/* Ícone num quadrado neutro e seta no círculo verde-menta (marca EasyAudit) */}
+        <View style={[s.iconeModulo, { backgroundColor: mode === 'dark' ? '#26344d' : '#eef0f4' }]}>
+          <Icone size={24} color={mode === 'dark' ? '#aeb8ef' : colors.text} />
+        </View>
+        <View style={s.open}><ArrowRightIcon size={16} color={colors.onMint} weight="bold" /></View>
       </View>
       <Text style={[t.section, s.tileName]}>{m.name}</Text>
-      <Text style={t.caption}>{m.description}</Text>
-      {aviso ? <View style={{ marginTop: 6 }}><StatusPill label={aviso} tone="accent" /></View> : null}
+      <Text style={[t.caption, { color: colors.textMuted }]}>{m.description}</Text>
+      {aviso ? <View style={s.aviso}><Text style={s.avisoTxt}>{aviso}</Text></View> : null}
     </Pressable>
   );
 }
@@ -215,5 +220,8 @@ const createStyles = (c: ThemeColors, desktop = false) => StyleSheet.create({
   tileName: { marginTop: 2 },
   listCard: { padding: space.xs, gap: 0 },
   divided: { borderTopWidth: 1, borderTopColor: c.border, borderRadius: 0 },
-  open: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
+  open: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: c.mint },
+  iconeModulo: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  aviso: { alignSelf: 'flex-start', marginTop: 6, backgroundColor: c.mint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
+  avisoTxt: { color: c.onMint, fontSize: 12, fontWeight: '700' },
 });

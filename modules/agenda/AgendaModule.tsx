@@ -98,7 +98,7 @@ export default function AgendaModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
-        <View style={s.brandMark}><CalendarDotsIcon size={18} color="#fff" weight="bold" /></View>
+        <View style={s.brandMark}><CalendarDotsIcon size={18} color="#5fd39a" weight="bold" /></View>
         <View style={s.flex}>
           <Text style={s.brandName}>Agenda</Text>
           <Text style={t.caption}>Integrada ao Google Agenda</Text>
@@ -229,7 +229,7 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   twoCol: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#1a73e8', alignItems: 'center', justifyContent: 'center' },
+  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text },
   content: { padding: space.lg, paddingBottom: space.xxl * 2, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center' },
   gTile: { width: 40, height: 40, borderRadius: radius.tile, alignItems: 'center', justifyContent: 'center' },

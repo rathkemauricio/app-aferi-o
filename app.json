@@ -13,7 +13,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#04142f"
+        "backgroundColor": "#0f1f3d"
       },
       "permissions": [
         "android.permission.RECORD_AUDIO"
@@ -47,8 +47,8 @@
       "favicon": "./assets/favicon.png",
       "name": "EasyAudit",
       "shortName": "EasyAudit",
-      "themeColor": "#04142f",
-      "backgroundColor": "#f5f6f8"
+      "themeColor": "#0f1f3d",
+      "backgroundColor": "#f4f3ef"
     },
     "extra": {
       "router": {

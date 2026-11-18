@@ -2,37 +2,43 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, useColorScheme } from 'react-native';
 import { createContext, createElement, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
-// Tokens visuais do app. Um único acento (índigo), neutros frios e cores semânticas só para status.
+// Tokens visuais do app (marca EasyAudit): azul-marinho e verde-menta, neutros frios e cores semânticas só para status.
+// Tema claro: botões principais em azul-marinho. Tema escuro: fundo marinho e botões em verde-menta.
 export const color = {
-  bg: '#f5f6f8',
+  bg: '#f2f4f7',
   surface: '#ffffff',
-  surfaceMuted: '#f9fafb',
-  border: '#e5e7ec',
-  borderStrong: '#d3d7df',
-  text: '#141922',
-  textMuted: '#596173',
-  textFaint: '#6e7686',
+  surfaceMuted: '#f7f8fa',
+  border: '#e3e7ee',
+  borderStrong: '#cdd4df',
+  text: '#0f1f3d',
+  textMuted: '#55607a',
+  textFaint: '#6f7891',
 
-  accent: '#4f46e5',
-  accentPressed: '#4338ca',
-  accentSoft: '#eef0ff',
-  accentText: '#3f37c9',
+  accent: '#0f1f3d',
+  accentPressed: '#0a1630',
+  accentSoft: '#e6ecf5',
+  accentText: '#1f3d6e',
   primaryText: '#ffffff',
 
   success: '#157a3c',
-  successSoft: '#e8f6ee',
+  successSoft: '#e3f6ec',
   warning: '#9a5b00',
   warningSoft: '#fdf3e0',
   danger: '#b42318',
   dangerSoft: '#fdecea',
-  neutralSoft: '#eef0f3',
+  neutralSoft: '#eef0f4',
+
+  /** Verde-menta da marca (setas dos cartões, etiquetas de destaque). */
+  mint: '#5fd39a',
+  /** Texto sobre o verde-menta. */
+  onMint: '#0f1f3d',
 };
 
 // Tons de categoria para os quadradinhos de ícone (filiais, bombas, bicos, aferições).
 export const tint = {
-  indigo: { bg: '#eef0ff', fg: '#4f46e5' },
-  sky: { bg: '#e8f3fc', fg: '#1f6fb2' },
-  emerald: { bg: '#e8f6ee', fg: '#157a3c' },
+  indigo: { bg: '#e6ecf5', fg: '#1f3d6e' },
+  sky: { bg: '#e6f1f8', fg: '#1f5f8b' },
+  emerald: { bg: '#e3f6ec', fg: '#17865a' },
   amber: { bg: '#fdf3e0', fg: '#9a5b00' },
   slate: { bg: '#eef0f3', fg: '#4a5263' },
   rose: { bg: '#fdecee', fg: '#c43d48' },
@@ -67,18 +73,10 @@ export const shadow = {
 export type ThemeMode = 'light' | 'dark';
 export type ThemeColors = { [K in keyof typeof color]: string };
 export const darkColor: ThemeColors = {
-  bg: '#0c1420', surface: '#141f2c', surfaceMuted: '#1a2838', border: '#28384a', borderStrong: '#3a4d63',
-  text: '#edf3fa', textMuted: '#b3c0cf', textFaint: '#8e9eb1', accent: '#9189ff', accentPressed: '#7c74ec',
-  accentSoft: '#29284c', accentText: '#bcb7ff', primaryText: '#ffffff', success: '#5dcc88', successSoft: '#183325', warning: '#f1bd65',
-  warningSoft: '#382d19', danger: '#ff8278', dangerSoft: '#3b2224', neutralSoft: '#273445',
-};
-const webColor: ThemeColors = {
-  ...color, bg: '#eceeea', surface: '#fbfcf9', surfaceMuted: '#f2f3ef', border: '#e0e2dc', borderStrong: '#cdd0c8',
-  text: '#242721', textMuted: '#62665e', textFaint: '#74786f', accent: '#efed53', accentPressed: '#dcd941',
-  accentSoft: '#f6f5c8', accentText: '#303123', primaryText: '#292a22',
-};
-const webDarkColor: ThemeColors = {
-  ...darkColor, accent: '#e5e250', accentPressed: '#cfcf40', accentSoft: '#3c3b26', accentText: '#f2ef57', primaryText: '#25261f',
+  bg: '#0d1628', surface: '#17233a', surfaceMuted: '#1d2b45', border: '#28395a', borderStrong: '#3a4d70',
+  text: '#eef2f8', textMuted: '#b6c1d3', textFaint: '#8d99b0', accent: '#5fd39a', accentPressed: '#4cc189',
+  accentSoft: '#1b3a36', accentText: '#7fe0b0', primaryText: '#0f1f3d', success: '#5dcc88', successSoft: '#173326', warning: '#f1bd65',
+  warningSoft: '#382d19', danger: '#ff8278', dangerSoft: '#3b2224', neutralSoft: '#26344d', mint: '#5fd39a', onMint: '#0f1f3d',
 };
 /** Preferência de tema do aparelho: claro, escuro ou automático (segue o tema do celular/computador). */
 export type PreferenciaTema = ThemeMode | 'auto';
@@ -104,9 +102,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const mode: ThemeMode = preferenciaTema === 'auto' ? (sistema === 'dark' ? 'dark' : 'light') : preferenciaTema;
   // Atalho (ícone de sol/lua): fixa o tema oposto ao que está na tela.
   const toggleTheme = useCallback(() => setPreferenciaTema(mode === 'light' ? 'dark' : 'light'), [mode, setPreferenciaTema]);
-  const colors = Platform.OS === 'web'
-    ? mode === 'dark' ? webDarkColor : webColor
-    : mode === 'dark' ? darkColor : color;
+  // Mesmas cores no app e na web (marca EasyAudit).
+  const colors = mode === 'dark' ? darkColor : color;
   const value = useMemo(() => ({ mode, colors, toggleTheme, escala, setEscala, preferenciaTema, setPreferenciaTema }), [mode, colors, toggleTheme, escala, setEscala, preferenciaTema, setPreferenciaTema]);
   return createElement(ThemeContext.Provider, { value }, children);
 }

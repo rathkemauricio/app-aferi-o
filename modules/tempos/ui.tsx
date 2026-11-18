@@ -86,7 +86,7 @@ export const createStyles = (c: ThemeColors) => StyleSheet.create({
   divided: { borderTopWidth: 1, borderTopColor: c.border, borderRadius: 0 },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  brandMark: { width: 34, height: 34, borderRadius: radius.tile, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  brandMark: { width: 34, height: 34, borderRadius: radius.tile, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text, letterSpacing: -0.2 },
   brandSub: { fontSize: 12, color: c.textMuted },
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 10, backgroundColor: c.warningSoft },

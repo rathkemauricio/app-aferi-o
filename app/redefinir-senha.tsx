@@ -118,7 +118,7 @@ const st = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
   scroll: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   card: { width: '100%', maxWidth: 420, backgroundColor: C.panel, borderRadius: 20, borderWidth: 1, borderColor: C.border, padding: 24, gap: 6 },
-  icon: { alignSelf: 'center', width: 52, height: 52, borderRadius: 14, backgroundColor: 'rgba(165,180,252,0.12)', alignItems: 'center', justifyContent: 'center' },
+  icon: { alignSelf: 'center', width: 52, height: 52, borderRadius: 14, backgroundColor: 'rgba(95,211,154,0.16)', alignItems: 'center', justifyContent: 'center' },
   title: { color: C.text, fontSize: 22, fontWeight: '800', textAlign: 'center', marginTop: 8 },
   sub: { color: C.muted, fontSize: 13, textAlign: 'center', marginTop: 4, marginBottom: 8, lineHeight: 19 },
   erro: { color: C.error, fontSize: 12, marginTop: 12, textAlign: 'center' },

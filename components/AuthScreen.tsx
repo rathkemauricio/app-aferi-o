@@ -1,7 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -15,11 +14,12 @@ import {
 import Animated, {
   cancelAnimation,
   Easing,
-  FadeIn,
+  Extrapolation,
   FadeInDown,
-  FadeOut,
+  interpolate,
   interpolateColor,
   Keyframe,
+  type SharedValue,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -33,6 +33,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTela } from '../ui/zoom';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
+import { Logo } from './Logo';
 import {
   ArrowRightIcon,
   CheckCircleIcon,
@@ -40,39 +41,42 @@ import {
   EnvelopeIcon,
   EyeIcon,
   EyeSlashIcon,
-  GasPumpIcon,
-  type Icon,
   LockSimpleIcon,
-  SquaresFourIcon,
-  TimerIcon,
   WarningCircleIcon,
   XIcon,
 } from '../ui/icons';
 
-/* ---------- Paleta ---------- */
+/* ---------- Paleta (marca EasyAudit: azul-marinho e verde-menta) ---------- */
 export const C = {
-  bg: '#07060f',
-  panel: '#0d0b1a',
-  border: 'rgba(139, 92, 246, 0.28)',
-  text: '#f5f3ff',
-  muted: '#9a93b8',
-  faint: '#5f5880',
-  line: 'rgba(196, 181, 253, 0.16)',
-  lineFocus: '#a5b4fc',
-  primary: '#4f46e5',
-  primaryPressed: '#4338ca',
-  accent: '#a5b4fc',
-  ok: '#4ade80',
-  error: '#f87171',
+  bg: '#e9edf2',
+  panel: '#ffffff',
+  border: '#dde3eb',
+  text: '#0f1f3d',
+  muted: '#5b6680',
+  faint: '#8a93a6',
+  line: '#d6dce6',
+  lineFocus: '#0f1f3d',
+  primary: '#0f1f3d',
+  primaryPressed: '#0a1630',
+  accent: '#17865a',
+  ok: '#1a8f58',
+  error: '#c0362c',
+  navy: '#0f1f3d',
+  mint: '#5fd39a',
 };
 
 /* ---------- Movimento ---------- */
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+/** Painel atravessando a tela: começa e termina suave. */
+const EASE_IN_OUT = Easing.bezier(0.77, 0, 0.175, 1);
 const EASE_DRIFT = Easing.inOut(Easing.sin);
 
 /** Entrada escalonada: cada item sobe 12px e aparece, 55ms depois do anterior. Respeita "reduzir movimento" do sistema. */
 const enter = (i: number, base = 0) =>
-  FadeInDown.duration(460).delay(base + i * 55).easing(EASE_OUT).withInitialValues({ transform: [{ translateY: 12 }] });
+  // Na web, a entrada de layout do Reanimated dentro de uma coluna com transform deixa os itens com
+  // position:absolute presos (campos sobrepostos). Lá a troca já é feita pelo painel deslizante.
+  Platform.OS === 'web' ? undefined
+    : FadeInDown.duration(460).delay(base + i * 55).easing(EASE_OUT).withInitialValues({ transform: [{ translateY: 12 }] });
 
 const cardEnter = new Keyframe({
   0: { opacity: 0, transform: [{ scale: 0.97 }] },
@@ -92,10 +96,10 @@ export const PASSWORD_RULES: { label: string; test: (v: string) => boolean }[] =
 export const isStrongPassword = (v: string) => PASSWORD_RULES.every(r => r.test(v));
 
 const STRENGTH_LEVELS = [
-  { min: 0, label: 'Fraca', color: '#ef4444' },
-  { min: 3, label: 'Regular', color: '#f97316' },
-  { min: 4, label: 'Boa', color: '#eab308' },
-  { min: 5, label: 'Forte', color: '#22c55e' },
+  { min: 0, label: 'Fraca', color: '#d93b30' },
+  { min: 3, label: 'Regular', color: '#e07a12' },
+  { min: 4, label: 'Boa', color: '#c99a06' },
+  { min: 5, label: 'Forte', color: '#1a8f58' },
 ];
 
 function strengthOf(value: string) {
@@ -119,7 +123,7 @@ export function AuthInput({ label, leading, secure = false, invalid = false, ...
 
   const rowStyle = useAnimatedStyle(() => ({
     borderColor: invalid ? C.error : interpolateColor(focus.get(), [0, 1], [C.line, C.lineFocus]),
-    backgroundColor: interpolateColor(focus.get(), [0, 1], ['rgba(255,255,255,0.035)', 'rgba(165,180,252,0.07)']),
+    backgroundColor: interpolateColor(focus.get(), [0, 1], ['#f6f8fb', '#ffffff']),
   }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: focus.get() }));
 
@@ -192,7 +196,7 @@ export function PasswordStrength({ value }: { value: string }) {
   );
 }
 
-/* ---------- Arte do painel (formas flutuando devagar) ---------- */
+/* ---------- Arte do painel azul-marinho (formas flutuando devagar) ---------- */
 type DriftProps = { style: ViewStyle; dx?: number; dy?: number; spin?: number; baseRotate?: number; duration: number; delay?: number };
 
 /** Forma decorativa que vai e volta em loop suave. Fica parada com "reduzir movimento" ligado. */
@@ -217,121 +221,101 @@ function Drift({ style, dx = 0, dy = 0, spin = 0, baseRotate = 0, duration, dela
   return <Animated.View style={[art.abs, style, anim]} />;
 }
 
-/** Arco girando continuamente. */
-function Orbit({ style, duration }: { style: ViewStyle; duration: number }) {
-  const reduced = useReducedMotion();
-  const r = useSharedValue(0);
-
-  useEffect(() => {
-    if (reduced) return;
-    r.set(withRepeat(withTiming(360, { duration, easing: Easing.linear }), -1, false));
-    return () => cancelAnimation(r);
-  }, [reduced, duration, r]);
-
-  const anim = useAnimatedStyle(() => ({ transform: [{ rotate: `${r.get()}deg` }] }));
-  return <Animated.View style={[art.abs, style, anim]} />;
-}
-
-/** Pontinho que acende e apaga. */
-function Twinkle({ top, left, size = 4, duration, delay = 0 }: { top: number | `${number}%`; left: number | `${number}%`; size?: number; duration: number; delay?: number }) {
-  const reduced = useReducedMotion();
-  const o = useSharedValue(0.35);
-
-  useEffect(() => {
-    if (reduced) return;
-    o.set(withDelay(delay, withRepeat(withTiming(1, { duration, easing: EASE_DRIFT }), -1, true)));
-    return () => cancelAnimation(o);
-  }, [reduced, duration, delay, o]);
-
-  const anim = useAnimatedStyle(() => ({ opacity: o.get() }));
-  return <Animated.View style={[art.abs, art.star, { top, left, width: size, height: size, borderRadius: size / 2 }, anim]} />;
-}
-
-function Artwork({ compact }: { compact: boolean }) {
+function ArteMarca({ compacto }: { compacto: boolean }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Drift duration={9000} dx={24} dy={18} style={{ width: 420, height: 420, borderRadius: 210, top: -140, left: -120, backgroundColor: '#2e1065', opacity: 0.9 }} />
-      <Drift duration={11000} delay={600} dx={-20} dy={26} style={{ width: 300, height: 300, borderRadius: 150, top: compact ? -40 : 80, right: -110, backgroundColor: '#5b21b6', opacity: 0.55 }} />
-      <Drift duration={13000} dx={10} dy={-14} spin={8} style={{ width: 360, height: 360, borderRadius: 180, top: compact ? -90 : 40, left: compact ? 80 : 30, borderWidth: 34, borderColor: 'rgba(124, 58, 237, 0.55)' }} />
-      <Orbit duration={36000} style={{ width: 300, height: 300, borderRadius: 150, top: compact ? -60 : 70, left: compact ? 110 : 60, borderWidth: 2, borderColor: 'transparent', borderTopColor: 'rgba(221, 214, 254, 0.55)', borderRightColor: 'rgba(221, 214, 254, 0.18)' }} />
-      <Drift duration={10000} delay={300} dx={-12} dy={16} style={{ width: 230, height: 230, borderRadius: 115, top: compact ? 10 : 200, left: compact ? -40 : -60, borderWidth: 18, borderColor: 'rgba(167, 139, 250, 0.35)' }} />
-      <Drift duration={8000} dx={18} dy={-10} baseRotate={-32} spin={4} style={{ width: 260, height: 90, borderRadius: 45, top: compact ? 40 : 250, left: compact ? 150 : 140, backgroundColor: 'rgba(196, 181, 253, 0.22)' }} />
-      <Drift duration={7000} delay={900} dx={26} dy={-8} baseRotate={-32} style={{ width: 180, height: 14, borderRadius: 7, top: compact ? 130 : 380, left: compact ? 40 : 60, backgroundColor: 'rgba(221, 214, 254, 0.35)' }} />
-      <Drift duration={12000} dx={-16} dy={-20} style={{ width: 120, height: 120, borderRadius: 60, bottom: -50, right: 40, backgroundColor: '#7c3aed', opacity: 0.35 }} />
-      <Twinkle top="18%" left="72%" duration={1800} />
-      <Twinkle top="34%" left="58%" size={3} duration={2400} delay={500} />
-      <Twinkle top="12%" left="40%" size={3} duration={2100} delay={1100} />
-      <Twinkle top="48%" left="86%" size={5} duration={2800} delay={300} />
-      {!compact && <Twinkle top="62%" left="70%" size={3} duration={2200} delay={800} />}
+      <Drift duration={11000} dx={22} dy={16} style={{ width: 380, height: 380, borderRadius: 190, top: compacto ? -230 : -150, right: -150, backgroundColor: 'rgba(95, 211, 154, 0.10)' }} />
+      <Drift duration={13000} delay={500} dx={-18} dy={22} spin={6} style={{ width: 300, height: 300, borderRadius: 150, bottom: compacto ? -220 : -120, left: -110, borderWidth: 30, borderColor: 'rgba(95, 211, 154, 0.12)' }} />
+      <Drift duration={9000} delay={300} dx={14} dy={-12} style={{ width: 140, height: 140, borderRadius: 70, top: compacto ? 30 : 140, left: compacto ? 210 : 260, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.10)' }} />
+      <Drift duration={8000} dx={20} dy={-8} baseRotate={-32} style={{ width: 160, height: 12, borderRadius: 6, top: compacto ? 96 : 230, left: compacto ? -30 : 40, backgroundColor: 'rgba(95, 211, 154, 0.22)' }} />
     </View>
   );
 }
 
-function Brand() {
+/* ---------- Painel da marca: troca de lado (entrar ↔ criar conta) ---------- */
+function BotaoContorno({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <Animated.View entering={FadeIn.duration(500).delay(120)} style={p.brandRow}>
-      <View style={p.logoWrap}>
-        <Image source={require('../assets/favicon.png')} style={{ width: 30, height: 30 }} accessibilityLabel="EasyAudit" />
-      </View>
-      <Text style={p.brandText}>EasyAudit</Text>
-    </Animated.View>
-  );
-}
-
-/* ---------- Destaques que giram no painel ---------- */
-const SLIDES: { icon: Icon; title: string; text: string }[] = [
-  { icon: GasPumpIcon, title: 'Aferições de bombas', text: 'Registre e acompanhe as aferições de todas as filiais em um só lugar.' },
-  { icon: TimerIcon, title: 'Tempos e movimentos', text: 'Colete tempos em campo, dimensione equipes e acompanhe o painel.' },
-  { icon: SquaresFourIcon, title: 'Croquis e auditorias', text: 'Desenhe o croqui do posto, audite riscos e controle inventários.' },
-];
-
-function Dot({ active, onPress, label }: { active: boolean; onPress: () => void; label: string }) {
-  const w = useSharedValue(active ? 34 : 18);
-  useEffect(() => { w.set(withTiming(active ? 34 : 18, { duration: 280, easing: EASE_OUT })); }, [active, w]);
-  const anim = useAnimatedStyle(() => ({ width: w.get() }));
-  return (
-    <Pressable onPress={onPress} hitSlop={{ top: 14, bottom: 14, left: 4, right: 4 }} accessibilityRole="button" accessibilityLabel={label}>
-      <Animated.View style={[p.dot, active && p.dotActive, anim]} />
+    <Pressable onPress={onPress} pressRetentionOffset={20} accessibilityRole="button" hitSlop={6}
+      style={({ pressed }) => [pm.botao, pressed && pm.botaoPressionado]}>
+      <Text style={pm.botaoTxt}>{label}</Text>
+      <ArrowRightIcon size={15} color="#ffffff" weight="bold" />
     </Pressable>
   );
 }
 
-function Hero() {
-  const [slide, setSlide] = useState(0);
+const DESTAQUES = ['Aferições, coleta de estoque e medição de tanques', 'Relatórios em PDF no app e no painel', 'Cada atividade registrada com quem fez'];
 
-  useEffect(() => {
-    const id = setTimeout(() => setSlide(i => (i + 1) % SLIDES.length), 5000);
-    return () => clearTimeout(id);
-  }, [slide]);
-
-  const { icon: SlideIcon, title, text } = SLIDES[slide];
-
+/**
+ * Painel azul-marinho. Na tela larga ele cobre metade do cartão e atravessa para o outro lado na troca;
+ * o texto convida para o lado oposto ao formulário que está à mostra.
+ */
+function PainelMarca({ p, lado, onTrocar }: { p: SharedValue<number>; lado: 0 | 1; onTrocar: (m: Mode) => void }) {
+  const blocoCriar = useAnimatedStyle(() => ({
+    opacity: interpolate(p.get(), [0, 0.45], [1, 0], Extrapolation.CLAMP),
+    transform: [{ translateX: interpolate(p.get(), [0, 1], [0, -36]) }],
+  }));
+  const blocoEntrar = useAnimatedStyle(() => ({
+    opacity: interpolate(p.get(), [0.55, 1], [0, 1], Extrapolation.CLAMP),
+    transform: [{ translateX: interpolate(p.get(), [0, 1], [36, 0]) }],
+  }));
   return (
-    <Animated.View entering={enter(1, 200)}>
-      <Text style={p.eyebrow}>GESTÃO DE POSTOS</Text>
-      <View style={p.slideBox}>
-        <Animated.View
-          key={slide}
-          entering={FadeInDown.duration(420).easing(EASE_OUT).withInitialValues({ transform: [{ translateY: 10 }] })}
-          exiting={FadeOut.duration(180)}
-          style={p.slide}
-          accessibilityLiveRegion="polite"
-        >
-          <View style={p.slideHead}>
-            <View style={p.badge}><SlideIcon size={16} color="#ede9fe" weight="duotone" /></View>
-            <Text style={p.heroTitle}>{title}</Text>
-          </View>
-          <Text style={p.heroText}>{text}</Text>
+    <View style={pm.painel}>
+      <ArteMarca compacto={false} />
+      <Logo claro altura={30} />
+      <View style={pm.textos}>
+        <Animated.View style={[pm.bloco, blocoCriar]} pointerEvents={lado === 0 ? 'auto' : 'none'} {...oculto(lado !== 0)}>
+          <Text style={pm.titulo}>Novo por aqui?</Text>
+          <Text style={pm.texto}>Crie sua conta com o seu e-mail. Depois o administrador libera os módulos que você vai usar.</Text>
+          <BotaoContorno label="Criar conta" onPress={() => onTrocar('signup')} />
+        </Animated.View>
+        <Animated.View style={[pm.bloco, pm.sobreposto, blocoEntrar]} pointerEvents={lado === 1 ? 'auto' : 'none'} {...oculto(lado !== 1)}>
+          <Text style={pm.titulo}>Já tem conta?</Text>
+          <Text style={pm.texto}>Entre com o seu e-mail e a sua senha para continuar de onde parou.</Text>
+          <BotaoContorno label="Entrar" onPress={() => onTrocar('login')} />
         </Animated.View>
       </View>
-      <View style={p.dots}>
-        {SLIDES.map((sl, i) => (
-          <Dot key={sl.title} active={i === slide} onPress={() => setSlide(i)} label={`Ver destaque: ${sl.title}`} />
+      <View style={pm.destaques}>
+        {DESTAQUES.map(d => (
+          <View key={d} style={pm.destaque}>
+            <CheckCircleIcon size={16} color={C.mint} weight="fill" />
+            <Text style={pm.destaqueTxt}>{d}</Text>
+          </View>
         ))}
       </View>
-    </Animated.View>
+    </View>
   );
 }
+
+/** Topo do celular: marca e frase, no mesmo azul-marinho. */
+function TopoMarca() {
+  return (
+    <View style={pm.topo}>
+      <ArteMarca compacto />
+      <Logo claro altura={26} />
+      <Text style={pm.topoTxt}>Auditorias, aferições e inventários da rede em um só lugar.</Text>
+    </View>
+  );
+}
+
+/** Celular: Entrar | Criar conta, com a pílula deslizando junto com os formulários. */
+function Alternador({ p, lado, onTrocar }: { p: SharedValue<number>; lado: 0 | 1; onTrocar: (m: Mode) => void }) {
+  const [w, setW] = useState(0);
+  const metade = Math.max(0, (w - 8) / 2);
+  const pilula = useAnimatedStyle(() => ({ transform: [{ translateX: p.get() * metade }] }), [metade]);
+  return (
+    <View style={sw.trilho} onLayout={e => setW(e.nativeEvent.layout.width)} accessibilityRole="tablist">
+      {w ? <Animated.View style={[sw.pilula, { width: metade }, pilula]} /> : null}
+      {(['login', 'signup'] as const).map((md, i) => (
+        <Pressable key={md} style={sw.opcao} onPress={() => onTrocar(md)} accessibilityRole="tab" accessibilityState={{ selected: lado === i }} hitSlop={4}>
+          <Text style={[sw.txt, lado === i && sw.txtOn]}>{md === 'login' ? 'Entrar' : 'Criar conta'}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Lado que não está à mostra: sem toque e fora do leitor de tela. */
+const oculto = (h: boolean) => ({ accessibilityElementsHidden: h, importantForAccessibility: h ? 'no-hide-descendants' as const : 'auto' as const });
 
 /* ---------- Mensagem de erro / sucesso ---------- */
 function Feedback({ kind, message, nonce }: { kind: 'error' | 'info'; message: string; nonce: number }) {
@@ -358,7 +342,7 @@ function Feedback({ kind, message, nonce }: { kind: 'error' | 'info'; message: s
     <Animated.View style={shake}>
       <Animated.View entering={FadeInDown.duration(260).easing(EASE_OUT).withInitialValues({ transform: [{ translateY: 6 }] })} style={[s.feedback, isError ? s.feedbackError : s.feedbackInfo]} accessibilityLiveRegion="polite">
         <FbIcon size={16} color={isError ? C.error : C.ok} weight="fill" />
-        <Text style={[s.feedbackText, { color: isError ? '#fecaca' : '#bbf7d0' }]}>{message}</Text>
+        <Text style={[s.feedbackText, { color: isError ? '#8f1d16' : '#14532d' }]}>{message}</Text>
       </Animated.View>
     </Animated.View>
   );
@@ -390,7 +374,7 @@ function PrimaryButton({ label, onPress, disabled, busy }: { label: string; onPr
         ) : (
           <>
             <Text style={s.primaryBtnText}>{label}</Text>
-            <Animated.View style={arrowStyle}><ArrowRightIcon size={16} color="#fff" weight="bold" /></Animated.View>
+            <Animated.View style={arrowStyle}><ArrowRightIcon size={16} color={C.mint} weight="bold" /></Animated.View>
           </>
         )}
       </Animated.View>
@@ -419,9 +403,18 @@ const ULTIMO_EMAIL = 'nevoeiro.auth.ultimo-email';
 /* ---------- Tela ---------- */
 type Mode = 'login' | 'signup' | 'forgot';
 
+/**
+ * Entrar / Criar conta com painel deslizante:
+ * - tela larga (web): cartão com o formulário de um lado e o painel azul-marinho do outro; na troca o painel
+ *   atravessa o cartão e o formulário passa para o lado oposto;
+ * - celular: os dois formulários lado a lado num trilho que desliza (o de entrar sai pela esquerda e o de criar
+ *   conta entra pela direita), com a pílula de Entrar | Criar conta acompanhando.
+ * Com "reduzir movimento" ligado, nada desliza: os formulários só trocam com um esmaecimento curto.
+ */
 export default function AuthScreen() {
   const { width } = useTela();
   const wide = width >= 820;
+  const reduced = useReducedMotion();
 
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -433,7 +426,18 @@ export default function AuthScreen() {
   const [info, setInfo] = useState('');
   const [podeReenviar, setPodeReenviar] = useState(false);
 
-  // Na primeira abertura os campos entram depois do cartão; nas trocas de modo, logo em seguida.
+  // Lado à mostra: 0 = entrar (ou recuperar a senha), 1 = criar conta.
+  const lado: 0 | 1 = mode === 'signup' ? 1 : 0;
+  /** Progresso da troca (0 → 1), animado. */
+  const p = useSharedValue<number>(lado);
+  /** Lado de destino, sem animação (posição usada com "reduzir movimento"). */
+  const alvo = useSharedValue<number>(lado);
+  useEffect(() => {
+    alvo.set(lado);
+    p.set(withTiming(lado, reduced ? { duration: 180, easing: EASE_OUT } : { duration: wide ? 640 : 460, easing: EASE_IN_OUT }));
+  }, [lado, reduced, wide, p, alvo]);
+
+  // Na primeira abertura os campos entram depois do cartão; nas trocas, logo em seguida.
   const firstMount = useRef(true);
   useEffect(() => { firstMount.current = false; }, []);
   const baseDelay = firstMount.current ? 220 : 0;
@@ -456,6 +460,7 @@ export default function AuthScreen() {
   }, [busy, mode, emailValid, password, strong, confirm]);
 
   const switchMode = (next: Mode) => {
+    if (next === mode) return;
     setMode(next);
     setPassword('');
     setConfirm('');
@@ -504,24 +509,16 @@ export default function AuthScreen() {
     if (err) setError(traduzirErro(err)); else { setError(''); setInfo('Enviamos um novo link de confirmação. Verifique também a caixa de spam.'); }
   };
 
-  const titulo = mode === 'login' ? 'Bem-vindo de volta' : mode === 'signup' ? 'Crie sua conta' : 'Recuperar acesso';
-  const subtitulo = mode === 'login' ? 'Entre com o e-mail e a senha da sua conta.' : mode === 'signup' ? 'Crie uma senha forte para proteger sua conta.' : 'Informe o e-mail da conta. Enviaremos um link para criar uma nova senha.';
-  const botao = mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : 'Enviar link';
-
-  let step = 0;
-  const next = () => enter(step++, baseDelay);
-
-  const form = (
-    <View style={[s.formPanel, wide ? s.formPanelWide : s.formPanelCompact]}>
-      <Animated.View entering={FadeIn.duration(400).delay(baseDelay)} style={s.topSwitch}>
-        <Text style={s.topSwitchText}>{mode === 'signup' ? 'Já tem uma conta?' : 'Não tem uma conta?'}</Text>
-        <Pressable onPress={() => switchMode(mode === 'signup' ? 'login' : 'signup')} style={({ pressed }) => [s.outlineBtn, pressed && s.outlineBtnPressed]}>
-          <Text style={s.outlineBtnText}>{mode === 'signup' ? 'Entrar' : 'Criar conta'}</Text>
-        </Pressable>
-      </Animated.View>
-
-      {/* Chave no modo: a troca entre entrar / criar / recuperar remonta o corpo e refaz a entrada escalonada. */}
-      <View key={mode} style={s.formBody}>
+  /** Conteúdo de um formulário (o de entrar/recuperar ou o de criar conta). Só o lado à mostra recebe as mensagens. */
+  const corpo = (md: Mode, ativo: boolean) => {
+    let step = 0;
+    const next = () => enter(step++, baseDelay);
+    const titulo = md === 'login' ? 'Bem-vindo de volta' : md === 'signup' ? 'Crie sua conta' : 'Recuperar acesso';
+    const subtitulo = md === 'login' ? 'Entre com o e-mail e a senha da sua conta.' : md === 'signup' ? 'Crie uma senha forte para proteger sua conta.' : 'Informe o e-mail da conta. Enviaremos um link para criar uma nova senha.';
+    const botao = md === 'login' ? 'Entrar' : md === 'signup' ? 'Criar conta' : 'Enviar link';
+    return (
+      // Chave no modo: trocar entre entrar e recuperar remonta o corpo e refaz a entrada escalonada.
+      <View key={md} style={s.formBody}>
         <Animated.Text entering={next()} style={s.title} accessibilityRole="header">{titulo}</Animated.Text>
         <Animated.Text entering={next()} style={s.subtitle}>{subtitulo}</Animated.Text>
 
@@ -535,29 +532,29 @@ export default function AuthScreen() {
             keyboardType="email-address"
             autoComplete="email"
             textContentType="emailAddress"
-            returnKeyType={mode === 'forgot' ? 'send' : 'next'}
-            onSubmitEditing={mode === 'forgot' ? () => void submit() : undefined}
+            returnKeyType={md === 'forgot' ? 'send' : 'next'}
+            onSubmitEditing={md === 'forgot' ? () => void submit() : undefined}
           />
         </Animated.View>
 
-        {mode !== 'forgot' && (
+        {md !== 'forgot' && (
           <Animated.View entering={next()}>
             <AuthInput
-              label={mode === 'login' ? 'Senha' : 'Nova senha'}
+              label={md === 'login' ? 'Senha' : 'Nova senha'}
               leading={<LockSimpleIcon size={18} color={C.accent} />}
               secure
               value={password}
               onChangeText={setPassword}
-              placeholder={mode === 'login' ? 'Digite sua senha' : 'Digite sua nova senha'}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              textContentType={mode === 'login' ? 'password' : 'newPassword'}
-              returnKeyType={mode === 'login' ? 'go' : 'next'}
-              onSubmitEditing={mode === 'login' ? () => void submit() : undefined}
+              placeholder={md === 'login' ? 'Digite sua senha' : 'Digite sua nova senha'}
+              autoComplete={md === 'login' ? 'current-password' : 'new-password'}
+              textContentType={md === 'login' ? 'password' : 'newPassword'}
+              returnKeyType={md === 'login' ? 'go' : 'next'}
+              onSubmitEditing={md === 'login' ? () => void submit() : undefined}
             />
           </Animated.View>
         )}
 
-        {mode === 'login' && (
+        {md === 'login' && (
           <Animated.View entering={next()} style={s.forgot}>
             <Pressable onPress={() => switchMode('forgot')} hitSlop={8} accessibilityRole="link" style={({ pressed }) => pressed && { opacity: 0.6 }}>
               <Text style={s.link}>Esqueci a senha</Text>
@@ -565,9 +562,10 @@ export default function AuthScreen() {
           </Animated.View>
         )}
 
-        {mode === 'signup' && (
+        {md === 'signup' && (
           <Animated.View entering={next()}>
-            <PasswordStrength value={password} />
+            {/* Medidor só no lado à mostra: no celular o trilho não fica com espaço sobrando embaixo do login. */}
+            {ativo ? <PasswordStrength value={password} /> : null}
             <AuthInput
               label="Confirmar nova senha"
               leading={<LockSimpleIcon size={18} color={C.accent} />}
@@ -588,19 +586,19 @@ export default function AuthScreen() {
           </Animated.View>
         )}
 
-        {error ? <Feedback key={`e${errorNonce}`} kind="error" message={error} nonce={errorNonce} /> : null}
-        {info ? <Feedback key={`i${info}`} kind="info" message={info} nonce={0} /> : null}
-        {podeReenviar && emailValid ? (
+        {ativo && error ? <Feedback key={`e${errorNonce}`} kind="error" message={error} nonce={errorNonce} /> : null}
+        {ativo && info ? <Feedback key={`i${info}`} kind="info" message={info} nonce={0} /> : null}
+        {ativo && podeReenviar && emailValid ? (
           <Pressable onPress={() => void reenviar()} disabled={busy} hitSlop={8} style={s.centerLink} accessibilityRole="button">
             <Text style={s.link}>Reenviar e-mail de confirmação</Text>
           </Pressable>
         ) : null}
 
         <Animated.View entering={next()}>
-          <PrimaryButton label={botao} onPress={() => void submit()} disabled={!canSubmit} busy={busy} />
+          <PrimaryButton label={botao} onPress={() => void submit()} disabled={!ativo || !canSubmit} busy={ativo && busy} />
         </Animated.View>
 
-        {mode === 'forgot' && (
+        {md === 'forgot' && (
           <Animated.View entering={next()} style={s.centerLink}>
             <Pressable onPress={() => switchMode('login')} hitSlop={8} accessibilityRole="link" style={({ pressed }) => pressed && { opacity: 0.6 }}>
               <Text style={s.link}>Voltar para o login</Text>
@@ -608,29 +606,73 @@ export default function AuthScreen() {
           </Animated.View>
         )}
       </View>
-    </View>
-  );
+    );
+  };
+  const modoEntrar: Mode = mode === 'forgot' ? 'forgot' : 'login';
 
-  return (
-    <SafeAreaView style={s.safe}>
-      {wide && (
+  /* ----- Tela larga: painel atravessando o cartão ----- */
+  const [larguraCartao, setLarguraCartao] = useState(0);
+  const metade = (larguraCartao || Math.min(width - 64, 1040)) / 2;
+  // A posição é lida direto em cada estilo (na web o Reanimated só acompanha os valores usados ali dentro).
+  const colEntrar = useAnimatedStyle(() => ({
+    opacity: interpolate(p.get(), [0, 0.5], [1, 0], Extrapolation.CLAMP),
+    transform: [{ translateX: (reduced ? alvo.get() : p.get()) * metade }],
+  }), [metade, reduced]);
+  const colCriar = useAnimatedStyle(() => ({
+    opacity: interpolate(p.get(), [0.5, 1], [0, 1], Extrapolation.CLAMP),
+    transform: [{ translateX: (reduced ? alvo.get() : p.get()) * metade }],
+  }), [metade, reduced]);
+  const painel = useAnimatedStyle(() => ({ transform: [{ translateX: -(reduced ? alvo.get() : p.get()) * metade }] }), [metade, reduced]);
+
+  /* ----- Celular: trilho com os dois formulários ----- */
+  const [larguraTrilho, setLarguraTrilho] = useState(0);
+  const coluna = larguraTrilho || Math.max(0, width - 28);
+  const trilho = useAnimatedStyle(() => ({ transform: [{ translateX: -(reduced ? alvo.get() : p.get()) * coluna }] }), [coluna, reduced]);
+  const opEntrar = useAnimatedStyle(() => ({ opacity: interpolate(p.get(), [0, 1], [1, 0]) }));
+  const opCriar = useAnimatedStyle(() => ({ opacity: interpolate(p.get(), [0, 1], [0, 1]) }));
+
+  if (wide) {
+    return (
+      <SafeAreaView style={s.safe}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Drift duration={14000} dx={40} dy={30} style={{ width: 520, height: 520, borderRadius: 260, top: -200, right: -160, backgroundColor: '#4c1d95', opacity: 0.18 }} />
-          <Drift duration={16000} delay={1000} dx={-30} dy={-40} style={{ width: 460, height: 460, borderRadius: 230, bottom: -220, left: -140, backgroundColor: '#3730a3', opacity: 0.16 }} />
+          <Drift duration={14000} dx={40} dy={30} style={{ width: 520, height: 520, borderRadius: 260, top: -200, right: -160, backgroundColor: 'rgba(15, 31, 61, 0.06)' }} />
+          <Drift duration={16000} delay={1000} dx={-30} dy={-40} style={{ width: 460, height: 460, borderRadius: 230, bottom: -220, left: -140, backgroundColor: 'rgba(95, 211, 154, 0.12)' }} />
         </View>
-      )}
-      <View style={s.flex}>
-        <ScrollView contentContainerStyle={[s.scroll, wide && s.scrollWide]} keyboardShouldPersistTaps="handled">
-          <Animated.View entering={cardEnter} style={[s.card, wide ? s.cardWide : s.cardCompact]}>
-            <View style={[s.artPanel, wide ? s.artPanelWide : s.artPanelCompact]}>
-              <Artwork compact={!wide} />
-              <Brand />
-              <Hero />
-            </View>
-            {form}
+        <ScrollView contentContainerStyle={s.scrollWide} keyboardShouldPersistTaps="handled">
+          <Animated.View entering={cardEnter} style={s.cardWide} onLayout={e => setLarguraCartao(e.nativeEvent.layout.width)}>
+            <Animated.View style={[s.colunaLarga, { width: metade }, colEntrar]} pointerEvents={lado === 0 ? 'auto' : 'none'} {...oculto(lado !== 0)}>
+              <ScrollView contentContainerStyle={s.colunaScroll} keyboardShouldPersistTaps="handled">{corpo(modoEntrar, lado === 0)}</ScrollView>
+            </Animated.View>
+            <Animated.View style={[s.colunaLarga, { width: metade }, colCriar]} pointerEvents={lado === 1 ? 'auto' : 'none'} {...oculto(lado !== 1)}>
+              <ScrollView contentContainerStyle={s.colunaScroll} keyboardShouldPersistTaps="handled">{corpo('signup', lado === 1)}</ScrollView>
+            </Animated.View>
+            <Animated.View style={[s.colunaLarga, { width: metade, left: metade }, painel]}>
+              <PainelMarca p={p} lado={lado} onTrocar={switchMode} />
+            </Animated.View>
           </Animated.View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={s.safeCompacto} edges={['top']}>
+      <ScrollView style={s.fundoCompacto} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <TopoMarca />
+        <Animated.View entering={cardEnter} style={s.areaCompacta}>
+          <Alternador p={p} lado={lado} onTrocar={switchMode} />
+          <View style={s.janela} onLayout={e => setLarguraTrilho(e.nativeEvent.layout.width)}>
+            <Animated.View style={[s.trilho, { width: coluna * 2 }, trilho]}>
+              <Animated.View style={[s.colunaCompacta, { width: coluna }, opEntrar]} pointerEvents={lado === 0 ? 'auto' : 'none'} {...oculto(lado !== 0)}>
+                {corpo(modoEntrar, lado === 0)}
+              </Animated.View>
+              <Animated.View style={[s.colunaCompacta, { width: coluna }, opCriar]} pointerEvents={lado === 1 ? 'auto' : 'none'} {...oculto(lado !== 1)}>
+                {corpo('signup', lado === 1)}
+              </Animated.View>
+            </Animated.View>
+          </View>
+        </Animated.View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -638,33 +680,28 @@ export default function AuthScreen() {
 /* ---------- Estilos ---------- */
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
-  flex: { flex: 1 },
+  safeCompacto: { flex: 1, backgroundColor: C.navy },
+  fundoCompacto: { backgroundColor: C.panel },
   scroll: { flexGrow: 1 },
-  scrollWide: { justifyContent: 'center', alignItems: 'center', padding: 32 },
-  card: { backgroundColor: C.panel, overflow: 'hidden' },
-  cardWide: { flexDirection: 'row', width: '100%', maxWidth: 1040, minHeight: 620, borderRadius: 28, borderWidth: 1, borderColor: C.border, boxShadow: '0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255,255,255,0.02) inset' },
-  cardCompact: { flex: 1 },
-  artPanel: { overflow: 'hidden', justifyContent: 'space-between', backgroundColor: '#120a2e' },
-  artPanelWide: { flex: 1.1, padding: 34, margin: 10, borderRadius: 20 },
-  artPanelCompact: { height: 250, padding: 22, paddingBottom: 38 },
-  formPanel: { backgroundColor: C.panel },
-  formPanelWide: { flex: 1, paddingHorizontal: 48, paddingVertical: 28 },
-  formPanelCompact: { flex: 1, paddingHorizontal: 22, paddingTop: 18, paddingBottom: 32, marginTop: -22, borderTopLeftRadius: 26, borderTopRightRadius: 26, boxShadow: '0 -12px 30px rgba(7, 6, 15, 0.6)' },
-  topSwitch: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10 },
-  topSwitchText: { color: C.muted, fontSize: 12 },
-  outlineBtn: { borderWidth: 1, borderColor: 'rgba(165, 180, 252, 0.5)', borderRadius: 999, paddingVertical: 7, paddingHorizontal: 16 },
-  outlineBtnPressed: { backgroundColor: 'rgba(165, 180, 252, 0.12)', transform: [{ scale: 0.97 }] },
-  outlineBtnText: { color: C.text, fontSize: 12, fontWeight: '700' },
-  formBody: { flex: 1, justifyContent: 'center', width: '100%', maxWidth: 380, alignSelf: 'center', paddingTop: 24, gap: 4 },
+  scrollWide: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  cardWide: { width: '100%', maxWidth: 1040, height: 680, borderRadius: 28, overflow: 'hidden', backgroundColor: C.panel, borderWidth: 1, borderColor: C.border, boxShadow: '0 30px 70px rgba(15, 31, 61, 0.18)' },
+  colunaLarga: { position: 'absolute', top: 0, bottom: 0, left: 0 },
+  colunaScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 48, paddingVertical: 28 },
+  areaCompacta: { flex: 1, backgroundColor: C.panel, marginTop: -24, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 32 },
+  // Folga de 8px nas laterais: o contorno de foco dos campos não é cortado pela janela do trilho.
+  janela: { overflow: 'hidden', marginHorizontal: -8 },
+  colunaCompacta: { paddingHorizontal: 8 },
+  trilho: { flexDirection: 'row', alignItems: 'flex-start' },
+  formBody: { width: '100%', maxWidth: 380, alignSelf: 'center', paddingTop: 12, gap: 4 },
   title: { color: C.text, fontSize: 26, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 },
   subtitle: { color: C.muted, fontSize: 13.5, textAlign: 'center', marginTop: 6, marginBottom: 12, lineHeight: 19 },
   matchText: { fontSize: 12, marginTop: 6 },
   feedback: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 14, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1 },
-  feedbackError: { backgroundColor: 'rgba(248, 113, 113, 0.08)', borderColor: 'rgba(248, 113, 113, 0.3)' },
-  feedbackInfo: { backgroundColor: 'rgba(74, 222, 128, 0.08)', borderColor: 'rgba(74, 222, 128, 0.3)' },
+  feedbackError: { backgroundColor: 'rgba(192, 54, 44, 0.07)', borderColor: 'rgba(192, 54, 44, 0.3)' },
+  feedbackInfo: { backgroundColor: 'rgba(26, 143, 88, 0.08)', borderColor: 'rgba(26, 143, 88, 0.3)' },
   feedbackText: { flex: 1, fontSize: 12.5, lineHeight: 18 },
   primaryBtn: { marginTop: 22, height: 50, borderRadius: 14, backgroundColor: C.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  primaryBtnGlow: { boxShadow: '0 10px 28px rgba(79, 70, 229, 0.45)' },
+  primaryBtnGlow: { boxShadow: '0 10px 24px rgba(15, 31, 61, 0.28)' },
   primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
   link: { color: C.accent, fontSize: 13, fontWeight: '700' },
@@ -675,10 +712,10 @@ const s = StyleSheet.create({
 const f = StyleSheet.create({
   field: { marginTop: 14 },
   label: { color: C.muted, fontSize: 12, fontWeight: '700', marginBottom: 6, marginLeft: 2 },
-  labelFocus: { color: C.accent },
+  labelFocus: { color: C.text },
   row: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, minHeight: 50, paddingHorizontal: 14 },
-  glow: { position: 'absolute', top: -4, left: -4, right: -4, bottom: -4, borderRadius: 18, borderWidth: 4, borderColor: 'rgba(129, 140, 248, 0.18)' },
-  glowInvalid: { borderColor: 'rgba(248, 113, 113, 0.18)' },
+  glow: { position: 'absolute', top: -4, left: -4, right: -4, bottom: -4, borderRadius: 18, borderWidth: 4, borderColor: 'rgba(95, 211, 154, 0.32)' },
+  glowInvalid: { borderColor: 'rgba(192, 54, 44, 0.18)' },
   leading: { width: 28, alignItems: 'flex-start', justifyContent: 'center' },
   input: { flex: 1, color: C.text, fontSize: 15, paddingVertical: 12 },
   eye: { paddingLeft: 10, paddingVertical: 8 },
@@ -689,7 +726,7 @@ const m = StyleSheet.create({
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { color: C.muted, fontSize: 12 },
   level: { fontSize: 12, fontWeight: '800' },
-  track: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', marginTop: 8, overflow: 'hidden' },
+  track: { height: 6, borderRadius: 3, backgroundColor: '#e6eaf0', marginTop: 8, overflow: 'hidden' },
   bar: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3 },
   reqTitle: { color: C.muted, fontSize: 12, marginTop: 14, marginBottom: 4 },
   req: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
@@ -698,23 +735,31 @@ const m = StyleSheet.create({
   pendingText: { color: C.faint },
 });
 
-const p = StyleSheet.create({
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logoWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(237, 233, 254, 0.08)', borderWidth: 1, borderColor: 'rgba(237, 233, 254, 0.14)' },
-  brandText: { color: '#fff', fontSize: 20, fontWeight: '800', letterSpacing: 0.2 },
-  eyebrow: { color: C.accent, fontSize: 11, fontWeight: '800', letterSpacing: 1.6, marginBottom: 8 },
-  slideBox: { height: 82 },
-  slide: { position: 'absolute', left: 0, right: 0, top: 0 },
-  slideHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  badge: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(237, 233, 254, 0.12)', borderWidth: 1, borderColor: 'rgba(237, 233, 254, 0.18)' },
-  heroTitle: { color: '#fff', fontSize: 20, fontWeight: '800', letterSpacing: -0.2 },
-  heroText: { color: 'rgba(237, 233, 254, 0.75)', fontSize: 13, marginTop: 8, maxWidth: 320, lineHeight: 19 },
-  dots: { flexDirection: 'row', gap: 6, marginTop: 10 },
-  dot: { width: 18, height: 3, borderRadius: 2, backgroundColor: 'rgba(237, 233, 254, 0.3)' },
-  dotActive: { backgroundColor: '#ede9fe' },
+const pm = StyleSheet.create({
+  painel: { flex: 1, overflow: 'hidden', backgroundColor: C.navy, padding: 40, justifyContent: 'space-between' },
+  textos: { minHeight: 200, justifyContent: 'center' },
+  bloco: { gap: 12 },
+  sobreposto: { position: 'absolute', left: 0, right: 0 },
+  titulo: { color: '#ffffff', fontSize: 28, fontWeight: '800', letterSpacing: -0.4 },
+  texto: { color: 'rgba(255, 255, 255, 0.78)', fontSize: 14, lineHeight: 21, maxWidth: 360 },
+  botao: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.75)', borderRadius: 999, paddingVertical: 11, paddingHorizontal: 22 },
+  botaoPressionado: { backgroundColor: 'rgba(255, 255, 255, 0.12)', transform: [{ scale: 0.97 }] },
+  botaoTxt: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
+  destaques: { gap: 10 },
+  destaque: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  destaqueTxt: { color: 'rgba(255, 255, 255, 0.82)', fontSize: 13 },
+  topo: { overflow: 'hidden', backgroundColor: C.navy, paddingHorizontal: 22, paddingTop: 26, paddingBottom: 52, gap: 12 },
+  topoTxt: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 14, lineHeight: 20, maxWidth: 300 },
+});
+
+const sw = StyleSheet.create({
+  trilho: { flexDirection: 'row', backgroundColor: '#eef1f5', borderRadius: 999, padding: 4, marginBottom: 6 },
+  pilula: { position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 999, backgroundColor: C.navy },
+  opcao: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 11 },
+  txt: { color: C.muted, fontSize: 14, fontWeight: '700' },
+  txtOn: { color: '#ffffff' },
 });
 
 const art = StyleSheet.create({
   abs: { position: 'absolute' },
-  star: { backgroundColor: '#ede9fe' },
 });

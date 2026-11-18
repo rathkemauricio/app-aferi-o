@@ -84,7 +84,7 @@ export default function TemposModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={exit} />
-        <View style={s.brandMark}><HourglassIcon size={18} color="#fff" weight="bold" /></View>
+        <View style={s.brandMark}><HourglassIcon size={18} color="#5fd39a" weight="bold" /></View>
         <View style={s.flex}>
           <Text style={s.brandName} numberOfLines={1}>Tempos e Movimentos</Text>
           <Text style={s.brandSub}>Módulo</Text>
