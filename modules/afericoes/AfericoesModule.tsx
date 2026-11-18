@@ -10,6 +10,7 @@ import { useAuth, useUsuarioLogado } from '../../lib/auth';
 import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
 import { afericoesCol } from './registros';
+import { Deslizavel } from '../tempos/Deslizavel';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { CroquiCanvas } from '../croqui/Canvas';
 import { Bico3D, BicoFlutuante, Brilho } from './BicoEmFoco';
@@ -242,6 +243,30 @@ export default function AfericoesModule() {
     if (hasWork) { confirmAction('Iniciar nova afericao?', 'O rascunho atual sera descartado. Deseja continuar?', 'Descartar e iniciar', start); return; }
     start();
   };
+  /** Editar uma aferição salva: volta para os bicos com o que foi registrado; ao salvar, substitui a mesma aferição. */
+  const editarAfericao = (a: Audit) => {
+    if (!data.branches.some(b => b.id === a.branchId)) { notify('Filial não encontrada', 'A filial desta aferição não está mais no cadastro.'); return; }
+    const abrir = () => {
+      const porBico: AuditDraft['data'] = {};
+      a.results.filter(r => r.done).forEach(r => { porBico[r.nozzleId] = { checks: [...r.checks], notes: [...r.notes] }; });
+      setDraft({ branchId: a.branchId, data: porBico });
+      setAuditMeta({ date: a.date, auditor: a.auditor, aferidor: a.aferidor ?? '', seal: a.seal, inmetro: a.inmetro, panels: a.panels, rodilhas: a.rodilhas, condBombas: a.condBombas ?? '', condBombasObs: a.condBombasObs ?? '', condIlhas: a.condIlhas ?? '', condIlhasObs: a.condIlhasObs ?? '', generalNotes: a.generalNotes, observations: a.observations, editId: a.id });
+      setSelectedPumpId(''); setSelectedNozzleId(''); setFlowStarted(null); setDetailAudit(null);
+      setAuditStage('equipment'); setTab('auditoria');
+    };
+    const temRascunho = (!!draft.branchId || Object.keys(draft.data).length > 0) && auditMeta.editId !== a.id;
+    if (temRascunho) { confirmAction('Editar esta aferição?', 'A aferição em andamento (não salva) será descartada.', 'Descartar e editar', abrir); return; }
+    abrir();
+  };
+  const excluirAfericao = (a: Audit) => confirmAction('Excluir aferição?', `${a.branchName} #${a.branchCode} · ${dateLabel(a.date)}. A aferição sai do histórico em todos os aparelhos. Não dá para desfazer.`, 'Excluir', () => {
+    auditsCol.remove(a.id);
+    setDetailAudit(null);
+  });
+  /** Apaga o registro de um bico na aferição em andamento (o bico volta a ficar pendente). */
+  const apagarBico = (nozzleId: string, nome: string) => confirmAction(`Apagar a aferição do ${nome}?`, 'O bico volta a ficar pendente nesta aferição.', 'Apagar', () => {
+    setDraft(d => { const dados = { ...d.data }; delete dados[nozzleId]; return { ...d, data: dados }; });
+  });
+
   const branch = data.branches.find(b => b.id === draft.branchId);
   const currentPump = branch?.pumps.find(p => p.id === selectedPumpId);
   const currentNozzle = currentPump?.nozzles.find(n => n.id === selectedNozzleId);
@@ -257,10 +282,13 @@ export default function AfericoesModule() {
     branch.pumps.forEach(p => p.nozzles.forEach(n => { const entry = draft.data[n.id]; results.push({ pumpId: p.id, nozzleId: n.id, pump: p.number, nozzle: n.number, fuel: n.fuel, done: !!entry, checks: entry?.checks ?? CRITERIA.map(() => ''), notes: entry?.notes ?? CRITERIA.map(() => '') }); }));
     if (!results.some(r => r.done)) { notify('Nenhum bico aferido', 'Registre ao menos um bico antes de salvar.'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(auditMeta.date)) { notify('Data inválida', 'Informe a data no formato AAAA-MM-DD.'); return; }
-    const audit: Audit = { id: uid('afericao'), branchId: branch.id, branchName: branch.name, branchCode: branch.code, branchCity: branch.city, branchState: branch.state, date: auditMeta.date, auditor: usuario, aferidor: (auditMeta.aferidor ?? '').trim(), seal: auditMeta.seal, inmetro: auditMeta.inmetro, panels: auditMeta.panels, rodilhas: auditMeta.rodilhas, condBombas: auditMeta.condBombas ?? '', condBombasObs: auditMeta.condBombasObs ?? '', condIlhas: auditMeta.condIlhas ?? '', condIlhasObs: auditMeta.condIlhasObs ?? '', generalNotes: auditMeta.generalNotes, observations: auditMeta.observations, results };
+    const editId = auditMeta.editId || '';
+    const original = editId ? data.audits.find(a => a.id === editId) : undefined;
+    const audit: Audit = { id: editId || uid('afericao'), branchId: branch.id, branchName: branch.name, branchCode: branch.code, branchCity: branch.city, branchState: branch.state, date: auditMeta.date, auditor: original?.auditor || usuario, aferidor: (auditMeta.aferidor ?? '').trim(), seal: auditMeta.seal, inmetro: auditMeta.inmetro, panels: auditMeta.panels, rodilhas: auditMeta.rodilhas, condBombas: auditMeta.condBombas ?? '', condBombasObs: auditMeta.condBombasObs ?? '', condIlhas: auditMeta.condIlhas ?? '', condIlhasObs: auditMeta.condIlhasObs ?? '', generalNotes: auditMeta.generalNotes, observations: auditMeta.observations, results };
     if (audit.aferidor) { ultimoAferidor.current = audit.aferidor; void AsyncStorage.setItem(ULTIMO_AFERIDOR, audit.aferidor).catch(() => undefined); }
-    void persist({ ...data, audits: [audit, ...data.audits] }); setDraft(emptyDraft()); setAuditStage('branch'); setTab('historico');
-    notify('Aferição salva', 'O resultado está disponível no histórico.');
+    void persist({ ...data, audits: editId ? data.audits.map(a => (a.id === editId ? audit : a)) : [audit, ...data.audits] });
+    setDraft(emptyDraft()); setAuditStage('branch'); setAuditMeta(m => ({ ...m, editId: '' })); setTab('historico');
+    notify(editId ? 'Aferição atualizada' : 'Aferição salva', 'O resultado está disponível no histórico.');
   };
 
   const filteredBranches = useMemo(() => data.branches.filter(b => (b.name + ' ' + b.code).toLowerCase().includes(branchSearch.toLowerCase())), [data.branches, branchSearch]);
@@ -320,7 +348,7 @@ export default function AfericoesModule() {
   const page: Record<Tab, { title: string; subtitle: string }> = {
     inicio: { title: 'Visão geral', subtitle: 'Rede de postos' },
     filiais: { title: 'Filiais', subtitle: 'Unidades, bombas e bicos cadastrados' },
-    auditoria: { title: 'Nova aferição', subtitle: branch ? `${branch.name} #${branch.code}` : 'Escolha a filial para começar' },
+    auditoria: { title: auditMeta.editId ? 'Editar aferição' : 'Nova aferição', subtitle: branch ? `${branch.name} #${branch.code}` : 'Escolha a filial para começar' },
     historico: { title: 'Histórico', subtitle: `${filteredAudits.length} aferição(ões) encontrada(s)` },
   };
   const newBranch = () => router.push('/filiais');
@@ -480,7 +508,7 @@ export default function AfericoesModule() {
       return <>
         <Button title="Trocar filial" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => setAuditStage('branch')} />
         {croquiDaAfericao(false)}
-        <Text style={textStyles.caption}>Toque em cada bico para registrar a inspeção. Bicos sem registro entram como não realizados.</Text>
+        <Text style={textStyles.caption}>Toque em cada bico para registrar a inspeção. Bico já aferido: arraste para a direita para editar ou para a esquerda para apagar. Bicos sem registro entram como não realizados.</Text>
         {branch.pumps.map(p => (
           <Card key={p.id} style={s.listCard}>
             <View style={[s.rowCenter, s.cardHead]}>
@@ -490,7 +518,14 @@ export default function AfericoesModule() {
             {p.nozzles.length ? p.nozzles.map(n => {
               const entry = draft.data[n.id];
               const st = !entry ? { label: 'Pendente', tone: 'neutral' as Tone } : entry.checks.includes('NC') ? { label: 'Não conforme', tone: 'danger' as Tone } : entry.checks.includes('OB') ? { label: 'Observação', tone: 'warning' as Tone } : { label: 'Aferido', tone: 'success' as Tone };
-              return <ListRow key={n.id} style={s.divided} icon={DropIcon} tint="emerald" title={`Bico ${n.number}`} subtitle={n.fuel} right={<StatusPill label={st.label} tone={st.tone} />} onPress={() => openNozzle(p.id, n.id)} />;
+              const linha = <ListRow style={[s.divided, { backgroundColor: colors.surface }]} icon={DropIcon} tint="emerald" title={`Bico ${n.number}`} subtitle={n.fuel} right={<StatusPill label={st.label} tone={st.tone} />} onPress={() => openNozzle(p.id, n.id)} />;
+              // Bico aferido: arrastar para a direita edita a aferição dele; para a esquerda apaga.
+              return entry ? (
+                <Deslizavel key={n.id} raio={0} direita={{ rotulo: 'Editar', cor: '#1d4ed8', icone: PencilSimpleIcon }} esquerda={{ rotulo: 'Apagar', cor: '#c0262d', icone: TrashIcon }}
+                  onDireita={() => openNozzle(p.id, n.id)} onEsquerda={() => apagarBico(n.id, `bico ${n.number}`)}>
+                  {linha}
+                </Deslizavel>
+              ) : <View key={n.id}>{linha}</View>;
             }) : <Text style={[textStyles.caption, s.padRow]}>Nenhum bico cadastrado nesta bomba.</Text>}
           </Card>
         ))}
@@ -651,7 +686,13 @@ export default function AfericoesModule() {
           <View style={{ height: space.xs }} />
         </View>}
         ListEmptyComponent={<EmptyState icon={ClockCounterClockwiseIcon} title="Nenhuma aferição encontrada" text="Ajuste os filtros ou registre uma nova aferição." action={{ label: 'Nova aferição', icon: PlusIcon, onPress: beginAudit }} />}
-        renderItem={({ item }) => <AuditRow audit={item} card onPress={() => setDetailAudit(item)} />}
+        renderItem={({ item }) => (
+          // Arrastar: direita edita a aferição; esquerda exclui.
+          <Deslizavel raio={radius.card} direita={{ rotulo: 'Editar', cor: '#1d4ed8', icone: PencilSimpleIcon }} esquerda={{ rotulo: 'Excluir', cor: '#c0262d', icone: TrashIcon }}
+            onDireita={() => editarAfericao(item)} onEsquerda={() => excluirAfericao(item)}>
+            <AuditRow audit={item} card onPress={() => setDetailAudit(item)} />
+          </Deslizavel>
+        )}
       />
     ) : tab === 'filiais' ? (
       <FlatList
@@ -788,6 +829,10 @@ export default function AfericoesModule() {
         footer={<>
           <Button title="Exportar PDF" icon={FilePdfIcon} onPress={() => void exportPdf(detailAudit)} />
           <Button title="Enviar por e-mail" icon={EnvelopeIcon} variant="secondary" onPress={() => { setEmailAudit(detailAudit); setDetailAudit(null); }} />
+          <View style={s.twoCol}>
+            <Button title="Editar" icon={PencilSimpleIcon} variant="secondary" style={s.flex} onPress={() => editarAfericao(detailAudit)} />
+            <Button title="Excluir" icon={TrashIcon} variant="danger" style={s.flex} onPress={() => excluirAfericao(detailAudit)} />
+          </View>
         </>}
       >
         <AuditStatusPill audit={detailAudit} />

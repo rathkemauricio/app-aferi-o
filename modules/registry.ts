@@ -1,5 +1,6 @@
 import type { Href } from 'expo-router';
 import { useTemposAviso } from './tempos/aviso';
+import { useAvisoAfericoes, useAvisoAuditoria, useAvisoColeta, useAvisoTanques } from './avisos';
 import { ArchiveIcon, BarcodeIcon, CalendarDotsIcon, ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, RulerIcon, ShieldWarningIcon, StorefrontIcon } from '../ui/icons';
 import type { Tint } from '../ui/theme';
 
@@ -24,6 +25,7 @@ export const MODULES: AppModule[] = [
     icon: GasPumpIcon,
     tint: 'indigo',
     route: '/afericoes',
+    useAviso: useAvisoAfericoes,
   },
   {
     id: 'tempos',
@@ -49,6 +51,7 @@ export const MODULES: AppModule[] = [
     icon: ClipboardTextIcon,
     tint: 'amber',
     route: '/auditoria',
+    useAviso: useAvisoAuditoria,
   },
   {
     id: 'riscos',
@@ -81,6 +84,7 @@ export const MODULES: AppModule[] = [
     icon: BarcodeIcon,
     tint: 'amber',
     route: '/coleta',
+    useAviso: useAvisoColeta,
   },
   {
     id: 'tanques',
@@ -89,5 +93,6 @@ export const MODULES: AppModule[] = [
     icon: RulerIcon,
     tint: 'sky',
     route: '/tanques',
+    useAviso: useAvisoTanques,
   },
 ];

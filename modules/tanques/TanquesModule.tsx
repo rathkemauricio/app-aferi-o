@@ -6,11 +6,12 @@ import { useUsuarioLogado } from '../../lib/auth';
 import type { Combustivel } from '../../lib/combustiveis';
 import { esc, imprimirHtml, rotuloFilial } from '../../lib/util';
 import {
-  ArrowLeftIcon, CaretDownIcon, CheckIcon, CloudCheckIcon, CloudSlashIcon, MagnifyingGlassIcon, PlusIcon, PrinterIcon, ResetIcon, RulerIcon, StorefrontIcon, TrashIcon, XIcon,
+  ArrowLeftIcon, CaretDownIcon, CheckIcon, CloudCheckIcon, CloudSlashIcon, HourglassIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, PrinterIcon, ResetIcon, RulerIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
 import { Button, Card, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
+import { Deslizavel } from '../tempos/Deslizavel';
 import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
@@ -84,11 +85,13 @@ function FiliaisTela({ dados, abrir }: { dados: Dados; abrir: (id: string) => vo
       {lista.map((f, i) => {
         const ult = dados.medicoes.find(m => m.filial_id === f.id);
         const res = ult ? resumo(ult).geral.resultado : null;
+        const emAndamento = dados.medicoes.some(m => m.filial_id === f.id && m.status === 'rascunho');
         return (
           <ListRow key={f.id} style={i > 0 && { borderTopWidth: 1, borderTopColor: colors.border, borderRadius: 0 }} icon={StorefrontIcon} tint={ult ? 'sky' : 'slate'}
             title={`${f.codigo} · ${f.nome}`}
             subtitle={ult ? `Última medição ${dataBR(ult.data)}${ult.status === 'rascunho' ? ' (em andamento)' : ''} · ${ult.responsavel_nome || '—'}` : 'Sem medições'}
-            right={res !== null && ult?.status === 'finalizada' ? <StatusPill label={`${fmtSinal(res)} L`} tone={res < 0 ? 'danger' : res > 0 ? 'warning' : 'success'} /> : undefined}
+            right={emAndamento ? <StatusPill icon={HourglassIcon} label="Em andamento" tone="warning" />
+              : res !== null && ult?.status === 'finalizada' ? <StatusPill label={`${fmtSinal(res)} L`} tone={res < 0 ? 'danger' : res > 0 ? 'warning' : 'success'} /> : undefined}
             onPress={() => abrir(f.id)} />
         );
       })}
@@ -120,18 +123,32 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
       : 'Esta filial não tem tanques no croqui: a nova medição vem com os tanques da última medição. Para cadastrá-los, desenhe os tanques no Croqui com o combustível de cada um.'}</Text>
     <SectionHeader title={`Medições (${medicoes.length})`} />
     {medicoes.length ? (
-      <Card style={{ padding: space.xs, gap: 0 }}>
-        {medicoes.map((m, i) => {
+      <View style={{ gap: space.sm }}>
+        {medicoes.map(m => {
           const g = resumo(m).geral;
+          const fin = m.status === 'finalizada';
+          // Arrastar: direita edita (ou reabre a finalizada); esquerda exclui.
           return (
-            <ListRow key={m.id} style={i > 0 && { borderTopWidth: 1, borderTopColor: colors.border, borderRadius: 0 }} icon={RulerIcon} tint={m.status === 'finalizada' ? 'sky' : 'amber'}
-              title={`${dataBR(m.data)} · ${m.tanques.length} tanque${m.tanques.length === 1 ? '' : 's'}`}
-              subtitle={`${m.status === 'finalizada' ? 'Finalizada' : 'Em andamento'} · ${m.responsavel_nome || '—'}`}
-              right={<StatusPill label={`${fmtSinal(g.resultado)} L`} tone={g.resultado < 0 ? 'danger' : g.resultado > 0 ? 'warning' : 'success'} />}
-              onPress={() => abrir(m.id)} />
+            <Deslizavel key={m.id} raio={radius.card} direita={fin ? { rotulo: 'Reabrir', cor: '#15803d', icone: ResetIcon } : { rotulo: 'Editar', cor: '#1d4ed8', icone: PencilSimpleIcon }}
+              esquerda={{ rotulo: 'Excluir', cor: '#c0262d', icone: TrashIcon }}
+              onDireita={() => {
+                if (!fin) { abrir(m.id); return; }
+                if (aberta && aberta.id !== m.id) { notify('Medição em andamento', `Termine ou exclua a medição de ${dataBR(aberta.data)} antes de reabrir outra.`); return; }
+                confirmAction('Reabrir medição?', 'A medição volta a aceitar alterações.', 'Reabrir', () => { medicoesCol.put({ ...m, status: 'rascunho' }); abrir(m.id); });
+              }}
+              onEsquerda={() => confirmAction('Excluir medição?', `Medição de ${dataBR(m.data)}. Sai do histórico em todos os aparelhos. Não dá para desfazer.`, 'Excluir', () => medicoesCol.remove(m.id))}>
+              <Card style={{ padding: space.xs, gap: 0 }}>
+                <ListRow icon={RulerIcon} tint={fin ? 'sky' : 'amber'}
+                  title={`${dataBR(m.data)} · ${m.tanques.length} tanque${m.tanques.length === 1 ? '' : 's'}`}
+                  subtitle={`${fin ? 'Finalizada' : 'Em andamento'} · ${m.responsavel_nome || '—'}`}
+                  right={fin ? <StatusPill label={`${fmtSinal(g.resultado)} L`} tone={g.resultado < 0 ? 'danger' : g.resultado > 0 ? 'warning' : 'success'} /> : <StatusPill icon={HourglassIcon} label="Em andamento" tone="warning" />}
+                  onPress={() => abrir(m.id)} />
+              </Card>
+            </Deslizavel>
           );
         })}
-      </Card>
+        <Text style={t.captionBg}>Arraste uma medição: para a direita edita (ou reabre a finalizada); para a esquerda exclui.</Text>
+      </View>
     ) : <EmptyState icon={RulerIcon} title="Nenhuma medição nesta filial" text="Toque em Nova medição para conferir os tanques." />}
   </>;
 }

@@ -9,7 +9,7 @@ import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { imprimirHtml, pdfBase64 } from '../../lib/util';
 import {
-  ArrowLeftIcon, CalendarBlankIcon, CaretDownIcon, CaretUpIcon, EyeIcon, CameraIcon, CheckIcon, ClipboardTextIcon, InfoIcon, PencilSimpleIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, EnvelopeIcon, FilePdfIcon,
+  ArrowLeftIcon, CalendarBlankIcon, CaretDownIcon, HourglassIcon, CaretUpIcon, EyeIcon, CameraIcon, CheckIcon, ClipboardTextIcon, InfoIcon, PencilSimpleIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, EnvelopeIcon, FilePdfIcon,
   ImagesIcon, MagnifyingGlassIcon, PlusIcon, ResetIcon, SealCheckIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill, type Tone } from '../../ui/kit';
@@ -18,6 +18,7 @@ import {
   type Auditoria, COMO_AVALIAR, contar, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, novosItens, PEDE_ACAO, type RelatorioFinal, relatorioHtml, ROTULO, ROTULO_CURTO, SETORES, setorDo, STATUS,
   type StatusReq, tituloCurto, uid,
 } from './model';
+import { Deslizavel } from '../tempos/Deslizavel';
 import { apagarFoto, auditoriasCol, enviarFoto, escolherFotos, fotosEmbutidas, guardarRelatorio, lerRelatorio, linksDasFotos, useAuditorias, useLinksFotos } from './store';
 
 const SESSAO = 'nevoeiro.auditoria.sessao.v1';
@@ -103,6 +104,7 @@ function ListaAuditorias({ auditorias, filiais, onAbrir }: { auditorias: Auditor
             <Button title="Nova auditoria" icon={PlusIcon} size="sm" onPress={() => (filiais.length ? setNova(true) : router.push('/filiais'))} />
           </View>
           <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Filial, auditor ou data" />
+          {auditorias.length ? <Text style={t.captionBg}>Arraste uma auditoria: para a direita edita (ou reabre a concluída); para a esquerda exclui.</Text> : null}
           <View style={{ height: space.xs }} />
         </View>}
         ListEmptyComponent={auditorias.length
@@ -112,7 +114,15 @@ function ListaAuditorias({ auditorias, filiais, onAbrir }: { auditorias: Auditor
             : <EmptyState icon={StorefrontIcon} title="Nenhuma filial cadastrada" text="As auditorias pertencem a uma filial do cadastro único." action={{ label: 'Abrir cadastro de filiais', onPress: () => router.push('/filiais') }} />}
         renderItem={({ item: a }) => {
           const c = contar(a.itens);
+          const concl = a.status === 'concluida';
+          // Arrastar: direita edita (ou reabre a concluída); esquerda exclui.
           return (
+            <Deslizavel raio={radius.card} direita={concl ? { rotulo: 'Reabrir', cor: '#15803d', icone: ResetIcon } : { rotulo: 'Editar', cor: '#1d4ed8', icone: PencilSimpleIcon }}
+              esquerda={{ rotulo: 'Excluir', cor: '#c0262d', icone: TrashIcon }}
+              onDireita={() => (concl
+                ? confirmAction('Reabrir auditoria?', 'A auditoria volta para edição. O relatório final guardado continua disponível.', 'Reabrir', () => { auditoriasCol.put({ ...a, status: 'rascunho' }); onAbrir(a.id); })
+                : onAbrir(a.id))}
+              onEsquerda={() => excluirAuditoria(a)}>
             <Pressable accessibilityRole="button" onPress={() => onAbrir(a.id)} style={({ pressed }) => [pressed && { opacity: 0.75 }]}>
               <Card>
                 <View style={s.row}>
@@ -120,7 +130,7 @@ function ListaAuditorias({ auditorias, filiais, onAbrir }: { auditorias: Auditor
                     <Text style={t.bodyStrong} numberOfLines={1}>{nomeFilial(filiais, a.filial_id)}</Text>
                     <Text style={t.caption} numberOfLines={1}>{dataBR(a.data)}{a.auditores ? ` · ${a.auditores}` : ''}</Text>
                   </View>
-                  <StatusPill label={a.status === 'concluida' ? 'Concluída' : 'Rascunho'} tone={a.status === 'concluida' ? 'success' : 'accent'} icon={a.status === 'concluida' ? SealCheckIcon : undefined} />
+                  <StatusPill label={concl ? 'Concluída' : 'Em andamento'} tone={concl ? 'success' : 'warning'} icon={concl ? SealCheckIcon : HourglassIcon} />
                 </View>
                 <View style={s.pills}>
                   {c.NC ? <StatusPill label={`${c.NC} NC`} tone="danger" /> : null}
@@ -130,6 +140,7 @@ function ListaAuditorias({ auditorias, filiais, onAbrir }: { auditorias: Auditor
                 </View>
               </Card>
             </Pressable>
+            </Deslizavel>
           );
         }}
       />
@@ -512,6 +523,16 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
       {email}
     </View>
   );
+}
+
+/** Exclui a auditoria com as fotos e os relatórios finais guardados. */
+function excluirAuditoria(a: Auditoria, depois?: () => void) {
+  confirmAction('Excluir auditoria?', 'O checklist, as observações, as fotos e os relatórios finais desta auditoria serão apagados.', 'Excluir', () => {
+    const arquivos = [...a.itens.flatMap(i => i.fotos), ...(a.relatorios ?? []).map(r => r.caminho)];
+    auditoriasCol.remove(a.id);
+    arquivos.forEach(f => void apagarFoto(f).catch(() => undefined));
+    depois?.();
+  });
 }
 
 /* ---------- Linha da lista (auditoria concluída): só número, requisito e status ---------- */

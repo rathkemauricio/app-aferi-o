@@ -11,7 +11,7 @@ import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { dataBR, esc, imprimirHtml, rotuloFilial } from '../../lib/util';
-import { ArrowRightIcon, BarcodeIcon, CaretDownIcon, FloppyDiskIcon, ClockCounterClockwiseIcon, DotsThreeVerticalIcon, EraserIcon, KeyboardIcon, PauseIcon, PencilSimpleIcon, PlayIcon, ResetIcon, TrashIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
+import { ArrowRightIcon, BarcodeIcon, HourglassIcon, CaretDownIcon, FloppyDiskIcon, ClockCounterClockwiseIcon, DotsThreeVerticalIcon, EraserIcon, KeyboardIcon, PauseIcon, PencilSimpleIcon, PlayIcon, ResetIcon, TrashIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
@@ -129,10 +129,15 @@ function Botao({ titulo, onPress, tipo = 'p', desabilitado = false, icone: I }: 
 }
 
 type Tom = 'ok' | 'alerta' | 'neutro' | 'erro' | 'info';
-function Pilula({ texto, tom }: { texto: string; tom: Tom }) {
+function Pilula({ texto, tom, icone: Icone }: { texto: string; tom: Tom; icone?: typeof CheckIcon }) {
   const c = useCores();
   const m: Record<Tom, [string, string]> = { ok: [c.successSoft, c.success], alerta: [c.warningSoft, c.warning], neutro: [c.neutralSoft, c.textMuted], erro: [c.dangerSoft, c.danger], info: [c.accentSoft, c.accentText] };
-  return <View style={[k.pilula, { backgroundColor: m[tom][0] }]}><Text style={[k.pilulaTxt, { color: m[tom][1] }]}>{texto}</Text></View>;
+  return (
+    <View style={[k.pilula, { backgroundColor: m[tom][0], flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+      {Icone ? <Icone size={12} color={m[tom][1]} weight="bold" /> : null}
+      <Text style={[k.pilulaTxt, { color: m[tom][1] }]}>{texto}</Text>
+    </View>
+  );
 }
 const tomRodada = (s: StatusRodada): Tom => (s === 'finalizada' ? 'ok' : s === 'andamento' ? 'alerta' : 'neutro');
 
@@ -292,7 +297,9 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
     <Cartao onPress={onPress}>
       <View style={k.linha}>
         <Text style={[k.cTit, { color: c.text, flex: 1 }]} numberOfLines={1}>{nomeFilial(dados, inv.filial_id)}</Text>
-        <Pilula texto={inv.status === 'carregando' ? 'Carregando' : enc ? 'Encerrado' : 'Aberto'} tom={enc ? 'alerta' : inv.status === 'carregando' ? 'neutro' : 'ok'} />
+        {enc ? <Pilula texto="Encerrado" tom="neutro" />
+          : inv.status === 'carregando' ? <Pilula texto="Carregando" tom="neutro" />
+          : <Pilula texto={conts.some(x => x.rodadas.includes('andamento') && !x.pausada) ? 'Em andamento' : 'Aberto'} tom="alerta" icone={HourglassIcon} />}
       </View>
       <Text style={[k.mono, { color: c.textMuted }]}>{inv.codigo}</Text>
       <Text style={[k.cTxt, { color: c.text }]}>{inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · {nCont} contage{nCont === 1 ? 'm' : 'ns'}</Text>
@@ -625,7 +632,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
             <Cartao onPress={() => nav.ir({ n: 'contagem', id: ct.id, aba: 'itens' })}>
               <Text style={[k.cTit, { color: c.text }]}>{ct.nome}</Text>
               <Text style={[k.cTxt, { color: c.textMuted }]}>{ROTULO_CLASSE[ct.classe]} · {ct.classe === 'completa' ? 'todas as categorias' : `${ct.categorias.length} categoria${ct.categorias.length === 1 ? '' : 's'}`} · {Math.round(pc * 100)}%</Text>
-              <View style={[k.linha, { flexWrap: 'wrap' }]}>{ct.pausada ? <Pilula texto="Pausada" tom="alerta" /> : null}{ct.rodadas.map((r, i) => <Pilula key={i} texto={`${i + 1}ª ${ROTULO_RODADA[r]}`} tom={tomRodada(r)} />)}</View>
+              <View style={[k.linha, { flexWrap: 'wrap' }]}>{ct.pausada ? <Pilula texto="Pausada" tom="alerta" /> : null}{ct.rodadas.map((r, i) => <Pilula key={i} texto={`${i + 1}ª ${ROTULO_RODADA[r]}`} tom={tomRodada(r)} icone={r === 'andamento' && !ct.pausada ? HourglassIcon : undefined} />)}</View>
               {feita && !enc ? (
                 <View style={k.linha}>
                   <View style={{ flex: 1 }}><Botao titulo="Reabrir contagem" tipo="s" onPress={() => contagensCol.put({ ...ct, rodadas: reabrir(ct, itens, q) })} /></View>
@@ -957,10 +964,10 @@ function CadastrarCodigo({ ean, inventarioId, produtos, noEscopo, onClose, onFei
     })();
   });
   return (
-    <Sheet title="Cadastrar código de barras" onClose={onClose}>
+    <Sheet title="Código de barras não cadastrado" onClose={onClose} centro>
       <Text style={[k.cTxt, { color: c.text }]}>Código lido: <Text style={[k.mono, k.b, { color: c.text }]}>{ean}</Text></Text>
-      <Text style={[k.cap, { color: c.textMuted }]}>Pesquise o item da carga (nome ou código interno) e toque nele para ligar este código de barras.</Text>
-      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Nome do produto ou código interno" autoCorrect={false} />
+      <Text style={[k.cap, { color: c.textMuted }]}>Pesquise o item da carga (nome ou código interno) e toque nele para cadastrar este código de barras nele.</Text>
+      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Nome do produto ou código interno" autoCorrect={false} autoFocus />
       {busca.trim().length < 2 ? null : achados.length ? achados.map(x => (
         <Pressable key={x.codigo} accessibilityRole="button" disabled={!!salvando} onPress={() => ligar(x)}
           style={({ pressed }) => [k.opcao, { borderBottomColor: c.border, alignItems: 'flex-start' }, pressed && { opacity: 0.8 }]}>
@@ -1182,7 +1189,17 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   const focar = (qual: 'codigo' | 'qtd') => {
     const ref = qual === 'qtd' ? campoQtd : campo;
     setTimeout(() => ref.current?.focus(), 60);
-    setTimeout(() => { if (!ref.current?.isFocused()) ref.current?.focus(); }, 280);
+    // Quantidade: tira e devolve o foco para o Android mostrar o teclado numérico (só o foco não abre o teclado
+    // quando ele vem do campo do código, que usa o leitor sem teclado).
+    if (qual === 'qtd') setTimeout(() => { const r = campoQtd.current; if (!r) return; r.blur(); setTimeout(() => r.focus(), 40); }, 260);
+    else setTimeout(() => { if (!ref.current?.isFocused()) ref.current?.focus(); }, 280);
+  };
+  /** Teclado numérico no campo do código: abre ao tocar nele (o leitor continua lendo sem teclado). */
+  const [tecladoCodigo, setTecladoCodigo] = useState(false);
+  const abrirTecladoCodigo = () => {
+    if (teclado || tecladoCodigo) return;
+    setTecladoCodigo(true);
+    setTimeout(() => { campo.current?.blur(); setTimeout(() => campo.current?.focus(), 40); }, 30);
   };
   // Item sem saldo no arquivo: só vira sobra se a categoria dele veio no arquivo (zerado no Petros) — ver podeSobra.
   const catsArquivo = useMemo(() => categoriasDoArquivo(produtos), [produtos]);
@@ -1209,8 +1226,10 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
       tocar('barrado'); setSel(null); setPendente(false); setLido(cod);
       const ean = /^\d{8,14}$/.test(cod);
       setSemCadastro(ean ? cod : null);
+      if (ean) setCadastrando(true); // abre na hora a janela para cadastrar o código ou pesquisar o item
       setAviso({ txt: ean ? `Código de barras ${cod} não cadastrado. Toque em "Cadastrar este código" para ligá-lo ao item.` : `Código ${cod} não está na carga do Petros nem na base de códigos de barra.`, tom: 'erro' });
-      focar('codigo'); return;
+      if (!ean) focar('codigo'); // com a janela aberta, o foco fica na pesquisa dela
+      return;
     }
     identificar(prod, cod);
   };
@@ -1331,7 +1350,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
         {/* Leitura: código + (buscar) + teclado + borracha, tudo numa linha */}
         <View style={[k.linha, { gap: 6 }]}>
           <TextInput ref={campo} autoFocus={!pendente} value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
-            placeholder={pendente ? 'Ler outro código' : 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado} keyboardType="number-pad" returnKeyType="search"
+            placeholder={pendente ? 'Ler outro código' : 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado || tecladoCodigo} onPressIn={abrirTecladoCodigo} keyboardType="number-pad" returnKeyType="search"
             style={[k.cCodigo, { color: c.text, backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : AMBER }]} accessibilityLabel="Código de barras" />
           {codigo.trim() ? icone('Buscar item', MagnifyingGlassIcon, () => ler(codigo), { fundo: AMBER, cor: AMBER_TXT, ativo: true }) : null}
           {icone('Apagar tudo e ler outro item', EraserIcon, apagar, { cor: c.danger, ativo: true })}
@@ -1432,7 +1451,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
         {/* Leitura do código */}
         <View style={[k.leitura, { backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : VERDE }]}>
           <TextInput ref={campo} autoFocus={!pendente} value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
-            placeholder="Código de barras" placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado} keyboardType="number-pad" returnKeyType="search"
+            placeholder="Código de barras" placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado || tecladoCodigo} onPressIn={abrirTecladoCodigo} keyboardType="number-pad" returnKeyType="search"
             style={[k.leituraCampo, { color: c.text }]} accessibilityLabel="Código de barras" />
           <Pressable accessibilityRole="button" accessibilityLabel="Buscar o item deste código" onPress={() => ler(codigo)} style={({ pressed }) => [k.leituraIr, pressed && { opacity: 0.8 }]}>
             <ArrowRightIcon size={26} color="#fff" weight="bold" />

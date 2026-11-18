@@ -11,7 +11,7 @@ import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useFiliais } from '../../lib/data';
 import { MODULES, type AppModule } from '../../modules/registry';
-import { ArrowRightIcon, DropIcon, GasPumpIcon, LockSimpleIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon } from '../../ui/icons';
+import { ArrowRightIcon, DropIcon, HourglassIcon, GasPumpIcon, LockSimpleIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon } from '../../ui/icons';
 import { Card, confirmAction, EmptyState, IconButton, IconTile, ListRow, SectionHeader, StatusPill } from '../../ui/kit';
 import { createTypography, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 
@@ -176,7 +176,7 @@ function ModuleCard({ module: m, onOpen, desktop = false }: { module: AppModule;
       </View>
       <Text style={[t.section, s.tileName]}>{m.name}</Text>
       <Text style={[t.caption, { color: colors.textMuted }]}>{m.description}</Text>
-      {aviso ? <View style={s.aviso}><Text style={s.avisoTxt}>{aviso}</Text></View> : null}
+      {aviso ? <View style={[s.aviso, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}><HourglassIcon size={13} color={colors.onMint} weight="bold" /><Text style={s.avisoTxt}>{aviso}</Text></View> : null}
     </Pressable>
   );
 }

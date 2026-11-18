@@ -221,7 +221,8 @@ export function Steps({ steps, current }: { steps: string[]; current: number }) 
  * dentro do KeyboardAvoidingView global — assim ela sobe junto com o teclado e a rolagem leva o campo em foco à vista.
  * Na web continua usando Modal.
  */
-type SheetProps = { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode };
+/** `centro`: abre como janela no meio da tela (não grudada embaixo). */
+type SheetProps = { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; centro?: boolean };
 type SheetHostApi = { set: (id: string, node: ReactNode) => void; remove: (id: string) => void };
 const SheetHostContext = createContext<SheetHostApi | null>(null);
 
@@ -265,7 +266,7 @@ export function Sheet(props: SheetProps) {
   );
 }
 
-function SheetView({ title, onClose, children, footer }: SheetProps) {
+function SheetView({ title, onClose, children, footer, centro = false }: SheetProps) {
   const { colors } = useContext(ThemeContext);
   const y = useRef(new Animated.Value(40)).current;
   const o = useRef(new Animated.Value(0)).current;
@@ -276,10 +277,10 @@ function SheetView({ title, onClose, children, footer }: SheetProps) {
     ]).start();
   }, [o, y]);
   return (
-    <Animated.View style={[k.backdrop, { opacity: o }]}>
+    <Animated.View style={[k.backdrop, centro && k.backdropCentro, { opacity: o }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar" />
-      <Animated.View style={[k.sheet, { backgroundColor: colors.bg, transform: [{ translateY: y }] }]}>
-        <View style={k.grabber} />
+      <Animated.View style={[k.sheet, centro && k.sheetCentro, { backgroundColor: colors.bg, transform: [{ translateY: y }] }]}>
+        {centro ? null : <View style={k.grabber} />}
         <View style={[k.sheetHead, { backgroundColor: colors.bg }]}>
           <Text style={[t.section, k.flex, { color: colors.text }]}>{title}</Text>
           <IconButton icon={XIcon} label="Fechar" onPress={onClose} />
@@ -355,6 +356,8 @@ const k = StyleSheet.create({
 
   backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(20, 25, 34, 0.42)', justifyContent: 'flex-end' },
   sheet: { maxHeight: '90%', width: '100%', maxWidth: 640, alignSelf: 'center', backgroundColor: color.bg, borderTopLeftRadius: Platform.OS === 'web' ? radius.card : 22, borderTopRightRadius: Platform.OS === 'web' ? radius.card : 22, ...shadow.sheet },
+  backdropCentro: { justifyContent: 'center', padding: 16 },
+  sheetCentro: { maxHeight: '80%', maxWidth: 520, borderRadius: 20, overflow: 'hidden' },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: color.borderStrong, marginTop: 8 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs },
   sheetBody: { padding: space.lg, paddingTop: space.sm, gap: space.md },
