@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture, type PanGestureConfig } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,7 +47,7 @@ const leituraMl = (v: number) => Math.max(-200, Math.min(200, Math.round(((v - 2
 const RY0 = 22, RY1 = 278, RX = 62;
 const yDoValor = (v: number) => RY1 - ((v + 200) / 400) * (RY1 - RY0);
 
-export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indiceCodigo, onCheck, onFechar, onModoNormal }: {
+export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indiceCodigo, onCheck, onNota, onFechar, onModoNormal }: {
   filial: string;
   bicos: BicoInterativo[];
   dados: Dados;
@@ -55,6 +55,8 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
   criteriosCodigo: string[];
   indiceCodigo: (criterio: string) => number;
   onCheck: (bicoId: string, indice: number, valor: string) => void;
+  /** Observação de um item em OB ou NC. */
+  onNota: (bicoId: string, indice: number, texto: string) => void;
   onFechar: () => void;
   /** Abre o bico atual no modo normal (vazão, desligamento, observações). */
   onModoNormal: (bicoId: string) => void;
@@ -69,7 +71,14 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
   const idxModo = modo === 'lenta' ? 0 : 1;
   const salvo = checks[idxModo];
   const [valor, setValor] = useState(0);
-  useEffect(() => { setValor(salvo !== undefined && salvo !== '' && !Number.isNaN(Number(salvo)) ? Number(salvo) : 0); }, [atual, modo]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Ao trocar de bico ou de vazão: régua no valor salvo e o líquido no nível correspondente (vazia se não medido).
+  const temSalvo = salvo !== undefined && salvo !== '' && !Number.isNaN(Number(salvo));
+  useEffect(() => {
+    const v = temSalvo ? Number(salvo) : 0;
+    setValor(v);
+    const nivel = temSalvo ? 20 + v / 1000 : 0;
+    vol.set(nivel); setLitros(nivel);
+  }, [atual, modo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gravarValor = useCallback((v: number) => { if (bico) onCheck(bico.id, idxModo, String(v)); }, [bico, idxModo, onCheck]);
 
@@ -141,7 +150,13 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
   /* ----- Régua: arrastar direto o botão ----- */
   const alturaRegua = useSharedValue(300);
   const ultimo = useSharedValue(0);
-  const aplicarRegua = useCallback((v: number) => setValor(v), []);
+  // A medida-padrão acompanha a régua: mudar de −20 para +20 sobe o líquido no gargalo (e o contrário desce).
+  const aplicarRegua = useCallback((v: number) => {
+    setValor(v);
+    cancelAnimation(vol);
+    vol.set(reduz ? 20 + v / 1000 : withTiming(20 + v / 1000, { duration: 220, easing: Easing.out(Easing.cubic) }));
+    setLitros(20 + v / 1000);
+  }, [reduz]); // eslint-disable-line react-hooks/exhaustive-deps
   const configRegua = useMemo((): PanGestureConfig => ({
     onBegin: e => {
       'worklet';
@@ -276,7 +291,7 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
               <View style={{ width: 84, height: 250 }} onLayout={ev => alturaRegua.set(ev.nativeEvent.layout.height)}
                 accessibilityRole="adjustable" accessibilityLabel={`Diferença: ${valor} mL`}
                 accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-                onAccessibilityAction={ev => { const v = Math.max(-200, Math.min(200, valor + (ev.nativeEvent.actionName === 'increment' ? 20 : -20))); setValor(v); gravarValor(v); }}>
+                onAccessibilityAction={ev => { const v = Math.max(-200, Math.min(200, valor + (ev.nativeEvent.actionName === 'increment' ? 20 : -20))); aplicarRegua(v); gravarValor(v); }}>
                 <Svg viewBox="0 0 96 300" style={{ width: 84, height: 250 }}>
                   {Array.from({ length: 21 }, (_, k) => {
                     const v = -200 + k * 20, y = yDoValor(v), forte = v % 100 === 0;
@@ -329,9 +344,12 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
               <Pressable accessibilityRole="button" onPress={tudoC} style={[e.tudoC]}><CheckIcon size={14} color={NAVY} weight="bold" /><Text style={{ color: NAVY, fontWeight: '800', fontSize: 13 }}>Tudo C</Text></Pressable>
             </View>
             {criteriosCodigo.map(c => {
-              const v = checks[indiceCodigo(c)] ?? '';
+              const i = indiceCodigo(c);
+              const v = checks[i] ?? '';
+              const nota = (bico && dados[bico.id]?.notes?.[i]) ?? '';
               return (
-                <View key={c} style={e.item}>
+                <View key={c} style={{ gap: 6 }}>
+                <View style={e.item}>
                   <Text style={e.itemNome}>{c}</Text>
                   <View style={e.codigos}>
                     {(['C', 'OB', 'NC', 'NA'] as const).map(k => {
@@ -344,6 +362,12 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
                       );
                     })}
                   </View>
+                </View>
+                {v === 'OB' || v === 'NC' ? (
+                  <TextInput value={nota} onChangeText={t => onNota(bico.id, i, t)} multiline placeholderTextColor={MUTED}
+                    placeholder={v === 'OB' ? `Observação de ${c}` : `Não conformidade de ${c}: o que foi encontrado?`}
+                    style={[e.nota, { borderColor: COR_RES[v] }]} accessibilityLabel={`Observação de ${c}`} />
+                ) : null}
                 </View>
               );
             })}
@@ -470,6 +494,7 @@ const e = StyleSheet.create({
   val: { flex: 1, backgroundColor: PAINEL, borderRadius: 14, padding: 12, borderWidth: 1.5, borderColor: 'transparent' },
   valNum: { color: FG, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
   itens: { backgroundColor: PAINEL, borderRadius: 18, padding: 12, gap: 10 },
+  nota: { borderWidth: 1.5, borderRadius: 12, backgroundColor: NAVY, color: FG, paddingHorizontal: 12, paddingVertical: 10, minHeight: 46, fontSize: 14, textAlignVertical: 'top' },
   campoRoleta: { borderRadius: 12, borderWidth: 1, borderColor: LINHA, backgroundColor: NAVY, overflow: 'hidden' },
   na: { borderWidth: 1.5, borderColor: LINHA, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
   naTxt: { color: MUTED, fontWeight: '800', fontSize: 12 },

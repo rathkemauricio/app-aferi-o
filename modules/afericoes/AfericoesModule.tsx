@@ -535,6 +535,7 @@ export default function AfericoesModule() {
             criteriosCodigo={['Luz', 'Mangueira', 'BICO', 'Lacres', 'Sump']}
             indiceCodigo={c => CRITERIA.indexOf(c)}
             onCheck={setCheckBico}
+            onNota={(id, i, texto) => setDraft(d => { const o = d.data[id] ?? { checks: CRITERIA.map(() => ''), notes: CRITERIA.map(() => '') }; const notes = [...o.notes]; notes[i] = texto; return { ...d, data: { ...d.data, [id]: { ...o, notes } } }; })}
             onFechar={() => setInterativa(false)}
             onModoNormal={id => { const p = branch.pumps.find(x => x.nozzles.some(n => n.id === id)); setInterativa(false); if (p) openNozzle(p.id, id); }}
           />
