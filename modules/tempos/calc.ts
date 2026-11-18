@@ -104,7 +104,7 @@ export function mediaObservada(d: TmData, filialId: string, atividadeIds: string
 export function csvEtapas(d: TmData, cs: Coleta[]) {
   const filial = (id: string) => { const f = d.filiais.find(x => x.id === id); return f ? `${f.codigo} ${f.nome}` : ''; };
   const atv = (id: string) => d.atividades.find(a => a.id === id);
-  const header = ['data', 'filial', 'setor', 'funcao', 'turno', 'demanda', 'auditor', 'atendimento_id', 'tipo', 'veiculo', 'funcionario', 'ordem', 'atividade', 'classe', 'inicio', 'termino', 'duracao_s', 'pausas_s', 'total_atendimento_s', 'volume', 'deslocamentos', 'origem', 'obs'];
+  const header = ['data', 'filial', 'setor', 'funcao', 'turno', 'demanda', 'auditor', 'atendimento_id', 'tipo', 'veiculo', 'funcionario', 'ordem', 'atividade', 'classe', 'inicio', 'termino', 'duracao_s', 'pausas_s', 'total_atendimento_s', 'volume', 'volume_faixa', 'deslocamentos', 'origem', 'obs'];
   const rows: (string | number)[][] = [];
   const porColeta = new Map(cs.map(c => [c.id, c]));
   d.atendimentos.filter(a => porColeta.has(a.coleta_id)).forEach((a: Atendimento) => {
@@ -112,7 +112,7 @@ export function csvEtapas(d: TmData, cs: Coleta[]) {
     a.etapas.forEach(e => {
       const x = atv(e.atividade_id);
       rows.push([c.data, filial(c.filial_id), c.setor, c.funcao, c.turno, c.demanda, c.auditor, a.id, a.tipo, d.veiculos.find(v => v.id === a.veiculo)?.nome ?? '', a.funcionario, e.ordem, x?.nome ?? '', x?.classe ?? '',
-        e.inicio ?? '', e.fim ?? '', e.duracao_s.toFixed(1), pausaSeg(e).toFixed(1), a.duracao_s.toFixed(1), a.volume ?? '', a.deslocamentos ?? '', a.origem, a.obs]);
+        e.inicio ?? '', e.fim ?? '', e.duracao_s.toFixed(1), pausaSeg(e).toFixed(1), a.duracao_s.toFixed(1), a.volume ?? '', a.volume_faixa ?? '', a.deslocamentos ?? '', a.origem, a.obs]);
     });
   });
   return [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');

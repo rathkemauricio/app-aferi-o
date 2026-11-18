@@ -6,7 +6,7 @@ import { CaretDownIcon, ChartBarIcon, CheckIcon, PlusIcon, ResetIcon, Storefront
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, Sheet, StatusPill } from '../../ui/kit';
 import { mediaObservada } from './calc';
 import { FilialPicker } from './ColetasTab';
-import { normNome, num, uid } from './model';
+import { type Faixa, FAIXAS, normNome, num, rotuloFaixa, uid } from './model';
 import type { TmData } from './store';
 import { BarList, Kpi, useLook } from './ui';
 import { AnaliseIA } from './AnaliseIA';
@@ -15,8 +15,6 @@ import { AnaliseIA } from './AnaliseIA';
 // Há um dimensionamento PADRÃO da rede (configuração global, editado pelo administrador) que vale para todas as filiais.
 // Quando uma filial é alterada, ela passa a ter o seu próprio documento em filial_docs (e pode voltar ao padrão).
 type Freq = 'd' | 's' | 'm' | 'h';
-/** Faixa de volume em litros: ≤ ou ≥ um valor de 10 a 1000 (passos de 10). */
-export type Faixa = { op: '≤' | '≥'; l: number };
 type ItemDim = { id: string; b: number; n: string; m: number; t: Freq; v: number; fx?: Faixa };
 export type Dimensionamento = { dias: number; quadro: number; bl: { f: number; h: number }[]; it: ItemDim[] };
 
@@ -24,9 +22,6 @@ export const CFG_DIM_PADRAO = 'tm.dimensionamento.padrao';
 const BL: [string, number, number][] = [['Abastecimento', 1.5, 220], ['Atendimento e serviços', 1, 220], ['Atividades na pista', 1, 220], ['Liderança', 1, 176]];
 const FQ: Record<Freq, string> = { d: 'Diária', s: 'Semanal', m: 'Mensal', h: 'Horas fixas' };
 
-/** Faixas na ordem pedida: ≥ 10, ≤ 10, ≥ 20, ≤ 20 … até 1000 L. */
-export const FAIXAS: Faixa[] = Array.from({ length: 100 }, (_, i) => (i + 1) * 10).flatMap(l => [{ op: '≥' as const, l }, { op: '≤' as const, l }]);
-export const rotuloFaixa = (f?: Faixa) => (f ? `${f.op} ${f.l} L` : '');
 const nomeItem = (i: ItemDim) => (i.fx ? `${i.n} ${rotuloFaixa(i.fx)}` : i.n);
 
 const SEED: [number, string, number, Freq, number, Faixa?][] = [

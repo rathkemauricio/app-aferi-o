@@ -52,7 +52,7 @@ export const ops = {
   },
   pausar: (id: string) => editarRascunho(id, a => ({ ...a, etapas: a.etapas.map(e => (!e.fim && !pausada(e) ? { ...e, pausas: [...e.pausas, [agoraIso(), null]] } : e)) })),
   retomar: (id: string) => editarRascunho(id, a => ({ ...a, etapas: a.etapas.map(e => (!e.fim && pausada(e) ? { ...e, pausas: e.pausas.map((p, i) => (i === e.pausas.length - 1 ? [p[0], agoraIso()] : p)) } : e)) })),
-  editarRascunho: (id: string, patch: Partial<Pick<Atendimento, 'funcionario' | 'obs' | 'volume' | 'deslocamentos' | 'veiculo'>>) => editarRascunho(id, a => ({ ...a, ...patch })),
+  editarRascunho: (id: string, patch: Partial<Pick<Atendimento, 'funcionario' | 'obs' | 'volume' | 'volume_faixa' | 'deslocamentos' | 'veiculo'>>) => editarRascunho(id, a => ({ ...a, ...patch })),
   removerEtapaRascunho: (id: string, ordem: number) => editarRascunho(id, a => ({ ...a, etapas: renumerar(a.etapas.filter(e => e.ordem !== ordem)) })),
   descartar: (id: string) => drafts.remove(id),
 
@@ -69,7 +69,7 @@ export const ops = {
   },
 
   /* ---------- Atendimento finalizado ---------- */
-  editarFinalizado: (a: Atendimento, patch: Partial<Pick<Atendimento, 'funcionario' | 'obs' | 'volume' | 'deslocamentos' | 'veiculo'>>) => atendimentosCol.put({ ...a, ...patch }),
+  editarFinalizado: (a: Atendimento, patch: Partial<Pick<Atendimento, 'funcionario' | 'obs' | 'volume' | 'volume_faixa' | 'deslocamentos' | 'veiculo'>>) => atendimentosCol.put({ ...a, ...patch }),
   removerEtapaFinalizado: (a: Atendimento, ordem: number) => {
     const etapas = renumerar(a.etapas.filter(e => e.ordem !== ordem));
     if (!etapas.length) { atendimentosCol.remove(a.id); return; }

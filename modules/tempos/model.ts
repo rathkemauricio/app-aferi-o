@@ -35,6 +35,8 @@ export type Atendimento = SyncRow & {
   duracao_s: number;
   etapas: Etapa[];
   volume: number | null;
+  /** Sinal da faixa de volume ('≥' ou '≤' o valor de `volume`); vazio = volume exato (registros antigos/importados). */
+  volume_faixa?: '≥' | '≤' | '';
   deslocamentos: number | null;
   obs: string;
   origem: 'app' | 'importado';
@@ -42,6 +44,13 @@ export type Atendimento = SyncRow & {
 
 /** Linha de tm_coletas. */
 export type Coleta = SyncRow & { filial_id: string; data: string; setor: string; funcao: string; turno: string; demanda: string; auditor: string };
+
+/* ---------- Faixas de volume ---------- */
+/** Faixa de volume em litros: ≤ ou ≥ um valor de 10 a 1000 (passos de 10). Usada no Dimensionamento e no volume do atendimento. */
+export type Faixa = { op: '≤' | '≥'; l: number };
+/** Faixas na ordem pedida: ≥ 10, ≤ 10, ≥ 20, ≤ 20 … até 1000 L. */
+export const FAIXAS: Faixa[] = Array.from({ length: 100 }, (_, i) => (i + 1) * 10).flatMap(l => [{ op: '≥' as const, l }, { op: '≤' as const, l }]);
+export const rotuloFaixa = (f?: Faixa) => (f ? `${f.op} ${f.l} L` : '');
 
 /* ---------- Utilidades ---------- */
 export const uid = (p: string) => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

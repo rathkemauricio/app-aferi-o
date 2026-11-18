@@ -50,7 +50,7 @@ export function PainelTab({ data }: { data: TmData }) {
         <Kpi label="Retrabalho (min)" value={fmtMin(r.retrabalhoSeg)} />
         <Kpi label="Deslocamentos" value={num(r.deslocamentos)} />
         <Kpi label="Ocupação %" value={num(r.ocupacao)} />
-        <Kpi label="Volume (litros/itens)" value={num(r.volume)} />
+        <Kpi label="Volume (litros, pelas faixas)" value={num(r.volume)} />
       </View>
 
       <Card>

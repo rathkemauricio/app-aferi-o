@@ -96,6 +96,7 @@ model TmAtendimento {
   duracaoS      Decimal   @default(0) @map("duracao_s") @db.Decimal(10, 1)
   etapas        Json      @default("[]")
   volume        Decimal?
+  volumeFaixa   String    @default("") @map("volume_faixa")
   deslocamentos Int?
   obs           String    @default("")
   origem        String    @default("app")

@@ -8,11 +8,11 @@ import {
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import {
-  type Atendimento, type Atividade, type Coleta, DEMANDAS, dataBR, duracaoAtendimento, duracaoEtapa, etapaAberta, etapaPausada, fmtCrono, fmtDur, hoje,
+  type Atendimento, type Atividade, type Coleta, DEMANDAS, FAIXAS, dataBR, duracaoAtendimento, duracaoEtapa, etapaAberta, etapaPausada, fmtCrono, fmtDur, hoje,
   horaBR, pausaSeg, SEQUENCIA_PISTA, SETORES, TURNOS,
 } from './model';
 import { radius } from '../../ui/theme';
-import { faixa, Roleta } from '../afericoes/Roleta';
+import { Roleta } from '../afericoes/Roleta';
 import { Deslizavel } from './Deslizavel';
 import { ops } from './ops';
 import { progressoFilial } from './calc';
@@ -285,7 +285,7 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
   const pick = (x: Atividade) => ops.iniciarEtapa(a.id, x.id);
   const descartar = () => confirmAction(emAndamento ? 'Descartar atendimento?' : 'Excluir registro?', 'As etapas cronometradas serão apagadas.', emAndamento ? 'Descartar' : 'Excluir',
     () => { if (emAndamento) ops.descartar(a.id); else ops.excluirFinalizado(a.id); nav.pop(); });
-  const editar = (patch: Partial<Pick<Atendimento, 'funcionario' | 'obs' | 'volume' | 'deslocamentos' | 'veiculo'>>) => (emAndamento ? ops.editarRascunho(a.id, patch) : ops.editarFinalizado(a, patch));
+  const editar = (patch: Partial<Pick<Atendimento, 'funcionario' | 'obs' | 'volume' | 'volume_faixa' | 'deslocamentos' | 'veiculo'>>) => (emAndamento ? ops.editarRascunho(a.id, patch) : ops.editarFinalizado(a, patch));
   const numero = (v: string) => { const x = Number(v.replace(',', '.')); return v.trim() === '' || Number.isNaN(x) ? null : x; };
 
   return <>
@@ -358,16 +358,16 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
 
     <Card>
       <Field label="Funcionário observado" value={a.funcionario} placeholder="Opcional" onChangeText={v => editar({ funcionario: v })} />
-      {/* Volume na roleta (igual à aferição): deslizar dentro do campo gira a roleta; tocar num valor escolhe. */}
+      {/* Volume por faixa na roleta (≥ 10, ≤ 10, ≥ 20 … L, as mesmas do Dimensionamento): deslizar dentro do campo gira a roleta. */}
       <View style={[s.row, { justifyContent: 'space-between' }]}>
-        <Text style={t.label}>Volume (litros ou itens)</Text>
+        <Text style={t.label}>Volume (faixa em litros)</Text>
         {a.volume !== null
-          ? <Button title="Limpar" variant="ghost" size="sm" onPress={() => editar({ volume: null })} />
+          ? <Button title="Limpar" variant="ghost" size="sm" onPress={() => editar({ volume: null, volume_faixa: '' })} />
           : <Text style={t.caption}>Opcional</Text>}
       </View>
       <View style={{ borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.campo, overflow: 'hidden' }}>
-        <Roleta rotulo="Volume em litros ou itens" valores={valoresVolume(a.volume)} valor={a.volume === null ? '' : String(a.volume)} vazio={a.volume === null}
-          formatar={v => v.replace('.', ',')} onChange={v => editar({ volume: Number(v) })} altura={42} visiveis={3} />
+        <Roleta rotulo="Faixa de volume em litros" valores={valoresVolume(a)} valor={chaveVolume(a)} vazio={a.volume === null}
+          formatar={rotuloVolume} onChange={v => { const f = deChave(v); editar({ volume: f.l, volume_faixa: f.op }); }} altura={42} visiveis={3} />
       </View>
       <Field estavel label="Deslocamentos" keyboardType="numeric" placeholder="Qtd." value={a.deslocamentos === null ? '' : String(a.deslocamentos)} onChangeText={v => editar({ deslocamentos: numero(v) })} />
       <Field label="Observações" multiline value={a.obs} placeholder="Ocorrências, dificuldades, espera do cliente" onChangeText={v => editar({ obs: v })} />
@@ -386,11 +386,17 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
 }
 
 /* ---------- Peças auxiliares ---------- */
-/** Valores da roleta de volume: de 1 em 1 até 200 e de 5 em 5 até 1000 (um valor fora disso, ex. importado, entra na lista). */
-const VOLUMES = [...faixa(0, 200, 1), ...faixa(205, 1000, 5)];
-const valoresVolume = (atual: number | null) => {
-  if (atual === null || VOLUMES.includes(String(atual))) return VOLUMES;
-  return [...VOLUMES, String(atual)].sort((x, y) => Number(x) - Number(y));
+/**
+ * Roleta de volume por faixa: ≥ 10, ≤ 10, ≥ 20, ≤ 20 … até 1000 L (as mesmas faixas do Dimensionamento).
+ * Cada valor é gravado como sinal (`volume_faixa`) + litros (`volume`). Um volume exato antigo/importado aparece no topo.
+ */
+const FAIXAS_VOLUME = FAIXAS.map(f => `${f.op}${f.l}`);
+const chaveVolume = (a: Atendimento) => (a.volume === null ? '' : `${a.volume_faixa ?? ''}${a.volume}`);
+const deChave = (v: string): { op: '≥' | '≤' | ''; l: number } => (v[0] === '≥' || v[0] === '≤' ? { op: v[0], l: Number(v.slice(1)) } : { op: '', l: Number(v) });
+const rotuloVolume = (v: string) => { const f = deChave(v); return `${f.op ? `${f.op} ` : ''}${String(f.l).replace('.', ',')} L`; };
+const valoresVolume = (a: Atendimento) => {
+  const atual = chaveVolume(a);
+  return atual === '' || FAIXAS_VOLUME.includes(atual) ? FAIXAS_VOLUME : [atual, ...FAIXAS_VOLUME];
 };
 
 type ColetaForm = { data: string; setor: string; funcao: string; turno: string; demanda: string; auditor: string };
