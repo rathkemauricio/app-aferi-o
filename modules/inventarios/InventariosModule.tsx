@@ -99,7 +99,7 @@ function ListaUnidades({ unidades, filiais, todos, onAbrir }: { unidades: Unidad
           <View style={s.pageHead}>
             <View style={s.flex}>
               <Text style={t.title}>Unidades</Text>
-              <Text style={t.caption}>Consulta histórica extraída do sistema legado. Toque numa unidade para ver os inventários.</Text>
+              <Text style={t.captionBg}>Consulta histórica extraída do sistema legado. Toque numa unidade para ver os inventários.</Text>
             </View>
             <Button title="Novo inventário" icon={PlusIcon} size="sm" onPress={() => setNovo(true)} />
           </View>
@@ -179,7 +179,7 @@ function ListaInventarios({ unidade, filiais, todos, onVoltar, onAbrir }: { unid
           <View style={s.pageHead}>
             <View style={s.flex}>
               <Text style={t.title} numberOfLines={1}>{unidade.nome}</Text>
-              <Text style={t.caption}>Toque num inventário para ver o resultado por categoria.</Text>
+              <Text style={t.captionBg}>Toque num inventário para ver o resultado por categoria.</Text>
             </View>
             <Button title="Novo" icon={PlusIcon} size="sm" onPress={() => setNovo(true)} />
           </View>
@@ -289,7 +289,7 @@ function DetalheInventario({ inv, unidade, onVoltar }: { inv: Inventario; unidad
           <Button title="Inventários" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={onVoltar} />
           <View>
             <Text style={t.title}>{inv.descricao || `Inventário ${inv.cau_id}`}</Text>
-            <Text style={t.caption}>Empresa: {inv.empresa || unidade.nome}  •  Data: {inv.agendamento || '—'}  •  ID: {inv.cau_id}</Text>
+            <Text style={t.captionBg}>Empresa: {inv.empresa || unidade.nome}  •  Data: {inv.agendamento || '—'}  •  ID: {inv.cau_id}</Text>
           </View>
           <View style={s.twoCol}>
             <Button title="Adicionar categoria" icon={PlusIcon} variant="secondary" size="sm" style={s.flex} disabled={!isSupabaseConfigured} onPress={() => setNova(true)} />

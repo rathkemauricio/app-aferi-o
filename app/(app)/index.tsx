@@ -111,8 +111,8 @@ export default function ModuleLauncher() {
 
       <ScrollView contentContainerStyle={s.content}>
         <Pressable style={s.account} onPress={() => router.push('/conta')} accessibilityRole="button" accessibilityLabel="Minha conta">
-          <UserCircleIcon size={18} color={colors.textMuted} />
-          <Text style={t.caption} numberOfLines={1}>
+          <UserCircleIcon size={18} color={colors.onBgMuted} />
+          <Text style={t.captionBg} numberOfLines={1}>
             {nome || userEmail || (isSupabaseConfigured ? 'Sessão sem e-mail' : 'Modo local, sem conta conectada')}
           </Text>
           {isAdmin && isSupabaseConfigured ? <View style={[s.aviso, { marginTop: 0 }]}><Text style={s.avisoTxt}>Administrador</Text></View> : null}
@@ -126,7 +126,7 @@ export default function ModuleLauncher() {
 
         <View style={s.head}>
           <Text style={t.title}>Módulos</Text>
-          <Text style={t.caption}>Escolha onde você quer trabalhar.</Text>
+          <Text style={t.captionBg}>Escolha onde você quer trabalhar.</Text>
         </View>
 
         {!modulos.length ? (
@@ -136,8 +136,8 @@ export default function ModuleLauncher() {
           {modulos.map(m => <ModuleCard key={m.id} module={m} onOpen={() => abrirModulo(m)} />)}
           <View style={[s.tile, s.placeholder]}>
             <IconTile icon={SquaresFourIcon} tint="slate" size={44} />
-            <Text style={t.bodyStrong}>Novos módulos</Text>
-            <Text style={t.caption}>Aparecem aqui assim que forem integrados à plataforma.</Text>
+            <Text style={[t.bodyStrong, { color: colors.onBg }]}>Novos módulos</Text>
+            <Text style={t.captionBg}>Aparecem aqui assim que forem integrados à plataforma.</Text>
           </View>
         </View>
 
@@ -148,7 +148,7 @@ export default function ModuleLauncher() {
           <ListRow style={s.divided} icon={StorefrontIcon} tint="indigo" title="Bandeiras" subtitle="Bandeiras dos postos, com cores para o croqui" onPress={() => router.push('/bandeiras')} />
           {isAdmin && isSupabaseConfigured ? <ListRow style={s.divided} icon={UserCircleIcon} tint="slate" title="Usuários e permissões" subtitle="Liberar contas e escolher os módulos de cada uma" onPress={() => router.push('/usuarios')} /> : null}
         </Card>
-        <Text style={[t.caption, { textAlign: 'center', marginTop: space.sm }]}>{rotuloVersao}</Text>
+        <Text style={[t.captionBg, { textAlign: 'center', marginTop: space.sm }]}>{rotuloVersao}</Text>
       </ScrollView>
     </SafeAreaView>
   );

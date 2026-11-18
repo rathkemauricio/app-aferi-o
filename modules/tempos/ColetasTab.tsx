@@ -421,7 +421,7 @@ export function PageHead({ title, subtitle, action }: { title: string; subtitle?
     <View style={s.pageHead}>
       <View style={s.flex}>
         <Text style={t.title} numberOfLines={1}>{title}</Text>
-        {subtitle ? <Text style={t.caption} numberOfLines={1}>{subtitle}</Text> : null}
+        {subtitle ? <Text style={t.captionBg} numberOfLines={1}>{subtitle}</Text> : null}
       </View>
       {action}
     </View>

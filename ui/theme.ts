@@ -32,6 +32,11 @@ export const color = {
   mint: '#5fd39a',
   /** Texto sobre a cor de destaque. */
   onMint: '#0f1f3d',
+
+  /** Texto direto sobre o fundo da página (títulos, seções, avisos). Nos temas com cartões claros sobre fundo
+   *  escuro, é diferente do `text` (que é o texto dos cartões). */
+  onBg: '#0f1f3d',
+  onBgMuted: '#3f4d68',
 };
 
 // Tons de categoria para os quadradinhos de ícone (filiais, bombas, bicos, aferições).
@@ -77,13 +82,20 @@ export const darkColor: ThemeColors = {
   text: '#eef2f8', textMuted: '#b6c1d3', textFaint: '#8d99b0', accent: '#5fd39a', accentPressed: '#4cc189',
   accentSoft: '#1b3a36', accentText: '#7fe0b0', primaryText: '#0f1f3d', success: '#5dcc88', successSoft: '#173326', warning: '#f1bd65',
   warningSoft: '#382d19', danger: '#ff8278', dangerSoft: '#3b2224', neutralSoft: '#26344d', mint: '#5fd39a', onMint: '#0f1f3d',
+  onBg: '#eef2f8', onBgMuted: '#b6c1d3',
 };
 /* ---------- Temas de preferência ---------- */
 // Cada tema é uma paleta completa e sólida (fundo, cartões, botões e destaques preenchidos), não só ícones e
 // letras coloridos. O usuário escolhe em Configurações; o atalho de sol/lua troca para o tema "par" (claro ↔ escuro).
 export type Tema = { id: string; nome: string; modo: ThemeMode; par: string; cores: ThemeColors };
-const claro = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'light', par, cores: { ...color, ...c } });
-const escuro = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'dark', par, cores: { ...darkColor, ...c } });
+const completar = (base: ThemeColors, c: Partial<ThemeColors>): ThemeColors => {
+  const r = { ...base, ...c };
+  return { ...r, onBg: c.onBg ?? r.text, onBgMuted: c.onBgMuted ?? r.textMuted };
+};
+const claro = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'light', par, cores: completar(color, c) });
+const escuro = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'dark', par, cores: completar(darkColor, c) });
+/** Fundo escuro com cartões claros: o texto dos cartões é escuro e o texto sobre o fundo (`onBg`) é claro. */
+const misto = (id: string, nome: string, par: string, c: Partial<ThemeColors>): Tema => ({ id, nome, modo: 'light', par, cores: completar(color, c) });
 
 export const TEMAS: Tema[] = [
   claro('claro', 'EasyAudit claro', 'escuro', {}),
@@ -113,35 +125,35 @@ export const TEMAS: Tema[] = [
     text: '#eef7e8', textMuted: '#bfd6c4', textFaint: '#97b3a0', accent: '#c5ef4a', accentPressed: '#b2dc35', accentSoft: '#344f22', accentText: '#d6f77a',
     primaryText: '#0f2f25', successSoft: '#1e4a32', neutralSoft: '#22503f', mint: '#c5ef4a', onMint: '#0f2f25',
   }),
-  escuro('grafite-vermelho', 'Grafite e Vermelho', 'azul-vermelho', {
-    bg: '#222224', surface: '#333336', surfaceMuted: '#3e3e42', border: '#4a4a4f', borderStrong: '#5c5c62',
-    text: '#f4f4f4', textMuted: '#c4c4c8', textFaint: '#9b9ba1', accent: '#ef3b2d', accentPressed: '#d42f22', accentSoft: '#4a2624', accentText: '#ff7a6e',
-    primaryText: '#ffffff', neutralSoft: '#3a3a3e', mint: '#ef3b2d', onMint: '#ffffff',
+  misto('grafite-vermelho', 'Grafite, Branco e Vermelho', 'azul-vermelho', {
+    bg: '#222224', surface: '#f1f1f2', surfaceMuted: '#e2e2e5', border: '#d2d2d6', borderStrong: '#b4b4bb',
+    text: '#1d1d1f', textMuted: '#74747c', textFaint: '#8b8b92', onBg: '#f4f4f4', onBgMuted: '#c4c4c8',
+    accent: '#ef3b2d', accentPressed: '#d42f22', accentSoft: '#fbd5d1', accentText: '#c9261a', primaryText: '#ffffff', neutralSoft: '#e7e7ea', mint: '#ef3b2d', onMint: '#ffffff',
   }),
   escuro('petroleo', 'Petróleo (Teal)', 'claro', {
     bg: '#0c3237', surface: '#18525a', surfaceMuted: '#1f5f68', border: '#276d76', borderStrong: '#358490',
     text: '#eaf6f7', textMuted: '#b6d4d7', textFaint: '#8fb4b8', accent: '#2ec4cc', accentPressed: '#20aeb6', accentSoft: '#164a50', accentText: '#6fdfe5',
     primaryText: '#06292d', neutralSoft: '#1c5a62', mint: '#2ec4cc', onMint: '#06292d',
   }),
-  escuro('roxo-ambar', 'Roxo, Bege e Amarelo', 'cinza-roxo', {
-    bg: '#1b1530', surface: '#2d2647', surfaceMuted: '#382f57', border: '#453b68', borderStrong: '#57497f',
-    text: '#f5eedf', textMuted: '#cfc4b0', textFaint: '#a89d8a', accent: '#8b4ee8', accentPressed: '#7a3fd4', accentSoft: '#3a2a5e', accentText: '#c4a2ff',
-    primaryText: '#ffffff', neutralSoft: '#332b50', mint: '#f6d27a', onMint: '#1b1530',
+  misto('roxo-ambar', 'Roxo, Bege e Amarelo', 'cinza-roxo', {
+    bg: '#1b1530', surface: '#f3e1c8', surfaceMuted: '#e8d2b2', border: '#dcc29e', borderStrong: '#c9aa7f',
+    text: '#2a2040', textMuted: '#7a6c80', textFaint: '#8e8299', onBg: '#f5eedf', onBgMuted: '#c9bfd9',
+    accent: '#8b4ee8', accentPressed: '#7a3fd4', accentSoft: '#e6d8fb', accentText: '#6a2fc9', primaryText: '#ffffff', neutralSoft: '#eedcc0', mint: '#8b4ee8', onMint: '#ffffff',
   }),
   escuro('grafite-laranja', 'Escura, Cinza e Laranja', 'creme-laranja', {
     bg: '#1f1f21', surface: '#3a3a3d', surfaceMuted: '#444448', border: '#4f4f53', borderStrong: '#636368',
     text: '#f5f5f5', textMuted: '#c7c7cb', textFaint: '#9d9da3', accent: '#ff6a13', accentPressed: '#e85c08', accentSoft: '#4a3020', accentText: '#ff9a5c',
     primaryText: '#ffffff', neutralSoft: '#38383b', mint: '#ff6a13', onMint: '#ffffff',
   }),
-  escuro('roxo-lima', 'Escuro, Creme e Verde-Lima', 'areia-oliva', {
-    bg: '#2a1637', surface: '#3d2450', surfaceMuted: '#4a2d60', border: '#58386f', borderStrong: '#6c4787',
-    text: '#f6f0dc', textMuted: '#d6cbb0', textFaint: '#aea48b', accent: '#a8e23c', accentPressed: '#95cf2a', accentSoft: '#3b4422', accentText: '#c4f26a',
-    primaryText: '#2a1637', neutralSoft: '#432a58', mint: '#a8e23c', onMint: '#2a1637',
+  misto('roxo-lima', 'Escuro, Creme e Verde-Lima', 'areia-oliva', {
+    bg: '#2a1637', surface: '#f3eedd', surfaceMuted: '#e8e1c9', border: '#dcd3b5', borderStrong: '#c6bb98',
+    text: '#2a1637', textMuted: '#7a6c84', textFaint: '#91859a', onBg: '#f6f0dc', onBgMuted: '#cdbfd8',
+    accent: '#a8e23c', accentPressed: '#95cf2a', accentSoft: '#e3f3c0', accentText: '#4f7a0a', primaryText: '#2a1637', neutralSoft: '#ede6d0', mint: '#a8e23c', onMint: '#2a1637',
   }),
-  escuro('azul-laranja', 'Azul, Off-White e Laranja', 'creme-laranja', {
-    bg: '#1b44a0', surface: '#2556bd', surfaceMuted: '#2c62cf', border: '#3a6fd6', borderStrong: '#5585e0',
-    text: '#ffffff', textMuted: '#d5e1fa', textFaint: '#aec4f0', accent: '#ff6a13', accentPressed: '#e85c08', accentSoft: '#3b3f8a', accentText: '#ffb27f',
-    primaryText: '#ffffff', neutralSoft: '#2a5cc6', mint: '#ff6a13', onMint: '#ffffff',
+  misto('azul-laranja', 'Azul, Off-White e Laranja', 'creme-laranja', {
+    bg: '#1b44a0', surface: '#f5f1e8', surfaceMuted: '#ebe4d4', border: '#ddd4c0', borderStrong: '#c7bca4',
+    text: '#16213d', textMuted: '#6d7390', textFaint: '#858aa2', onBg: '#ffffff', onBgMuted: '#d5e1fa',
+    accent: '#ff6a13', accentPressed: '#e85c08', accentSoft: '#fde0cc', accentText: '#c24f05', primaryText: '#ffffff', neutralSoft: '#efe9dc', mint: '#ff6a13', onMint: '#ffffff',
   }),
 ];
 export const temaPorId = (id: string) => TEMAS.find(t => t.id === id);
@@ -184,7 +196,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function createTypography(colors: ThemeColors) {
   return {
-    title: { fontSize: 24, fontWeight: '800' as const, letterSpacing: -0.4, color: colors.text },
+    title: { fontSize: 24, fontWeight: '800' as const, letterSpacing: -0.4, color: colors.onBg },
+    /** Legenda escrita direto sobre o fundo da página (fora de cartões). */
+    captionBg: { fontSize: 12.5, color: colors.onBgMuted, lineHeight: 18 },
     section: { fontSize: 17, fontWeight: '700' as const, letterSpacing: -0.2, color: colors.text },
     body: { fontSize: 14, color: colors.text },
     bodyStrong: { fontSize: 14, fontWeight: '600' as const, color: colors.text },

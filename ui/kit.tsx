@@ -168,7 +168,7 @@ export function SectionHeader({ title, action, onPress }: { title: string; actio
   const { colors } = useContext(ThemeContext);
   return (
     <View style={k.sectionHead}>
-      <Text style={[t.section, { color: colors.text }]}>{title}</Text>
+      <Text style={[t.section, { color: colors.onBg }]}>{title}</Text>
       {action && onPress ? <Pressable onPress={onPress} hitSlop={8}><Text style={k.link}>{action}</Text></Pressable> : null}
     </View>
   );

@@ -113,7 +113,7 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
   };
   return <>
     <Text style={t.title}>{filial.codigo} · {filial.nome}</Text>
-    <Text style={t.caption}>{[filial.cidade, filial.uf].filter(Boolean).join(' / ')}</Text>
+    <Text style={t.captionBg}>{[filial.cidade, filial.uf].filter(Boolean).join(' / ')}</Text>
     <Button title={aberta ? 'Continuar medição em andamento' : 'Nova medição'} icon={aberta ? RulerIcon : PlusIcon} onPress={nova} />
     <Text style={t.caption}>{croqui.length
       ? `Tanques cadastrados no croqui: ${croqui.map(x => x.tanque).join(', ')}. A nova medição já vem com eles (número e combustível) e com a informada da última medição.`

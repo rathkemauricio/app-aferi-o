@@ -21,6 +21,10 @@ import {
 import { apagarFoto, auditoriasCol, enviarFoto, escolherFotos, fotosEmbutidas, guardarRelatorio, lerRelatorio, linksDasFotos, useAuditorias, useLinksFotos } from './store';
 
 const SESSAO = 'nevoeiro.auditoria.sessao.v1';
+/** Cores vivas e sólidas de cada status (selos, botões e borda do item). */
+const VIVO: Record<StatusReq, string> = { C: '#12b05a', OB: '#1f7bff', OM: '#ff8a00', NC: '#ff2442', PP: '#8b4dff', NA: '#7d8799' };
+/** NC, OB e OM brilham de leve na própria cor (sem pulsar). */
+const brilho = (st: StatusReq) => (st === 'NC' || st === 'OB' || st === 'OM' ? { boxShadow: `0 0 10px 1px ${VIVO[st]}99` } : null);
 const TOM: Record<StatusReq, Tone> = { C: 'success', OB: 'neutral', OM: 'warning', NC: 'danger', PP: 'accent', NA: 'neutral' };
 type Filtro = 'todos' | 'pendentes' | StatusReq;
 /** Concluída abre em lista (resumo); os detalhes só em "Visualizar completa" (leitura) ou ao reabrir (edição). */
@@ -94,7 +98,7 @@ function ListaAuditorias({ auditorias, filiais, onAbrir }: { auditorias: Auditor
           <View style={s.pageHead}>
             <View style={s.flex}>
               <Text style={t.title}>Auditorias</Text>
-              <Text style={t.caption}>Checklist de requisitos com evidências e planos de ação</Text>
+              <Text style={t.captionBg}>Checklist de requisitos com evidências e planos de ação</Text>
             </View>
             <Button title="Nova auditoria" icon={PlusIcon} size="sm" onPress={() => (filiais.length ? setNova(true) : router.push('/filiais'))} />
           </View>
@@ -348,7 +352,7 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
   const filtrosView = (
     <View style={{ gap: space.sm }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pilulas} keyboardShouldPersistTaps="handled">
-        {filtros.map(f => pilula(f.id, `${f.rotulo} (${f.n})`, filtro === f.id, () => setFiltro(f.id), corTom(f.tom)))}
+        {filtros.map(f => pilula(f.id, `${f.rotulo} (${f.n})`, filtro === f.id, () => setFiltro(f.id), (STATUS as readonly string[]).includes(f.id) && f.n ? VIVO[f.id as StatusReq] : corTom(f.tom)))}
       </ScrollView>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pilulas} keyboardShouldPersistTaps="handled">
         {pilula('setor-todos', 'Todos os setores', !setor, () => setSetor(''))}
@@ -435,7 +439,7 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
         <View style={s.pageHead}>
           <View style={s.flex}>
             <Text style={t.title} numberOfLines={1}>{filial}</Text>
-            <Text style={t.caption}>{dataBR(cab.data)}{cab.auditores ? ` · ${cab.auditores}` : ''} · {cab.escopo || ESCOPO_PADRAO}</Text>
+            <Text style={t.captionBg}>{dataBR(cab.data)}{cab.auditores ? ` · ${cab.auditores}` : ''} · {cab.escopo || ESCOPO_PADRAO}</Text>
           </View>
           <StatusPill label="Concluída" tone="success" icon={SealCheckIcon} />
         </View>
@@ -609,15 +613,14 @@ const ItemAcordeao = memo(function ItemAcordeao({ item, aberto, links, enviando,
   const [foco, setFoco] = useState(0);
   const st = item.status;
   const pedeAcao = !!st && PEDE_ACAO.includes(st);
-  const cor = (x: StatusReq) => { const tom = TOM[x]; return tom === 'danger' ? colors.danger : tom === 'warning' ? colors.warning : tom === 'success' ? colors.success : tom === 'accent' ? colors.accentText : colors.textMuted; };
   const selo = st ? (
-    <View style={[s.selo, { borderColor: cor(st) }]}><Text style={[s.seloTxt, { color: cor(st) }]}>{st}</Text></View>
+    <View style={[s.selo, { backgroundColor: VIVO[st], borderColor: VIVO[st] }, brilho(st)]}><Text style={[s.seloTxt, { color: '#ffffff' }]}>{st}</Text></View>
   ) : null;
 
   if (!aberto) {
     return (
       <Pressable accessibilityRole="button" accessibilityLabel={`Item ${item.id}: ${tituloCurto(item.titulo)}${st ? `, ${ROTULO[st]}` : ', pendente'}`}
-        onPress={() => onAbrir(item.id)} style={({ pressed }) => [s.fechado, st === 'NC' && { borderColor: colors.danger }, pressed && { opacity: 0.8 }]}>
+        onPress={() => onAbrir(item.id)} style={({ pressed }) => [s.fechado, st && brilho(st) ? { borderColor: VIVO[st], borderWidth: 1.5 } : null, pressed && { opacity: 0.8 }]}>
         <View style={s.num}><Text style={s.numTxt}>{item.id}</Text></View>
         <Text style={[t.body, s.flex]} numberOfLines={2}>{tituloCurto(item.titulo)}</Text>
         {selo}
@@ -634,7 +637,7 @@ const ItemAcordeao = memo(function ItemAcordeao({ item, aberto, links, enviando,
     else setFoco(n => n + 1);
   };
   return (
-    <View style={[s.aberto, { borderColor: st === 'NC' ? colors.danger : colors.accent }]}>
+    <View style={[s.aberto, { borderColor: st && brilho(st) ? VIVO[st] : colors.accent }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Recolher item" onPress={() => onAbrir(null)} style={s.itemTopo}>
         <View style={s.num}><Text style={s.numTxt}>{item.id}</Text></View>
         <Text style={[t.bodyStrong, s.flex]}>{tituloCurto(item.titulo)}</Text>
@@ -651,7 +654,7 @@ const ItemAcordeao = memo(function ItemAcordeao({ item, aberto, links, enviando,
           <Text style={t.label}>O QUE VERIFICAR</Text>
           <Text style={t.body}>{item.titulo}</Text>
           <Text style={[t.label, { marginTop: 4 }]}>COMO AVALIAR</Text>
-          {STATUS.map(x => <Text key={x} style={t.caption}><Text style={{ fontWeight: '800', color: cor(x) }}>{x}</Text> · {COMO_AVALIAR[x]}</Text>)}
+          {STATUS.map(x => <Text key={x} style={t.caption}><Text style={{ fontWeight: '800', color: VIVO[x] }}>{x}</Text> · {COMO_AVALIAR[x]}</Text>)}
         </View>
       ) : null}
 
@@ -660,8 +663,8 @@ const ItemAcordeao = memo(function ItemAcordeao({ item, aberto, links, enviando,
           const on = st === x;
           return (
             <Pressable key={x} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={ROTULO[x]} onPress={() => escolher(x)}
-              style={({ pressed }) => [s.botaoStatus, { borderColor: on ? cor(x) : colors.borderStrong, backgroundColor: on ? cor(x) : colors.surface }, pressed && { transform: [{ scale: 0.96 }] }]}>
-              <Text style={[s.botaoStatusTxt, { color: on ? colors.bg : cor(x) }]}>{x}</Text>
+              style={({ pressed }) => [s.botaoStatus, { borderColor: VIVO[x], backgroundColor: on ? VIVO[x] : colors.bg }, on && brilho(x), pressed && { transform: [{ scale: 0.96 }] }]}>
+              <Text style={[s.botaoStatusTxt, { color: on ? '#ffffff' : VIVO[x] }]}>{x}</Text>
             </Pressable>
           );
         })}
@@ -774,8 +777,8 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   pilulaTxt: { fontSize: 13, fontWeight: '700' },
   fechado: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10, borderRadius: radius.control, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
   aberto: { gap: space.sm, padding: space.md, borderRadius: radius.card, borderWidth: 1.5, backgroundColor: c.surface },
-  selo: { minWidth: 34, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill, borderWidth: 1.5, alignItems: 'center' },
-  seloTxt: { fontSize: 12, fontWeight: '800' },
+  selo: { minWidth: 38, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1.5, alignItems: 'center' },
+  seloTxt: { fontSize: 12.5, fontWeight: '900', letterSpacing: 0.3 },
   criterio: { gap: 4, padding: space.md, borderRadius: radius.control, backgroundColor: c.surfaceMuted, borderWidth: 1, borderColor: c.border },
   botoesStatus: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   botaoStatus: { flexGrow: 1, minWidth: 48, minHeight: 44, borderRadius: radius.control, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
