@@ -18,7 +18,7 @@ import { createTypography, radius, space, ThemeContext, type ThemeColors } from 
 // Tela inicial após o login: lista os módulos disponíveis. Não conhece detalhes de nenhum módulo.
 export default function ModuleLauncher() {
   const router = useRouter();
-  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut } = useAuth();
+  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa } = useAuth();
   const { width } = useTela();
   const desktop = Platform.OS === 'web' && width >= 980;
   const { filiais, loaded: filiaisLoaded } = useFiliais();
@@ -52,7 +52,7 @@ export default function ModuleLauncher() {
               <Text style={s.webTitle}>{saudacao}{nome ? `, ${nome.split(' ')[0]}` : ''}</Text>
               <Text style={s.webSubtitle}>Acompanhe a rede e escolha uma área para continuar.</Text>
             </View>
-            <View style={s.networkBadge}><StorefrontIcon size={15} color={colors.text} weight="fill" /><Text style={s.networkText}>Rede Nevoeiro</Text></View>
+            <View style={s.networkBadge}><StorefrontIcon size={15} color={colors.text} weight="fill" /><Text style={s.networkText}>{empresa?.nome ?? 'EasyAudit'}</Text></View>
           </View>
 
           <View style={s.metricGrid}>

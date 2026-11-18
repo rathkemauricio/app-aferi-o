@@ -10,6 +10,7 @@
 // 2.5 Flash — este é desativado em 1/12/2026). gemini-4-argon/carbon e os "pro" são só pagos.
 // Publicar: npx supabase functions deploy analise-ia --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
+import { contaDe } from '../_shared/conta.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -92,10 +93,10 @@ async function perguntarGemini(perfil: { nome: string; contexto: string }, dados
     : `Nenhum modelo do Gemini disponível para esta chave (${ultimoErro}). Configure GEMINI_MODEL no servidor.`);
 }
 
-async function analisarTempos(body: { filial_id?: string; perfil?: string; dados?: unknown }, usuario: { id: string; nome: string }) {
+async function analisarTempos(body: { filial_id?: string; perfil?: string; dados?: unknown }, usuario: { id: string; nome: string }, emp: string) {
   if (!CHAVE) return json(400, { erro: 'A análise com IA ainda não está configurada: falta a chave do Gemini (GEMINI_API_KEY) no servidor.' });
   const filialId = String(body.filial_id ?? '');
-  const { data: f } = await admin.from('filiais').select('id').eq('id', filialId).maybeSingle();
+  const { data: f } = await admin.from('filiais').select('id').eq('id', filialId).eq('empresa_id', emp).maybeSingle();
   if (!f) return json(400, { erro: 'Filial não encontrada.' });
   const tamanho = JSON.stringify(body.dados ?? null).length;
   if (!body.dados || tamanho > 300_000) return json(400, { erro: 'Dados da análise ausentes ou grandes demais.' });
@@ -103,7 +104,7 @@ async function analisarTempos(body: { filial_id?: string; perfil?: string; dados
 
   const { modelo, resultado } = await perguntarGemini(PERFIS[perfilId], body.dados);
   const id = `ia-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  const { error } = await admin.from('tm_analises_ia').insert({ id, filial_id: filialId, perfil: perfilId, modelo, resultado, dados: body.dados, usuario: usuario.id, usuario_nome: usuario.nome });
+  const { error } = await admin.from('tm_analises_ia').insert({ id, empresa_id: emp, filial_id: filialId, perfil: perfilId, modelo, resultado, dados: body.dados, usuario: usuario.id, usuario_nome: usuario.nome });
   if (error) throw new Error(`Análise feita, mas não foi salva: ${error.message}`);
   return json(200, { ok: true, id, modelo, resultado });
 }
@@ -111,15 +112,15 @@ async function analisarTempos(body: { filial_id?: string; perfil?: string; dados
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
-    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-    const { data: u, error } = await admin.auth.getUser(token);
-    if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
-    const { data: p } = await admin.from('profiles').select('papel,ativo,modulos,nome,email').eq('user_id', u.user.id).maybeSingle();
-    if (!p?.ativo || !(p.papel === 'admin' || (p.modulos ?? []).includes('tempos'))) return json(403, { erro: 'O módulo Tempos e Movimentos não está liberado para esta conta.' });
+    const conta = await contaDe(admin, req);
+    if (!conta) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
+    if (!conta.libera('tempos') || !conta.empresa) return json(403, { erro: 'O módulo Tempos e Movimentos não está liberado para esta conta.' });
+    const u = { user: conta.user };
+    const p = conta.perfil!;
     const nome = String(p.nome || String(p.email ?? u.user.email ?? '').split('@')[0]);
     const body = await req.json().catch(() => ({}));
     switch (body.acao) {
-      case 'tempos': return await analisarTempos(body, { id: u.user.id, nome });
+      case 'tempos': return await analisarTempos(body, { id: u.user.id, nome }, conta.empresa.id);
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {

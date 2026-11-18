@@ -28,10 +28,10 @@ const APP_URL = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
 // Mesmos ids e nomes de modules/registry.ts.
 const MODULOS: Record<string, string> = { afericoes: 'Aferições', tempos: 'Tempos e Movimentos', croqui: 'Croqui', auditoria: 'Auditoria', riscos: 'Mapa de Risco', inventarios: 'Inventários', agenda: 'Agenda', coleta: 'Coleta', tanques: 'Medição de Tanques' };
 
-type Perfil = { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[] | null };
+type Perfil = { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[] | null; empresa_id: string | null };
 
 async function perfilDe(userId: string) {
-  const { data, error } = await admin.from('profiles').select('user_id,email,nome,papel,ativo,modulos').eq('user_id', userId).maybeSingle();
+  const { data, error } = await admin.from('profiles').select('user_id,email,nome,papel,ativo,modulos,empresa_id').eq('user_id', userId).maybeSingle();
   if (error) throw new Error(`Falha ao ler o perfil: ${error.message}`);
   return data as Perfil | null;
 }
@@ -41,10 +41,11 @@ const nomeDe = (p: Perfil) => p.nome?.trim() || p.email;
 // ── Ações ────────────────────────────────────────────────────────────────────────────────────────
 
 async function contaPendente(user: User, perfil: Perfil | null) {
-  if (!perfil || perfil.ativo || perfil.papel === 'admin') return json(200, { ok: true, enviado: false });
+  // Multiempresa: conta sem empresa (sem convite) não tem a quem pedir; com empresa, avisa só os administradores dela.
+  if (!perfil || perfil.ativo || perfil.papel === 'admin' || !perfil.empresa_id) return json(200, { ok: true, enviado: false });
   if (user.app_metadata?.aviso_admin_em) return json(200, { ok: true, enviado: false }); // já avisou
 
-  const { data: admins, error } = await admin.from('profiles').select('email').eq('papel', 'admin').eq('ativo', true);
+  const { data: admins, error } = await admin.from('profiles').select('email').eq('papel', 'admin').eq('ativo', true).eq('empresa_id', perfil.empresa_id);
   if (error) throw new Error(`Falha ao listar administradores: ${error.message}`);
   const para = [...new Set((admins ?? []).map(a => String(a.email).toLowerCase()).filter(e => EMAIL_RE.test(e)))];
   if (!para.length) return json(200, { ok: true, enviado: false });
@@ -72,7 +73,7 @@ async function contaPendente(user: User, perfil: Perfil | null) {
 async function contaAlterada(perfil: Perfil | null, body: Record<string, unknown>) {
   if (!perfil?.ativo || perfil.papel !== 'admin') return json(403, { erro: 'Somente o administrador pode enviar este aviso.' });
   const alvo = await perfilDe(String(body.user_id ?? ''));
-  if (!alvo || !EMAIL_RE.test(alvo.email)) return json(404, { erro: 'Conta não encontrada.' });
+  if (!alvo || alvo.empresa_id !== perfil.empresa_id || !EMAIL_RE.test(alvo.email)) return json(404, { erro: 'Conta não encontrada.' });
 
   if (alvo.ativo) {
     const mods = alvo.papel === 'admin'

@@ -105,6 +105,12 @@ export class Collection<T extends SyncRow> {
     this.outbox.set(id, { ...cur, deleted_at: new Date().toISOString() });
     this.save(); this.emit(); this.scheduleFlush();
   }
+  /** Apaga o cache deste aparelho (outra empresa entrou): a próxima leitura traz tudo do servidor de novo. */
+  reset() {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    this.items.clear(); this.outbox.clear(); this.cursor = null; this.cursorId = null; this.pulledOnce = false;
+    this.save(); this.emit();
+  }
   /** Substitui tudo localmente (usado por importação de backup no modo local). */
   replaceLocal(list: T[]) { this.items = new Map(list.map(i => [i.id, i])); this.outbox = new Map(list.map(i => [i.id, i])); this.save(); this.emit(); this.scheduleFlush(); }
 
@@ -121,7 +127,9 @@ export class Collection<T extends SyncRow> {
     this.setStatus('syncing');
     // updated_at é definido pelo servidor; não enviamos o valor local.
     const rows = batch.map(r => { const { updated_at: _u, ...rest } = r; if (this.opts.softDelete === false) delete (rest as SyncRow).deleted_at; return rest; });
-    const { error } = await supabase.from(this.opts.table).upsert(rows as Record<string, unknown>[]);
+    // defaultToNull: false → coluna que não veio na linha usa o valor padrão do banco (ex.: empresa_id = empresa de
+    // quem grava), mesmo quando outras linhas do mesmo envio trazem a coluna.
+    const { error } = await supabase.from(this.opts.table).upsert(rows as Record<string, unknown>[], { defaultToNull: false });
     if (error) { this.setStatus('error'); return; }
     // Remove da fila apenas o que não mudou durante o envio.
     batch.forEach(r => { if (this.outbox.get(r.id) === r) this.outbox.delete(r.id); });
@@ -177,6 +185,8 @@ export function setSyncEnabled(on: boolean) {
 export const isSyncEnabled = () => syncEnabled;
 export async function syncAll() { await Promise.all(registry.map(c => c.sync())); }
 export async function flushAll() { await Promise.all(registry.map(c => c.flush())); }
+/** Limpa o cache local de todas as coleções (troca de empresa no aparelho). */
+export async function resetAll() { await Promise.all(registry.map(c => c.whenLoaded())); registry.forEach(c => c.reset()); }
 
 /** Hook: lista viva da coleção e seu estado. */
 export function useCollection<T extends SyncRow>(c: Collection<T>) {

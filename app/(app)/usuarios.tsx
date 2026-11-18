@@ -1,22 +1,24 @@
 import { useRouter } from 'expo-router';
 import { type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
 import { emailValido, enviarEmail } from '../../lib/email';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
-import { ArrowLeftIcon, CheckIcon, LockSimpleIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, UserCircleIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 
 type Perfil = { user_id: string; email: string; nome: string; avatar: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; created_at: string };
 
-/** Gerenciamento de usuários (somente administrador): aprovar contas novas, bloquear, definir papel e módulos. */
+/** Contas da empresa (somente administrador da empresa): convidar por e-mail, bloquear, definir papel e módulos. */
 export default function UsuariosScreen() {
   const router = useRouter();
-  const { isAdmin, userId, recarregarPerfil } = useAuth();
+  const { isAdmin, userId, recarregarPerfil, empresa } = useAuth();
+  // Módulos que o plano da empresa tem (só esses podem ser liberados para as contas).
+  const modulosDoPlano = MODULES.filter(m => !empresa || empresa.modulos.includes(m.id));
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const [perfis, setPerfis] = useState<Perfil[] | null>(null);
@@ -40,7 +42,12 @@ export default function UsuariosScreen() {
   const alterar = async (p: Perfil, patch: Partial<Pick<Perfil, 'ativo' | 'papel' | 'modulos'>>) => {
     if (!supabase) return;
     const { error } = await supabase.from('profiles').update(patch).eq('user_id', p.user_id);
-    if (error) { notify('Não foi possível salvar', error.message); return; }
+    if (error) {
+      notify('Não foi possível salvar', /limite de contas/i.test(error.message)
+        ? `O plano da empresa permite ${empresa?.limite_contas ?? '?'} contas ativas e todas estão em uso. Inative uma conta ou fale com o EasyAudit para aumentar o plano.`
+        : error.message);
+      return;
+    }
     if (p.user_id === userId) void recarregarPerfil();
     void carregar();
     // Liberou ou bloqueou: avisa o dono da conta por e-mail (o servidor lê o perfil já atualizado).
@@ -90,24 +97,26 @@ export default function UsuariosScreen() {
     if (!aviso.ok) notify('Aviso por e-mail não enviado', `A alteração foi salva, mas ${p.email} não foi avisado por e-mail. ${aviso.erro}`);
   };
 
-  const criarUsuario = async () => {
+  /** Convite por e-mail: a pessoa recebe o link, cria a própria senha e entra na empresa com o papel e os módulos. */
+  const convidar = async () => {
     if (!supabase || !novo) return;
     const email = novo.email.trim().toLowerCase();
     if (!novo.nome.trim()) { notify('Informe o nome', 'O nome aparece nos registros e relatórios de quem fez cada atividade.'); return; }
     if (!emailValido(email)) { notify('E-mail inválido', 'Confira o e-mail digitado.'); return; }
-    if (novo.senha.length < 8) { notify('Senha muito curta', 'Use pelo menos 8 caracteres (ou toque em "Gerar").'); return; }
     if (novo.papel === 'usuario' && !novo.modulos.length) { notify('Marque os módulos', 'Escolha ao menos um módulo que a pessoa vai usar.'); return; }
     setCriando(true);
-    const res = await chamarUsuarios({ acao: 'criar', email, nome: novo.nome.trim(), senha: novo.senha, papel: novo.papel, modulos: novo.modulos });
-    if (!res.ok) { setCriando(false); notify('Usuário não criado', res.erro); return; }
-    const userIdNovo = (res.data as { user_id?: string } | null)?.user_id;
-    let aviso = '';
-    if (novo.avisar && userIdNovo) {
-      const r = await enviarEmail({ acao: 'conta_alterada', user_id: userIdNovo });
-      aviso = r.ok ? `\n\n${email} recebeu um e-mail avisando que a conta está liberada.` : `\n\nO aviso por e-mail não foi enviado: ${r.erro}`;
-    }
-    setCriando(false); setNovo(null); void carregar();
-    notify('Usuário criado', `${novo.nome.trim()} já pode entrar no EasyAudit com o e-mail ${email} e a senha que você definiu. Passe a senha para a pessoa; ela pode trocar depois em Minha conta → Alterar senha.${aviso}`);
+    const res = await chamarUsuarios({ acao: 'convidar', email, nome: novo.nome.trim(), papel: novo.papel, modulos: novo.modulos });
+    setCriando(false);
+    if (!res.ok) { notify('Convite não enviado', res.erro); return; }
+    const existente = (res.data as { existente?: boolean } | null)?.existente;
+    setNovo(null); void carregar();
+    notify('Convite enviado', existente
+      ? `${email} já tinha conta no EasyAudit e agora faz parte da sua empresa. Ela recebeu um e-mail com o link para entrar.`
+      : `${novo.nome.trim()} recebeu um e-mail em ${email} com o link para criar a senha. A conta já aparece na lista e ocupa uma das contas do plano.`);
+  };
+  const reenviar = async (p: Perfil) => {
+    const r = await chamarUsuarios({ acao: 'reenviar', user_id: p.user_id });
+    notify(r.ok ? 'Link enviado' : 'Link não enviado', r.ok ? `${p.email} recebeu um e-mail com o link para definir a senha e entrar.` : r.erro);
   };
 
   const lista = (perfis ?? []).filter(p => `${p.email} ${p.nome}`.toLowerCase().includes(busca.toLowerCase()));
@@ -119,7 +128,7 @@ export default function UsuariosScreen() {
 
   const modChips = (sel: string[], onToggle: (id: string) => void) => (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-      {MODULES.map(m => {
+      {modulosDoPlano.map(m => {
         const on = sel.includes(m.id);
         return (
           <Pressable key={m.id} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => onToggle(m.id)}
@@ -150,8 +159,11 @@ export default function UsuariosScreen() {
       <Card key={p.user_id}>
         {cabecalho(p, <StatusPill label={p.ativo ? (p.papel === 'admin' ? 'Administrador' : 'Ativo') : 'Inativo'} tone={p.ativo ? (p.papel === 'admin' ? 'accent' : 'success') : 'danger'} />)}
         {eu ? <Text style={t.caption}>Sua conta: o nome, o e-mail e a senha se alteram em Minha conta. Você não pode mudar o próprio papel nem inativar a própria conta.</Text> : <>
-          <Button title="Editar dados (nome, e-mail, senha)" icon={PencilSimpleIcon} variant="secondary" size="sm" style={{ alignSelf: 'flex-start' }}
-            onPress={() => setEdicao({ p, nome: p.nome ?? '', email: p.email, senha: '' })} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+            <Button title="Editar dados (nome, e-mail, senha)" icon={PencilSimpleIcon} variant="secondary" size="sm"
+              onPress={() => setEdicao({ p, nome: p.nome ?? '', email: p.email, senha: '' })} />
+            {p.ativo ? <Button title="Enviar link de acesso" icon={EnvelopeIcon} variant="ghost" size="sm" onPress={() => void reenviar(p)} /> : null}
+          </View>
           <ChoiceChips value={p.papel === 'admin' ? 'Administrador' : 'Usuário'} options={['Usuário', 'Administrador']}
             onChange={v => confirmAction('Alterar papel?', v === 'Administrador'
               ? `${p.email} passará a acessar todos os módulos e a gerenciar usuários, filiais e parâmetros.`
@@ -176,7 +188,7 @@ export default function UsuariosScreen() {
         <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Usuários e permissões</Text>
-          <Text style={t.caption}>Adicione contas ou aprove as criadas pela tela de login</Text>
+          <Text style={t.caption}>{empresa ? `Contas da ${empresa.nome}` : 'Convide as contas da sua empresa'}</Text>
         </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center', paddingBottom: 56 }}
@@ -184,7 +196,23 @@ export default function UsuariosScreen() {
         {!isAdmin ? <EmptyState icon={LockSimpleIcon} title="Acesso restrito" text="Somente o administrador gerencia usuários." />
           : erro ? <EmptyState icon={UserCircleIcon} title="Sem conexão" text={erro} action={{ label: 'Tentar de novo', onPress: () => void carregar() }} />
           : <>
-            <Button title="Adicionar usuário" icon={PlusIcon} onPress={() => setNovo({ nome: '', email: '', senha: '', papel: 'usuario', modulos: [], avisar: true })} />
+            {empresa ? (() => {
+              const usadas = (perfis ?? []).filter(p => p.ativo).length;
+              const cheio = usadas >= empresa.limite_contas;
+              return (
+                <Card style={{ gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                    <Text style={[t.bodyStrong, { flex: 1 }]}>Contas ativas: {usadas} de {empresa.limite_contas}</Text>
+                    <StatusPill label={cheio ? 'Plano cheio' : `${empresa.limite_contas - usadas} livre(s)`} tone={cheio ? 'danger' : 'success'} />
+                  </View>
+                  <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.surfaceMuted, overflow: 'hidden' }}>
+                    <View style={{ width: `${Math.min(100, (usadas / empresa.limite_contas) * 100)}%`, height: 8, borderRadius: 4, backgroundColor: cheio ? colors.danger : colors.accent }} />
+                  </View>
+                  <Text style={t.caption}>Contas inativas não contam. Para mais contas ou módulos, fale com o EasyAudit para mudar o plano.</Text>
+                </Card>
+              );
+            })() : null}
+            <Button title="Convidar pessoa por e-mail" icon={PlusIcon} onPress={() => setNovo({ nome: '', email: '', senha: '', papel: 'usuario', modulos: [], avisar: true })} />
             <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar por nome ou e-mail" />
 
             <SectionHeader title={`Aguardando aprovação (${pendentes.length})`} />
@@ -199,7 +227,7 @@ export default function UsuariosScreen() {
                   <Text style={t.caption}>{sel.length ? 'A conta passa a ver apenas os módulos marcados.' : 'Marque ao menos um módulo para aprovar. Sem aprovação, a conta continua sem acesso a nenhum dado.'}</Text>
                 </Card>
               );
-            }) : <Text style={t.caption}>Nenhuma conta nova esperando. Quem criar conta pela tela de login aparece aqui.</Text>}
+            }) : <Text style={t.caption}>Nenhuma conta esperando. Para incluir alguém, use "Convidar pessoa por e-mail".</Text>}
 
             <SectionHeader title={`Com acesso (${ativos.length})`} />
             {ativos.map(cartaoConta)}
@@ -209,7 +237,7 @@ export default function UsuariosScreen() {
               {bloqueados.map(cartaoConta)}
             </> : null}
 
-            <Text style={t.caption}>Cada conta vê e usa só os módulos marcados; o banco de dados aplica a mesma regra. Para apagar uma conta definitivamente, use o painel do Supabase (Authentication → Users).</Text>
+            <Text style={t.caption}>Cada conta vê só os dados da sua empresa e usa só os módulos marcados; o banco de dados aplica a mesma regra.</Text>
           </>}
       </ScrollView>
 
@@ -230,29 +258,19 @@ export default function UsuariosScreen() {
       )}
 
       {novo && (
-        <Sheet title="Adicionar usuário" onClose={() => !criando && setNovo(null)}
-          footer={<Button title={criando ? 'Criando…' : 'Criar usuário'} icon={CheckIcon} disabled={criando} onPress={() => void criarUsuario()} />}>
+        <Sheet title="Convidar pessoa" onClose={() => !criando && setNovo(null)}
+          footer={<Button title={criando ? 'Enviando…' : 'Enviar convite'} icon={EnvelopeIcon} disabled={criando} onPress={() => void convidar()} />}>
           <Field label="Nome" value={novo.nome} onChangeText={v => setNovo({ ...novo, nome: v })} placeholder="Como aparece nos registros e relatórios" maxLength={80} />
           <Field label="E-mail (login)" value={novo.email} onChangeText={v => setNovo({ ...novo, email: v })} placeholder="pessoa@email.com" keyboardType="email-address" autoCapitalize="none" autoComplete="off" />
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
-            <View style={{ flex: 1 }}>
-              <Field label="Senha inicial" value={novo.senha} onChangeText={v => setNovo({ ...novo, senha: v })} placeholder="Mínimo 8 caracteres" autoCapitalize="none" autoCorrect={false} autoComplete="off" />
-            </View>
-            <Button title="Gerar" size="sm" variant="secondary" onPress={() => setNovo({ ...novo, senha: gerarSenha() })} />
-          </View>
-          <Text style={t.caption}>Passe a senha para a pessoa. Ela pode trocar depois em Minha conta → Alterar senha.</Text>
+          <Text style={t.caption}>A pessoa recebe um e-mail com o link para criar a própria senha. Você não precisa saber nem passar a senha.</Text>
           <Text style={t.label}>Papel</Text>
           <ChoiceChips value={novo.papel === 'admin' ? 'Administrador' : 'Usuário'} options={['Usuário', 'Administrador']} onChange={v => setNovo({ ...novo, papel: v === 'Administrador' ? 'admin' : 'usuario' })} />
           {novo.papel === 'admin'
-            ? <Text style={t.caption}>Administrador acessa todos os módulos e gerencia usuários, filiais e parâmetros.</Text>
+            ? <Text style={t.caption}>Administrador acessa todos os módulos do plano e gerencia usuários, filiais e parâmetros da empresa.</Text>
             : <>
               <Text style={t.label}>Módulos que esta conta vai usar</Text>
               {modChips(novo.modulos, id => setNovo({ ...novo, modulos: novo.modulos.includes(id) ? novo.modulos.filter(x => x !== id) : [...novo.modulos, id] }))}
             </>}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-            <Text style={[t.bodyStrong, { flex: 1 }]}>Avisar a pessoa por e-mail que a conta está liberada</Text>
-            <Switch value={novo.avisar} onValueChange={v => setNovo({ ...novo, avisar: v })} accessibilityLabel="Avisar por e-mail" />
-          </View>
         </Sheet>
       )}
     </SafeAreaView>

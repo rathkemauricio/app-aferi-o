@@ -20,6 +20,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 import { lerArquivo, textosDasPaginas } from './arquivo.ts';
 import { enviarPetros, type LinhaResultado, petrosConfigurado, type ProdutoErp, saldosPetros } from './petros.ts';
+import { contaDe, REDE_NEVOEIRO } from '../_shared/conta.ts';
+
+// Multiempresa: `emp` = empresa de quem chamou. Toda leitura/gravação abaixo é filtrada por ela (a chave de serviço
+// passa por cima das regras do banco). A integração Petros (ERP da Rede Nevoeiro) só vale para a Rede Nevoeiro.
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -33,8 +37,8 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 const PISTA = /combust|lubrif|[óo]leo|aditiv|acess[óo]r|arla|filtro|graxa|fluido|gasolina|diesel|etanol|gnv|palheta|automotiv|pista/i;
 const classeDe = (p: ProdutoErp) => p.classe ?? (PISTA.test(`${p.categoria} ${p.nome}`) ? 'pista' : 'conveniencia');
 
-async function inventario(id: string) {
-  const { data, error } = await admin.from('ce_inventarios').select('id,codigo,status,filial_id,filiais(codigo)').eq('id', id).maybeSingle();
+async function inventario(id: string, emp: string) {
+  const { data, error } = await admin.from('ce_inventarios').select('id,codigo,status,filial_id,filiais(codigo)').eq('id', id).eq('empresa_id', emp).maybeSingle();
   if (error) throw new Error(`Falha ao ler o inventário: ${error.message}`);
   if (!data) throw new Error('Inventário não encontrado no servidor. Aguarde a sincronização e tente de novo.');
   // deno-lint-ignore no-explicit-any
@@ -47,10 +51,10 @@ type ItemBarras = { codigo: string; nome: string; categoria: string; eans: strin
 const REDE = 'rede';
 
 /** Uma base de códigos de barra (código interno → EANs): a da rede ou a própria de uma filial. */
-async function lerBase(id: string) {
+async function lerBase(id: string, emp: string) {
   const base = new Map<string, ItemBarras>();
   for (let de = 0; ; de += 1000) {
-    const { data, error } = await admin.from('ce_barras').select('codigo,nome,categoria,eans').eq('filial_id', id).order('codigo').range(de, de + 999);
+    const { data, error } = await admin.from('ce_barras').select('codigo,nome,categoria,eans').eq('empresa_id', emp).eq('filial_id', id).order('codigo').range(de, de + 999);
     if (error) throw new Error(`Falha ao ler a base de códigos de barra: ${error.message}`);
     (data ?? []).forEach(d => base.set(String(d.codigo), { codigo: String(d.codigo), nome: String(d.nome), categoria: String(d.categoria), eans: (d.eans as string[]) ?? [] }));
     if (!data || data.length < 1000) break;
@@ -59,8 +63,8 @@ async function lerBase(id: string) {
 }
 
 /** Base usada pela filial: a da rede somada à própria da filial (os EANs dos dois se juntam; o nome da filial vale). */
-async function baseBarras(filialId: string) {
-  const [rede, propria] = await Promise.all([lerBase(REDE), lerBase(filialId)]);
+async function baseBarras(filialId: string, emp: string) {
+  const [rede, propria] = await Promise.all([lerBase(REDE, emp), lerBase(filialId, emp)]);
   propria.forEach((b, codigo) => {
     const r = rede.get(codigo);
     rede.set(codigo, r ? { ...b, nome: b.nome || r.nome, categoria: b.categoria || r.categoria, eans: [...new Set([...b.eans, ...r.eans])] } : b);
@@ -69,15 +73,15 @@ async function baseBarras(filialId: string) {
 }
 
 /** Onde gravar um código de barras novo: na base própria da filial, se ela tiver, senão na da rede. */
-async function baseEmUso(filialId: string) {
-  const { data } = await admin.from('ce_bases').select('id').eq('id', filialId).is('deleted_at', null).maybeSingle();
+async function baseEmUso(filialId: string, emp: string) {
+  const { data } = await admin.from('ce_bases').select('id').eq('empresa_id', emp).eq('id', filialId).is('deleted_at', null).maybeSingle();
   return data ? filialId : REDE;
 }
 
 /** Grava (substitui) uma base de códigos de barra (da rede ou de uma filial), lida no navegador a partir do PDF do ERP. */
-async function gravarBarras(body: { filial_id: string; arquivo: string; itens: ItemBarras[] }) {
+async function gravarBarras(body: { filial_id: string; arquivo: string; itens: ItemBarras[] }, emp: string) {
   if (body.filial_id !== REDE) {
-    const { data: f } = await admin.from('filiais').select('id').eq('id', body.filial_id).maybeSingle();
+    const { data: f } = await admin.from('filiais').select('id').eq('id', body.filial_id).eq('empresa_id', emp).maybeSingle();
     if (!f) return json(400, { erro: 'Filial não encontrada no servidor.' });
   }
   const porCodigo = new Map<string, ItemBarras>();
@@ -89,17 +93,17 @@ async function gravarBarras(body: { filial_id: string; arquivo: string; itens: I
     if (ja) ja.eans = [...new Set([...ja.eans, ...eans])];
     else porCodigo.set(codigo, { codigo, nome: String(i.nome ?? '').slice(0, 200), categoria: String(i.categoria ?? '').slice(0, 120), eans });
   });
-  const linhas = [...porCodigo.values()].map(i => ({ filial_id: body.filial_id, ...i }));
+  const linhas = [...porCodigo.values()].map(i => ({ empresa_id: emp, filial_id: body.filial_id, ...i }));
   if (!linhas.length) return json(400, { erro: 'Nenhum produto reconhecido na relação de códigos de barra.' });
 
-  const { error: e1 } = await admin.from('ce_barras').delete().eq('filial_id', body.filial_id);
+  const { error: e1 } = await admin.from('ce_barras').delete().eq('empresa_id', emp).eq('filial_id', body.filial_id);
   if (e1) throw new Error(`Falha ao limpar a base anterior: ${e1.message}`);
   for (let i = 0; i < linhas.length; i += 1000) {
     const { error } = await admin.from('ce_barras').insert(linhas.slice(i, i + 1000));
     if (error) throw new Error(`Falha ao gravar a base de códigos de barra: ${error.message}`);
   }
   const eans = linhas.reduce((n, l) => n + l.eans.length, 0);
-  const { error: e2 } = await admin.from('ce_bases').upsert({ id: body.filial_id, arquivo: String(body.arquivo ?? '').slice(0, 200), itens: linhas.length, eans, importado_em: new Date().toISOString(), deleted_at: null });
+  const { error: e2 } = await admin.from('ce_bases').upsert({ empresa_id: emp, id: body.filial_id, arquivo: String(body.arquivo ?? '').slice(0, 200), itens: linhas.length, eans, importado_em: new Date().toISOString(), deleted_at: null });
   if (e2) throw new Error(`Falha ao registrar a base: ${e2.message}`);
   return json(200, { ok: true, itens: linhas.length, eans, semEan: linhas.filter(l => !l.eans.length).length });
 }
@@ -117,11 +121,12 @@ async function extrairPdf(body: { caminho: string; de: number; ate: number }) {
 }
 
 type Arquivo = { nome: string; base64: string };
-async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petros'; arquivo?: Arquivo; arquivo_venda?: Arquivo }) {
-  const inv = await inventario(body.inventario_id);
+async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petros'; arquivo?: Arquivo; arquivo_venda?: Arquivo }, emp: string) {
+  const inv = await inventario(body.inventario_id, emp);
+  if (body.fonte === 'petros' && emp !== REDE_NEVOEIRO) return json(400, { erro: 'A integração com o ERP Petros não está configurada para a sua empresa. Envie o arquivo exportado do ERP.' });
   if (inv.status === 'encerrado') return json(400, { erro: 'Este inventário já foi encerrado.' });
   // Os códigos de barra vêm da base fixa da filial; sem ela o coletor não reconhece os EANs.
-  const base = await baseBarras(inv.filial_id);
+  const base = await baseBarras(inv.filial_id, emp);
   if (!base.size) return json(400, { erro: `Ainda não há base de códigos de barra para a filial ${inv.filialCodigo}. Importe a base da rede em "Bases de códigos de barra" e carregue os saldos de novo.` });
   let produtos: ProdutoErp[], ignoradas = 0, saldoEm: string | null = null, empresa: string | null = null;
   // Dois PDFs do mesmo relatório: um com o custo unitário e outro com o preço de venda (ligados pelo código interno).
@@ -190,7 +195,7 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
   const { error: e1 } = await admin.from('ce_produtos').delete().eq('inventario_id', inv.id);
   if (e1) throw new Error(`Falha ao limpar a carga anterior: ${e1.message}`);
   for (let i = 0; i < todas.length; i += 1000) {
-    const { error } = await admin.from('ce_produtos').insert(todas.slice(i, i + 1000));
+    const { error } = await admin.from('ce_produtos').insert(todas.slice(i, i + 1000).map(l => ({ ...l, empresa_id: emp })));
     if (error) throw new Error(`Falha ao gravar os produtos: ${error.message}`);
   }
   const { error: e2 } = await admin.from('ce_inventarios').update({
@@ -210,10 +215,10 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
 }
 
 /** Liga um código de barras lido na coleta ao item da carga e grava na base em uso (vale para os próximos inventários). */
-async function associarEan(body: { inventario_id: string; codigo: string; ean: string }) {
+async function associarEan(body: { inventario_id: string; codigo: string; ean: string }, emp: string) {
   const ean = String(body.ean ?? '').trim(), codigo = String(body.codigo ?? '').trim();
   if (!/^\d{8,14}$/.test(ean)) return json(400, { erro: 'Código de barras inválido: precisa ter de 8 a 14 dígitos.' });
-  const inv = await inventario(body.inventario_id);
+  const inv = await inventario(body.inventario_id, emp);
   const { data: prod, error } = await admin.from('ce_produtos').select('codigo,eans,nome,categoria').eq('inventario_id', inv.id).eq('codigo', codigo).maybeSingle();
   if (error) throw new Error(`Falha ao ler o item: ${error.message}`);
   if (!prod) return json(400, { erro: 'Item não encontrado na carga deste inventário.' });
@@ -228,22 +233,23 @@ async function associarEan(body: { inventario_id: string; codigo: string; ean: s
   await admin.from('ce_inventarios').update({ eans_extra: { ...((i2?.eans_extra as Record<string, string>) ?? {}), [ean]: codigo } }).eq('id', inv.id);
 
   // Base em uso: soma o código ao item (ou cria o item na base).
-  const baseId = await baseEmUso(inv.filial_id);
-  const { data: b } = await admin.from('ce_barras').select('eans').eq('filial_id', baseId).eq('codigo', codigo).maybeSingle();
+  const baseId = await baseEmUso(inv.filial_id, emp);
+  const { data: b } = await admin.from('ce_barras').select('eans').eq('empresa_id', emp).eq('filial_id', baseId).eq('codigo', codigo).maybeSingle();
   const novos = [...new Set([...((b?.eans as string[]) ?? []), ean])];
-  const { error: e2 } = await admin.from('ce_barras').upsert({ filial_id: baseId, codigo, nome: String(prod.nome ?? ''), categoria: String(prod.categoria ?? ''), eans: novos });
+  const { error: e2 } = await admin.from('ce_barras').upsert({ empresa_id: emp, filial_id: baseId, codigo, nome: String(prod.nome ?? ''), categoria: String(prod.categoria ?? ''), eans: novos });
   if (e2) throw new Error(`Falha ao gravar na base de códigos de barra: ${e2.message}`);
-  const { data: info } = await admin.from('ce_bases').select('itens,eans').eq('id', baseId).maybeSingle();
+  const { data: info } = await admin.from('ce_bases').select('itens,eans').eq('empresa_id', emp).eq('id', baseId).maybeSingle();
   const acrescimo = novos.length - ((b?.eans as string[]) ?? []).length;
   await admin.from('ce_bases').upsert({
-    id: baseId, itens: Number(info?.itens ?? 0) + (b ? 0 : 1), eans: Number(info?.eans ?? 0) + acrescimo, deleted_at: null,
+    empresa_id: emp, id: baseId, itens: Number(info?.itens ?? 0) + (b ? 0 : 1), eans: Number(info?.eans ?? 0) + acrescimo, deleted_at: null,
     ...(info ? {} : { arquivo: 'Cadastrados na coleta', importado_em: new Date().toISOString() }),
   });
   return json(200, { ok: true, base: baseId === REDE ? 'rede' : 'filial' });
 }
 
-async function enviarResultado(body: { inventario_id: string; linhas: LinhaResultado[] }) {
-  const inv = await inventario(body.inventario_id);
+async function enviarResultado(body: { inventario_id: string; linhas: LinhaResultado[] }, emp: string) {
+  if (emp !== REDE_NEVOEIRO) return json(400, { erro: 'A integração com o ERP Petros não está configurada para a sua empresa.' });
+  const inv = await inventario(body.inventario_id, emp);
   const enviados = await enviarPetros(inv.filialCodigo, String(inv.codigo), body.linhas ?? []);
   await admin.from('ce_inventarios').update({ enviado_erp_em: new Date().toISOString() }).eq('id', inv.id);
   return json(200, { ok: true, enviados });
@@ -252,22 +258,21 @@ async function enviarResultado(body: { inventario_id: string; linhas: LinhaResul
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
-    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-    const { data: u, error } = await admin.auth.getUser(token);
-    if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
-    const { data: p } = await admin.from('profiles').select('papel,ativo,modulos').eq('user_id', u.user.id).maybeSingle();
-    const libera = (m: string) => !!p?.ativo && (p.papel === 'admin' || (p.modulos ?? []).includes(m));
+    const conta = await contaDe(admin, req);
+    if (!conta) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
+    const libera = conta.libera;
+    const emp = conta.empresa?.id ?? '';
     const body = await req.json().catch(() => ({}));
     // A leitura de PDF também serve às tabelas de arqueação da Medição de Tanques (pasta arqueacao/).
     const tabelaTanque = body.acao === 'extrair_pdf' && String(body.caminho ?? '').startsWith('arqueacao/');
     if (tabelaTanque ? !libera('tanques') : !libera('coleta')) return json(403, { erro: tabelaTanque ? 'O módulo Medição de Tanques não está liberado para esta conta.' : 'O módulo Coleta não está liberado para esta conta.' });
     switch (body.acao) {
-      case 'status': return json(200, { ok: true, petros: petrosConfigurado() });
-      case 'carregar': return await carregar(body);
-      case 'gravar_barras': return await gravarBarras(body);
-      case 'associar_ean': return await associarEan(body);
+      case 'status': return json(200, { ok: true, petros: emp === REDE_NEVOEIRO && petrosConfigurado() });
+      case 'carregar': return await carregar(body, emp);
+      case 'gravar_barras': return await gravarBarras(body, emp);
+      case 'associar_ean': return await associarEan(body, emp);
       case 'extrair_pdf': return await extrairPdf(body);
-      case 'enviar_resultado': return await enviarResultado(body);
+      case 'enviar_resultado': return await enviarResultado(body, emp);
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {

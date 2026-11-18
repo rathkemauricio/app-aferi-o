@@ -13,6 +13,7 @@
 //           tipo "Aplicativo da Web", URI de redirecionamento = <SUPABASE_URL>/functions/v1/google-agenda)
 //           APP_URL (opcional): para onde a página de retorno leva o usuário depois de conectar.
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
+import { contaDe } from '../_shared/conta.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -150,7 +151,7 @@ async function conectar(userId: string) {
 }
 
 /** Envia ao Google o que mudou no app e traz o que mudou no Google (leitura incremental por syncToken). */
-async function sincronizar(userId: string) {
+async function sincronizar(userId: string, emp: string) {
   const c = await conexaoDe(userId);
   if (!c) return json(200, { ok: true, conectado: false });
   const cal = encodeURIComponent(c.calendario || 'primary');
@@ -207,7 +208,8 @@ async function sincronizar(userId: string) {
         const novo = doGoogle(g, userId, id);
         if (!novo.data) continue;
         if (atual && mesmoConteudo(atual, novo)) continue;
-        const linha = atual ? { ...novo, origem: atual.origem, filial_id: atual.filial_id } : novo;
+        // Evento novo vindo do Google entra na empresa de quem sincronizou (multiempresa).
+        const linha = atual ? { ...novo, origem: atual.origem, filial_id: atual.filial_id } : { ...novo, empresa_id: emp };
         const { error: e2 } = await admin.from('agenda_eventos').upsert(linha, { onConflict: 'id' });
         if (!e2) recebidos++;
       }
@@ -272,16 +274,15 @@ Deno.serve(async req => {
   const url = new URL(req.url);
   if (req.method === 'GET') return retornoGoogle(url);
   try {
-    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-    const { data: u, error } = await admin.auth.getUser(token);
-    if (error || !u.user) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
-    const { data: pode } = await admin.from('profiles').select('papel,ativo,modulos').eq('user_id', u.user.id).maybeSingle();
-    if (!pode?.ativo || !(pode.papel === 'admin' || (pode.modulos ?? []).includes('agenda'))) return json(403, { erro: 'O módulo Agenda não está liberado para esta conta.' });
+    const conta = await contaDe(admin, req);
+    if (!conta) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
+    if (!conta.libera('agenda') || !conta.empresa) return json(403, { erro: 'O módulo Agenda não está liberado para esta conta.' });
+    const u = { user: conta.user };
     const { acao } = await req.json().catch(() => ({ acao: '' }));
     switch (acao) {
       case 'status': return await status(u.user.id);
       case 'conectar': return await conectar(u.user.id);
-      case 'sincronizar': return await sincronizar(u.user.id);
+      case 'sincronizar': return await sincronizar(u.user.id, conta.empresa.id);
       case 'desconectar': return await desconectar(u.user.id);
       default: return json(400, { erro: 'Ação desconhecida.' });
     }

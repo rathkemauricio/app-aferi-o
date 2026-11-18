@@ -107,7 +107,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { colors, mode, toggleTheme } = useContext(ThemeContext);
-  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut } = useAuth();
+  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa } = useAuth();
   const reduz = useReducedMotion();
   const p = useMemo(() => paletaDa(colors, mode === 'dark'), [colors, mode]);
   const styles = useMemo(() => makeStyles(colors, p), [colors, p]);
@@ -171,7 +171,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
       <Animated.View style={[styles.sidebar, sBarra]}>
         <View style={styles.brand}>
           <Image source={require('../assets/favicon.png')} style={styles.logo} accessibilityLabel="EasyAudit" />
-          <Animated.View style={[styles.brandCopy, sMarca]}><Text style={styles.brandName}>EasyAudit</Text><Text style={styles.brandSub}>Rede Nevoeiro</Text></Animated.View>
+          <Animated.View style={[styles.brandCopy, sMarca]}><Text style={styles.brandName}>EasyAudit</Text><Text numberOfLines={1} style={styles.brandSub}>{empresa?.nome ?? 'EasyAudit'}</Text></Animated.View>
         </View>
 
         <ScrollView style={styles.navScroll} contentContainerStyle={styles.navContent} showsVerticalScrollIndicator={false}>
