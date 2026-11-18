@@ -13,7 +13,7 @@ import { createTypography, pageMaxWidth, radius, space, ThemeContext, type Theme
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
 import { Deslizavel } from '../tempos/Deslizavel';
 import { MedicaoInterativa } from './MedicaoInterativa';
-import { litrosPelaTabela, type TabelaArqueacao, tabelaDoTanque, useTabelas, vincularTanque } from './arqueacao';
+import { alturaMaxima, litrosPelaTabela, type TabelaArqueacao, tabelaDoTanque, useTabelas, vincularTanque } from './arqueacao';
 import { TabelasArqueacao } from './TabelasArqueacao';
 import { CadastroTanques } from './CadastroTanques';
 import { garantirTanque, type TanqueFilial, useTanquesFilial } from './cadastro';
@@ -170,11 +170,11 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
 }
 
 /* ---------------- Medição ---------------- */
-function NumeroCampo({ label, valor, onChange, editavel }: { label: string; valor: number | null; onChange: (v: number | null) => void; editavel: boolean }) {
+function NumeroCampo({ label, valor, onChange, editavel, emColuna = false }: { label: string; valor: number | null; onChange: (v: number | null) => void; editavel: boolean; emColuna?: boolean }) {
   const [texto, setTexto] = useState(valor === null ? '' : String(valor).replace('.', ','));
   // Acompanha o valor gravado por outra tela (ex.: medição interativa), sem atrapalhar o que está sendo digitado.
   useEffect(() => { if (lerNumero(texto) !== valor) setTexto(valor === null ? '' : String(valor).replace('.', ',')); }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <Field label={label} value={texto} editable={editavel} keyboardType="decimal-pad" placeholder="0" style={{ flexGrow: 1, flexBasis: 130 }}
+  return <Field label={label} value={texto} editable={editavel} keyboardType="decimal-pad" placeholder="0" style={emColuna ? undefined : { flexGrow: 1, flexBasis: 130 }}
     onChangeText={v => { setTexto(v); const n = lerNumero(v); if (n !== null || !v.trim()) onChange(n); }} />;
 }
 
@@ -193,6 +193,21 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
   const fin = m.status === 'finalizada';
   const r = resumo(m);
   const salvar = (patch: Partial<Medicao>) => medicoesCol.put({ ...m, ...patch });
+  // Centímetros → litros sempre em dia (tela normal e interativa): tanque com tabela e metragem sem litros, ou com
+  // litros da tabela desatualizados (tabela ligada depois, trocada ou corrigida), recalcula sozinho. Litros digitados ficam.
+  useEffect(() => {
+    if (fin) return;
+    let mudou = false;
+    const tanques = m.tanques.map(l => {
+      const tab = tabelaDoTanque(tabelas, l.tanque);
+      if (!tab || l.metragem === null || !(l.litros === null || l.litrosTabela)) return l;
+      const litros = litrosPelaTabela(tab, l.metragem);
+      if (l.litros === litros && l.litrosTabela === tab.nome) return l;
+      mudou = true;
+      return { ...l, litros, litrosTabela: tab.nome };
+    });
+    if (mudou) { const atual = medicoesCol.get(m.id) ?? m; medicoesCol.put({ ...atual, tanques }); }
+  }, [m.tanques, tabelas, fin]); // eslint-disable-line react-hooks/exhaustive-deps
   const mudarLinha = (id: string, p: Partial<LinhaTanque>) => salvar({ tanques: m.tanques.map(l => (l.id === id ? { ...l, ...p } : l)) });
   /** Mesma gravação, partindo da medição mais recente (a tela interativa grava altura e litros em seguida). */
   const mudarLinhaAtual = (id: string, p: Partial<LinhaTanque>) => {
@@ -249,13 +264,25 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
           {!fin ? <IconButton icon={XIcon} tone="danger" label="Remover tanque" onPress={() => confirmAction('Remover tanque?', `O tanque ${l.tanque || ''} sai desta medição.`, 'Remover', () => salvar({ tanques: m.tanques.filter(x => x.id !== l.id) }))} /> : null}
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-          <NumeroCampo label="Metragem (cm)" valor={l.metragem} editavel={!fin} onChange={v => mudarMetragem(l, v)} />
+          {(() => {
+            const tab = tabelaDoTanque(tabelas, l.tanque);
+            const max = tab ? alturaMaxima(tab) : null;
+            const acima = max !== null && l.metragem !== null && l.metragem > max;
+            return (
+              <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
+                <NumeroCampo emColuna label="Metragem (cm)" valor={l.metragem} editavel={!fin} onChange={v => mudarMetragem(l, v)} />
+                <Text style={[t.caption, acima && { color: colors.danger, fontWeight: '700' }]}>
+                  {acima ? `acima da tabela (máx. ${max} cm): confira` : max !== null ? `régua de 0 a ${max} cm` : 'sem tabela: digite os litros'}
+                </Text>
+              </View>
+            );
+          })()}
           <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
-            <NumeroCampo label="Litros (medido)" valor={l.litros} editavel={!fin} onChange={v => mudarLinha(l.id, { litros: v, litrosTabela: undefined })} />
+            <NumeroCampo emColuna label="Litros (medido)" valor={l.litros} editavel={!fin} onChange={v => mudarLinha(l.id, { litros: v, litrosTabela: undefined })} />
             <Text style={t.caption}>{l.litrosTabela ? 'pela tabela de arqueação' : l.litros !== null ? 'digitado' : ''}</Text>
           </View>
           <View style={{ flexGrow: 1, flexBasis: 130, gap: 2 }}>
-            <NumeroCampo label="Informada (L)" valor={l.informada} editavel={!fin} onChange={v => mudarLinha(l.id, { informada: v, informadaDe: undefined })} />
+            <NumeroCampo emColuna label="Informada (L)" valor={l.informada} editavel={!fin} onChange={v => mudarLinha(l.id, { informada: v, informadaDe: undefined })} />
             <Text style={t.caption}>{l.informadaDe ? `da medição de ${dataBR(l.informadaDe)}` : 'digitada (sem medição anterior)'}</Text>
           </View>
         </View>

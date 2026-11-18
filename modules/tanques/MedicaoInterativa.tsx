@@ -66,6 +66,11 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
     setLitrosTxt(l?.litros !== null && l?.litros !== undefined ? String(l.litros).replace('.', ',') : '');
     nivel.set(reduz ? (l?.metragem ?? 0) : withTiming(l?.metragem ?? 0, { duration: 350, easing: Easing.out(Easing.cubic) }));
   }, [atual]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Litros recalculados por fora (tabela ligada ou corrigida, tela normal): o campo acompanha.
+  useEffect(() => {
+    const v = tanques[atual]?.litros ?? null;
+    setLitrosTxt(txt => (lerNumero(txt) === v ? txt : v === null ? '' : String(v).replace('.', ',')));
+  }, [tanques, atual]);
   useEffect(() => {
     if (!reduz) fase.set(withRepeat(withTiming(Math.PI * 2, { duration: 1600, easing: Easing.linear }), -1, false));
     return () => cancelAnimation(fase);
@@ -82,6 +87,13 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
   const gravarRef = useRef(gravarAltura);
   gravarRef.current = gravarAltura;
   const gravar = useCallback((v: number) => gravarRef.current(v), []);
+  /** Durante o arraste: mostra a altura e, com tabela, os litros dela (a gravação é ao soltar). */
+  const mostrarRef = useRef((v: number) => { setCm(v); });
+  mostrarRef.current = (v: number) => {
+    setCm(v);
+    if (tab) { const l = litrosPelaTabela(tab, v); setLitrosTxt(l === null ? '' : String(l).replace('.', ',')); }
+  };
+  const mostrar = useCallback((v: number) => mostrarRef.current(v), []);
   const definir = (v: number) => { setCm(v); nivel.set(reduz ? v : withTiming(v, { duration: 220, easing: Easing.out(Easing.cubic) })); gravar(v); };
 
   const alturaDesenho = useSharedValue(330);
@@ -91,17 +103,17 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
       'worklet';
       const y = (ev.y / alturaDesenho.get()) * VB_H;
       const v = Math.max(0, Math.min(diam.get(), Math.round(((FUNDO - y) / ALTURA) * diam.get())));
-      nivel.set(v); ultimo.set(v); scheduleOnRN(setCm, v);
+      nivel.set(v); ultimo.set(v); scheduleOnRN(mostrar, v);
     },
     onUpdate: ev => {
       'worklet';
       const y = (ev.y / alturaDesenho.get()) * VB_H;
       const v = Math.max(0, Math.min(diam.get(), Math.round(((FUNDO - y) / ALTURA) * diam.get())));
       nivel.set(v);
-      if (v !== ultimo.get()) { ultimo.set(v); scheduleOnRN(setCm, v); }
+      if (v !== ultimo.get()) { ultimo.set(v); scheduleOnRN(mostrar, v); }
     },
     onFinalize: () => { 'worklet'; if (ultimo.get() >= 0) scheduleOnRN(gravar, ultimo.get()); },
-  }), [alturaDesenho, nivel, ultimo, gravar, diam]);
+  }), [alturaDesenho, nivel, ultimo, gravar, mostrar, diam]);
   const pan = usePanGesture(configPan);
 
   /* ----- Desenho animado ----- */
@@ -223,7 +235,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
                 <View style={{ width: 92, gap: 6, justifyContent: 'center' }}>
                   <Text style={[e.sub, { textAlign: 'center' }]}>Ajuste fino</Text>
                   <View style={e.campoRoleta}>
-                    <Roleta rotulo="Altura em centímetros" valores={valoresCm} valor={cm === null ? '' : String(cm)} vazio={cm === null} formatar={v => `${v} cm`}
+                    <Roleta rotulo="Altura em centímetros" valores={valoresCm} valor={cm === null ? '' : String(Math.min(DIAM, Math.round(cm)))} vazio={cm === null} formatar={v => `${v} cm`}
                       onChange={v => definir(Number(v))} altura={42} visiveis={3} />
                   </View>
                 </View>
@@ -232,7 +244,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
 
             {/* Leitura */}
             <View style={e.leitura}>
-              <Text style={[e.num, { color: cm === null ? MUTED : FG }]}>{cm === null ? '—' : cm}</Text>
+              <Text style={[e.num, { color: cm === null ? MUTED : FG }]}>{cm === null ? '—' : String(cm).replace('.', ',')}</Text>
               <Text style={e.un}>cm</Text>
               {pct !== null ? <View style={e.tag}><Text style={e.tagTxt}>{pct}% {tab ? 'do tanque' : 'da régua'}</Text></View> : null}
             </View>
@@ -245,6 +257,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
               <Text style={e.rot}>{tab ? `Litros pela tabela ${tab.nome}` : 'Litros (tabela do tanque)'}</Text>
               <TextInput value={litrosTxt} onChangeText={mudarLitros} keyboardType="decimal-pad" placeholder="0" placeholderTextColor="#6b7891"
                 style={e.litros} accessibilityLabel="Litros pela tabela do tanque" />
+              {tab && cm !== null && cm > alturaMaxima(tab) ? <Text style={[e.sub, { color: '#ffb547' }]}>Altura acima da tabela ({alturaMaxima(tab)} cm): os litros ficam no volume total. Confira a medida.</Text> : null}
               {tab ? <Text style={e.sub}>{t.litrosTabela ? 'Calculado pela altura (dá para corrigir digitando).' : 'Digitado à mão; mexa na régua para calcular pela tabela.'}</Text> : null}
               <Text style={e.sub}>Informada (medição anterior): <Text style={{ color: FG, fontWeight: '800' }}>{fmtL(t.informada)} L</Text></Text>
             </View>
