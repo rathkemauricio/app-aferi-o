@@ -15,6 +15,8 @@ import { Deslizavel } from '../tempos/Deslizavel';
 import { MedicaoInterativa } from './MedicaoInterativa';
 import { litrosPelaTabela, type TabelaArqueacao, tabelaDoTanque, useTabelas, vincularTanque } from './arqueacao';
 import { TabelasArqueacao } from './TabelasArqueacao';
+import { CadastroTanques } from './CadastroTanques';
+import { garantirTanque, type TanqueFilial, useTanquesFilial } from './cadastro';
 import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
@@ -112,18 +114,25 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
   const medicoes = dados.medicoes.filter(m => m.filial_id === filialId);
   const aberta = medicoes.find(m => m.status === 'rascunho');
   const croqui = useTanquesDoCroqui(filialId);
+  const cadastro = useTanquesFilial(filialId);
+  const tabelas = useTabelas(filialId);
   if (!filial) return <EmptyState icon={StorefrontIcon} title="Filial não encontrada" />;
+  // Tanques da nova medição: os cadastrados; sem cadastro, os do croqui; sem croqui, os da última medição.
+  const base = tanquesBase(cadastro, croqui);
+  const ultimos: TanqueCroqui[] = medicoes.find(m => m.tanques.length)?.tanques.filter(l => l.tanque.trim()).map(l => ({ tanque: l.tanque.trim(), combustivel: l.combustivel })) ?? [];
   const nova = () => {
     if (aberta) { notify('Medição em andamento', `Já existe uma medição em andamento de ${dataBR(aberta.data)}. Termine ou exclua antes de abrir outra.`); abrir(aberta.id); return; }
-    abrir(novaMedicao(filialId, usuario, dados.medicoes, croqui));
+    abrir(novaMedicao(filialId, usuario, dados.medicoes, base));
   };
   return <>
     <Text style={t.title}>{filial.codigo} · {filial.nome}</Text>
     <Text style={t.captionBg}>{[filial.cidade, filial.uf].filter(Boolean).join(' / ')}</Text>
     <Button title={aberta ? 'Continuar medição em andamento' : 'Nova medição'} icon={aberta ? RulerIcon : PlusIcon} onPress={nova} />
-    <Text style={t.caption}>{croqui.length
-      ? `Tanques cadastrados no croqui: ${croqui.map(x => x.tanque).join(', ')}. A nova medição já vem com eles (número e combustível) e com a informada da última medição.`
-      : 'Esta filial não tem tanques no croqui: a nova medição vem com os tanques da última medição. Para cadastrá-los, desenhe os tanques no Croqui com o combustível de cada um.'}</Text>
+    <Text style={t.caption}>{cadastro.length
+      ? `A nova medição já vem com os ${cadastro.length} tanque(s) cadastrado(s) (${cadastro.map(x => x.numero).join(', ')}), com combustível, tabela de arqueação e a informada da última medição.`
+      : croqui.length
+        ? `Sem tanques cadastrados: a nova medição vem com os tanques do croqui (${croqui.map(x => x.tanque).join(', ')}). Cadastre os tanques abaixo para tê-los sempre prontos.`
+        : 'Sem tanques cadastrados: a nova medição vem com os tanques da última medição. Cadastre os tanques abaixo para tê-los sempre prontos.'}</Text>
     <SectionHeader title={`Medições (${medicoes.length})`} />
     {medicoes.length ? (
       <View style={{ gap: space.sm }}>
@@ -153,8 +162,10 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
         <Text style={t.captionBg}>Arraste uma medição: para a direita edita (ou reabre a finalizada); para a esquerda exclui.</Text>
       </View>
     ) : <EmptyState icon={RulerIcon} title="Nenhuma medição nesta filial" text="Toque em Nova medição para conferir os tanques." />}
+    <CadastroTanques filialId={filialId} cadastro={cadastro} tabelas={tabelas} sugestao={croqui.length ? croqui : ultimos}
+      origemSugestao={croqui.length ? 'do croqui' : 'da última medição'} combustiveis={dados.combustiveis} nomeComb={nomeCombDe(dados)} corComb={corCombDe(dados, colors.textFaint)} />
     <TabelasArqueacao filialId={filialId} filialCodigo={String(filial.codigo)} filialNome={`${filial.codigo} · ${filial.nome}`}
-      tanquesConhecidos={[...new Set([...croqui.map(x => x.tanque), ...(medicoes[0]?.tanques.map(l => l.tanque.trim()).filter(Boolean) ?? [])])]} />
+      tanquesConhecidos={[...new Set([...cadastro.map(x => x.numero), ...croqui.map(x => x.tanque), ...ultimos.map(x => x.tanque)])]} />
   </>;
 }
 
@@ -171,6 +182,8 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
   m: Medicao; filialNome: string; combustiveis: Combustivel[]; nomeComb: (id: string) => string; corComb: (id: string) => string; voltar: () => void; anteriores: Medicao[];
 }) {
   const croqui = useTanquesDoCroqui(m.filial_id);
+  const cadastro = useTanquesFilial(m.filial_id);
+  const base = tanquesBase(cadastro, croqui);
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const usuario = useUsuarioLogado();
@@ -192,6 +205,8 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
   /** Troca a tabela do tanque e recalcula os litros pela altura já medida. */
   const escolherTabela = (l: LinhaTanque, tab: TabelaArqueacao | null) => {
     vincularTanque(tabelas, l.tanque, tab?.id ?? null);
+    // O tanque passa a fazer parte do cadastro da filial (próximas medições já vêm com ele e com a tabela).
+    garantirTanque(cadastro, m.filial_id, l.tanque, l.combustivel);
     if (tab && l.metragem !== null) mudarLinha(l.id, comTabela(l, l.metragem, tab));
     else if (!tab && l.litrosTabela) mudarLinha(l.id, { litrosTabela: undefined });
   };
@@ -262,10 +277,13 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
     {!fin && m.tanques.length ? <Button title="Medição interativa (régua no tanque)" icon={RulerIcon} onPress={() => setInterativa(true)} /> : null}
     {interativa ? <MedicaoInterativa tanques={m.tanques} filial={filialNome} nomeComb={nomeComb} corComb={corComb} tabelaDe={tq => tabelaDoTanque(tabelas, tq)} onMudar={mudarLinhaAtual} onFechar={() => setInterativa(false)} /> : null}
     {!fin ? <Button title="Adicionar tanque" icon={PlusIcon} variant="secondary" onPress={() => salvar({ tanques: [...m.tanques, linhaVazia(String(m.tanques.length + 1))] })} /> : null}
-    {!fin && croqui.length && !confereComCroqui(m.tanques, croqui) ? (
-      <Button title={`Usar os tanques do croqui (${croqui.length})`} icon={ResetIcon} variant="secondary"
-        onPress={() => confirmAction('Usar os tanques do croqui?', `${croqui.map(x => `Tanque ${x.tanque}${x.combustivel ? ` · ${nomeComb(x.combustivel)}` : ''}`).join('\n')}\n\nTanques que já estão na medição mantêm o que foi digitado; os que não estão no croqui saem.`, 'Usar', () => aplicarCroqui(m, croqui, anteriores))} />
-    ) : null}
+    {!fin && base.length > 0 && !confereComCroqui(m.tanques, base) ? (() => {
+      const origem = cadastro.length ? 'cadastrados' : 'do croqui';
+      return (
+        <Button title={`Usar os tanques ${origem} (${base.length})`} icon={ResetIcon} variant="secondary"
+          onPress={() => confirmAction(`Usar os tanques ${origem}?`, `${base.map(x => `Tanque ${x.tanque}${x.combustivel ? ` · ${nomeComb(x.combustivel)}` : ''}`).join('\n')}\n\nTanques que já estão na medição mantêm o que foi digitado; os que não estão na lista saem.`, 'Usar', () => aplicarCroqui(m, base, anteriores))} />
+      );
+    })() : null}
 
     {/* 2. Conferência por combustível: a venda e o recebimento são unificados */}
     <SectionHeader title="Conferência por combustível" />
@@ -349,6 +367,12 @@ function comTabela(l: LinhaTanque, cm: number | null, tab: TabelaArqueacao | und
   if (cm === null) return l.litrosTabela ? { metragem: null, litros: null, litrosTabela: undefined } : { metragem: null };
   return { metragem: cm, litros: litrosPelaTabela(tab, cm), litrosTabela: tab.nome };
 }
+
+/** Tanques que a medição usa: os cadastrados na filial; sem cadastro, os do croqui. */
+const tanquesBase = (cadastro: TanqueFilial[], croqui: TanqueCroqui[]): TanqueCroqui[] =>
+  (cadastro.length ? cadastro.map(x => ({ tanque: x.numero, combustivel: x.combustivel })) : croqui);
+const nomeCombDe = (d: Dados) => (id: string) => d.combustiveis.find(c => c.id === id)?.nome ?? (id || '—');
+const corCombDe = (d: Dados, padrao: string) => (id: string) => d.combustiveis.find(c => c.id === id)?.cor ?? padrao;
 
 /** Os tanques da medição são os do croqui (mesmos números e combustíveis)? */
 const confereComCroqui = (linhas: LinhaTanque[], croqui: TanqueCroqui[]) =>
