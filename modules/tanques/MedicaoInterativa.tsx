@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 import { GestureDetector, GestureHandlerRootView, usePanGesture, type PanGestureConfig } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, Easing, useAnimatedProps, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, ClipPath, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { ClipPath, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ArrowRightIcon, CheckIcon, XIcon } from '../../ui/icons';
 import { darkColor, ThemeContext } from '../../ui/theme';
@@ -21,8 +21,11 @@ const NAVY = '#0b1426', PAINEL = '#13213b', PAINEL2 = '#1b2c4b', LINHA = '#2a3d6
 /** Diâmetro de referência do desenho (cm): a escala da régua vai de 0 a 260 cm. */
 const DIAM = 260;
 const VALORES_CM = faixa(0, 300, 1);
-// Desenho (viewBox 300 × 330): tanque em corte com centro (150, 200) e raio 115 → fundo em y 315, topo em y 85.
-const CX = 150, CY = 200, R = 115, FUNDO = CY + R, ALTURA = 2 * R;
+// Desenho (viewBox 340 × 320): tanque subterrâneo horizontal visto de lado (cilindro com tampos abaulados),
+// do x 20 ao 320, topo em y 100 e fundo em y 300; boca de visita e régua no meio (x 170).
+const VB_W = 340, VB_H = 320, CX = 170, TOPO = 100, FUNDO = 300, ALTURA = FUNDO - TOPO, X0 = 20, X1 = 320;
+/** Contorno do tanque: corpo cilíndrico com tampos (calotas) elípticos nas pontas. */
+const CASCO = `M70 ${TOPO} H270 A50 ${ALTURA / 2} 0 0 1 270 ${FUNDO} H70 A50 ${ALTURA / 2} 0 0 1 70 ${TOPO} Z`;
 const yDoCm = (cm: number) => { 'worklet'; return FUNDO - (Math.min(cm, DIAM) / DIAM) * ALTURA; };
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
@@ -70,13 +73,13 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
   const configPan = useMemo((): PanGestureConfig => ({
     onBegin: ev => {
       'worklet';
-      const y = (ev.y / alturaDesenho.get()) * 330;
+      const y = (ev.y / alturaDesenho.get()) * VB_H;
       const v = Math.max(0, Math.min(DIAM, Math.round(((FUNDO - y) / ALTURA) * DIAM)));
       nivel.set(v); ultimo.set(v); scheduleOnRN(setCm, v);
     },
     onUpdate: ev => {
       'worklet';
-      const y = (ev.y / alturaDesenho.get()) * 330;
+      const y = (ev.y / alturaDesenho.get()) * VB_H;
       const v = Math.max(0, Math.min(DIAM, Math.round(((FUNDO - y) / ALTURA) * DIAM)));
       nivel.set(v);
       if (v !== ultimo.get()) { ultimo.set(v); scheduleOnRN(setCm, v); }
@@ -90,9 +93,9 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
   const ondaProps = useAnimatedProps(() => {
     const y = yDoCm(nivel.get());
     const amp = nivel.get() > 1 ? 2.2 : 0;
-    let d = `M${CX - R} ${y + 6}`;
-    for (let x = CX - R; x <= CX + R; x += 10) d += ` L${x} ${y + Math.sin(x / 15 + fase.get()) * amp}`;
-    return { d: `${d} L${CX + R} ${FUNDO + 6} L${CX - R} ${FUNDO + 6} Z` };
+    let d = `M${X0} ${y + 6}`;
+    for (let x = X0; x <= X1; x += 10) d += ` L${x} ${y + Math.sin(x / 15 + fase.get()) * amp}`;
+    return { d: `${d} L${X1} ${FUNDO + 6} L${X0} ${FUNDO + 6} Z` };
   });
   const molhadoProps = useAnimatedProps(() => { const y = yDoCm(nivel.get()); return { y, height: Math.max(0, FUNDO - y) }; });
   const linhaProps = useAnimatedProps(() => { const y = yDoCm(nivel.get()); return { y1: y, y2: y }; });
@@ -151,36 +154,51 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
                   accessibilityRole="adjustable" accessibilityLabel={`Altura do combustível: ${cm === null ? 'não medida' : `${cm} centímetros`}`}
                   accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
                   onAccessibilityAction={ev => definir(Math.max(0, Math.min(300, (cm ?? 0) + (ev.nativeEvent.actionName === 'increment' ? 1 : -1))))}>
-                  <Svg viewBox="0 0 300 330" style={{ width: '100%', aspectRatio: 300 / 330 }}>
+                  <Svg viewBox={`0 0 ${VB_W} ${VB_H}`} style={{ width: '100%', aspectRatio: VB_W / VB_H }}>
                     <Defs>
-                      <ClipPath id="corte"><Circle cx={CX} cy={CY} r={R} /></ClipPath>
+                      <ClipPath id="casco"><Path d={CASCO} /></ClipPath>
                       <LinearGradient id="comb" x1="0" y1="0" x2="0" y2="1"><Stop offset="0" stopColor="#ffb08f" stopOpacity={0.95} /><Stop offset="1" stopColor={cor} /></LinearGradient>
+                      <LinearGradient id="aco" x1="0" y1="0" x2="0" y2="1"><Stop offset="0" stopColor="#d9dee6" /><Stop offset="0.5" stopColor="#aab3c0" /><Stop offset="1" stopColor="#7d8796" /></LinearGradient>
+                      <LinearGradient id="terra" x1="0" y1="0" x2="0" y2="1"><Stop offset="0" stopColor="#4a3b2c" /><Stop offset="1" stopColor="#2b2219" /></LinearGradient>
                     </Defs>
-                    {/* chão e boca de visita */}
-                    <Rect x={0} y={20} width={300} height={44} fill="#2a2f3a" />
-                    <Rect x={0} y={60} width={300} height={4} fill="#3b4252" />
-                    <Rect x={128} y={44} width={44} height={42} fill="#1d2433" stroke="#4a5263" strokeWidth={2} />
-                    {/* tanque */}
-                    <Circle cx={CX} cy={CY} r={R} fill="#0d1a30" />
-                    <G clipPath="url(#corte)">
-                      <AnimatedRect x={CX - R} width={2 * R} fill="url(#comb)" animatedProps={liqProps} />
+                    {/* solo, laje de concreto da pista e terra em volta do tanque */}
+                    <Rect x={0} y={34} width={VB_W} height={VB_H - 34} fill="url(#terra)" />
+                    <Rect x={0} y={28} width={VB_W} height={12} fill="#8a8f98" />
+                    <Rect x={0} y={28} width={VB_W} height={2} fill="#b8bdc5" />
+                    {/* tubo de descarga (com engate) e respiro */}
+                    <Rect x={96} y={24} width={10} height={TOPO - 22} fill="url(#aco)" />
+                    <Rect x={91} y={18} width={20} height={9} rx={2} fill="#f2b233" />
+                    <SvgText x={101} y={13} textAnchor="middle" fill="#cfd4da" fontSize={8}>descarga</SvgText>
+                    <Rect x={250} y={6} width={7} height={TOPO - 4} fill="url(#aco)" />
+                    <Path d="M244 8 H263 L259 2 H248 Z" fill="#aab3c0" />
+                    <SvgText x={272} y={22} fill="#cfd4da" fontSize={8}>respiro</SvgText>
+                    {/* boca de visita: pescoço, flange e tampa na laje */}
+                    <Rect x={146} y={40} width={48} height={TOPO - 38} fill="url(#aco)" stroke="#5c6575" strokeWidth={1} />
+                    <Rect x={138} y={38} width={64} height={6} rx={2} fill="#6b7483" />
+                    <Rect x={140} y={26} width={60} height={5} rx={2} fill="#3a404b" />
+                    {/* casco do tanque com o combustível */}
+                    <Path d={CASCO} fill="#0d1a30" />
+                    <G clipPath="url(#casco)">
+                      <AnimatedRect x={X0} width={X1 - X0} fill="url(#comb)" animatedProps={liqProps} />
                       <AnimatedPath fill="url(#comb)" animatedProps={ondaProps} />
                     </G>
-                    <Circle cx={CX} cy={CY} r={R} fill="none" stroke="#cfd4da" strokeWidth={3} />
-                    {/* régua: parte molhada na cor do combustível */}
-                    <Rect x={144} y={8} width={12} height={FUNDO - 8} rx={3} fill="#e8d9a8" />
-                    <AnimatedRect x={144} width={12} fill={cor} opacity={0.9} animatedProps={molhadoProps} />
+                    {/* cintas de reforço e contorno de aço */}
+                    {[110, 230].map(x => <Line key={x} x1={x} x2={x} y1={TOPO} y2={FUNDO} stroke="#cfd4da" strokeOpacity={0.35} strokeWidth={3} />)}
+                    <Path d={CASCO} fill="none" stroke="#cfd4da" strokeWidth={3.5} />
+                    <SvgText x={52} y={84} textAnchor="middle" fill="#ffffff" opacity={0.75} fontWeight="700" fontSize={10}>{t.combustivel ? nomeComb(t.combustivel) : ''}</SvgText>
+                    {/* régua pela boca de visita: parte molhada na cor do combustível */}
+                    <Rect x={CX - 6} y={16} width={12} height={FUNDO - 16} rx={3} fill="#e8d9a8" />
+                    <AnimatedRect x={CX - 6} width={12} fill={cor} opacity={0.9} animatedProps={molhadoProps} />
                     {Array.from({ length: DIAM / 10 + 1 }, (_, k) => {
                       const v = k * 10, y = yDoCm(v), forte = v % 50 === 0;
                       return (
                         <G key={v}>
-                          <Line x1={144} x2={forte ? 152 : 148} y1={y} y2={y} stroke="#3a2f12" strokeWidth={forte ? 1.4 : 0.9} />
-                          {forte ? <SvgText x={162} y={y + 3} fill="#cfd4da" fontSize={9}>{v}</SvgText> : null}
+                          <Line x1={CX - 6} x2={forte ? CX + 2 : CX - 2} y1={y} y2={y} stroke="#3a2f12" strokeWidth={forte ? 1.4 : 0.9} />
+                          {forte ? <SvgText x={CX + 10} y={y + 3} fill="#ffffff" fontSize={9} fontWeight="700">{v}</SvgText> : null}
                         </G>
                       );
                     })}
-                    <AnimatedLine x1={CX - R} x2={CX + R} stroke={MINT} strokeWidth={1.5} strokeDasharray="6 5" animatedProps={linhaProps} />
-                    <SvgText x={CX} y={CY + 60} textAnchor="middle" fill="#cfd4da" opacity={0.45} fontWeight="700" fontSize={14}>{t.combustivel ? nomeComb(t.combustivel) : ''}</SvgText>
+                    <AnimatedLine x1={X0} x2={X1} stroke={MINT} strokeWidth={1.5} strokeDasharray="6 5" animatedProps={linhaProps} />
                   </Svg>
                 </View>
               </GestureDetector>
@@ -201,7 +219,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, onMudar,
               <Text style={e.un}>cm</Text>
               {pct !== null ? <View style={e.tag}><Text style={e.tagTxt}>{pct}% da régua</Text></View> : null}
             </View>
-            <Text style={e.sub}>Arraste no tanque para marcar a altura do combustível; use a roleta para o ajuste fino. Escala do desenho: 0 a {DIAM} cm.</Text>
+            <Text style={e.sub}>Arraste no tanque para marcar a altura do combustível; use a roleta para o ajuste fino. Escala do desenho: 0 a {DIAM} cm (diâmetro de referência, até chegarem as tabelas de arqueação).</Text>
 
             {/* Litros */}
             <View style={e.caixa}>
