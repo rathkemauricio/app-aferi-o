@@ -16,7 +16,7 @@ import { MedicaoInterativa } from './MedicaoInterativa';
 import { alturaMaxima, litrosPelaTabela, type TabelaArqueacao, tabelaDoTanque, useTabelas, vincularTanque } from './arqueacao';
 import { TabelasArqueacao } from './TabelasArqueacao';
 import { CadastroTanques } from './CadastroTanques';
-import { garantirTanque, pontosDaFilial, type TanqueFilial, useTanquesFilial } from './cadastro';
+import { garantirTanque, type TanqueFilial, useTanquesFilial } from './cadastro';
 import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
@@ -165,7 +165,8 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
     <CadastroTanques filialId={filialId} cadastro={cadastro} tabelas={tabelas} sugestao={croqui.length ? croqui : ultimos}
       origemSugestao={croqui.length ? 'do croqui' : 'da última medição'} combustiveis={dados.combustiveis} nomeComb={nomeCombDe(dados)} corComb={corCombDe(dados, colors.textFaint)} />
     <TabelasArqueacao filialId={filialId} filialCodigo={String(filial.codigo)} filialNome={`${filial.codigo} · ${filial.nome}`}
-      tanquesConhecidos={cadastro.length ? base.map(x => x.tanque) : [...new Set([...croqui.map(x => x.tanque), ...ultimos.map(x => x.tanque)])]} />
+      tanquesConhecidos={cadastro.length ? base.map(x => x.tanque) : [...new Set([...croqui.map(x => x.tanque), ...ultimos.map(x => x.tanque)])]}
+      combustiveis={dados.combustiveis} />
   </>;
 }
 
@@ -395,9 +396,9 @@ function comTabela(l: LinhaTanque, cm: number | null, tab: TabelaArqueacao | und
   return { metragem: cm, litros: litrosPelaTabela(tab, cm), litrosTabela: tab.nome };
 }
 
-/** Tanques que a medição usa: os cadastrados na filial (bi/tripartido = um por compartimento: 3A, 3B …); sem cadastro, os do croqui. */
+/** Tanques que a medição usa: os cadastrados na filial (no bi/tripartido, cada compartimento tem número próprio); sem cadastro, os do croqui. */
 const tanquesBase = (cadastro: TanqueFilial[], croqui: TanqueCroqui[]): TanqueCroqui[] =>
-  (cadastro.length ? pontosDaFilial(cadastro).map(p => ({ tanque: p.tanque, combustivel: p.combustivel })) : croqui);
+  (cadastro.length ? cadastro.map(x => ({ tanque: x.numero, combustivel: x.combustivel })) : croqui);
 const nomeCombDe = (d: Dados) => (id: string) => d.combustiveis.find(c => c.id === id)?.nome ?? (id || '—');
 const corCombDe = (d: Dados, padrao: string) => (id: string) => d.combustiveis.find(c => c.id === id)?.cor ?? padrao;
 

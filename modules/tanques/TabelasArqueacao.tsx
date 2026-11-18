@@ -6,9 +6,12 @@ import { CheckIcon, FileArrowUpIcon, PrinterIcon, RulerIcon, TrashIcon, WarningI
 import { Button, Card, confirmAction, Field, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, radius, space, ThemeContext } from '../../ui/theme';
 import { lerTextosPdf } from '../coleta/barras';
+import type { Combustivel } from '../../lib/combustiveis';
 import {
-  alturaMaxima, htmlTabela, lerTabela, linhasDoPdf, litrosPelaTabela, pontosParaConferir, type TabelaArqueacao, tabelasCol, useTabelas, volumeTotal,
+  acharCombustivel, alturaMaxima, type DocumentoLido, htmlTabela, lerDocumentoFilial, lerTabela, linhasDoPdf, litrosPelaTabela, pontosParaConferir,
+  type TabelaArqueacao, tabelasCol, useTabelas, volumeTotal,
 } from './arqueacao';
+import { importarDocumento, type SecaoImportar, useTanquesFilial } from './cadastro';
 import { lerNumero, uid } from './model';
 
 const fmt = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('pt-BR'));
@@ -18,14 +21,15 @@ const ordenar = (l: string[]) => [...l].sort((a, b) => a.localeCompare(b, 'pt-BR
  * Tabelas de arqueação da filial: importar do PDF, conferir, escolher os tanques que usam cada uma, imprimir e excluir.
  * `tanquesConhecidos` = números dos tanques do croqui e da última medição (para marcar quais usam a tabela).
  */
-export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesConhecidos }: {
-  filialId: string; filialCodigo: string; filialNome: string; tanquesConhecidos: string[];
+export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesConhecidos, combustiveis }: {
+  filialId: string; filialCodigo: string; filialNome: string; tanquesConhecidos: string[]; combustiveis: Combustivel[];
 }) {
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const tabelas = useTabelas(filialId);
   const [lendo, setLendo] = useState<string | null>(null);
   const [editando, setEditando] = useState<{ tabela: TabelaArqueacao; nova: boolean; avisos: string[] } | null>(null);
+  const [documento, setDocumento] = useState<{ doc: DocumentoLido; arquivo: string } | null>(null);
 
   const importar = async () => {
     if (lendo) return;
@@ -34,8 +38,12 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
       const a = r.canceled ? undefined : r.assets?.[0];
       if (!a) return;
       setLendo('Abrindo o PDF…');
-      const lida = lerTabela(linhasDoPdf(await lerTextosPdf(a, 'arqueacao', setLendo)));
+      const linhas = linhasDoPdf(await lerTextosPdf(a, 'arqueacao', setLendo));
       setLendo(null);
+      // Documento padrão da filial (tanques + tabelas): cadastra tudo de uma vez, depois de mostrar o que foi lido.
+      const doc = lerDocumentoFilial(linhas);
+      if (doc) { setDocumento({ doc, arquivo: a.name }); return; }
+      const lida = lerTabela(linhas);
       if (lida.pontos.length < 10) { notify('Tabela não reconhecida', `Não encontrei as colunas de altura (cm) e volume (L) em "${a.name}". O PDF precisa ter texto (não pode ser só uma foto).`); return; }
       const avisos: string[] = [];
       if (lida.filialNoArquivo && Number(lida.filialNoArquivo) !== Number(filialCodigo)) avisos.push(`O arquivo diz "Filial ${lida.filialNoArquivo}", mas você está importando na filial ${filialCodigo}. Confira se é a filial certa.`);
@@ -71,14 +79,118 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
       );
     })}
     {/* A tabela é importada pelo PDF no painel web; no app ela só é consultada e usada na medição. */}
-    {Platform.OS === 'web'
-      ? <Button title={lendo ?? 'Importar tabela de arqueação (PDF)'} icon={FileArrowUpIcon} variant="secondary" disabled={!!lendo} onPress={() => void importar()} />
+    {Platform.OS === 'web' ? <>
+      <Button title={lendo ?? 'Importar PDF da filial (tanques e tabelas)'} icon={FileArrowUpIcon} variant="secondary" disabled={!!lendo} onPress={() => void importar()} />
+      <Text style={t.caption}>O PDF padrão da filial cadastra os tanques (número, combustível, capacidade, tipo e marca) e as tabelas de cada um. Um PDF só com a tabela de um tanque também serve.</Text>
+    </>
       : <Text style={t.caption}>{tabelas.length ? 'Para importar outra tabela, use o painel web (PDF).' : 'Nenhuma tabela ainda: importe o PDF da tabela de arqueação pelo painel web.'}</Text>}
+    {documento ? (
+      <ImportarDocumento doc={documento.doc} arquivo={documento.arquivo} filialId={filialId} filialCodigo={filialCodigo} tabelas={tabelas}
+        combustiveis={combustiveis} onFechar={() => setDocumento(null)} />
+    ) : null}
     {editando ? (
       <EditorTabela inicial={editando.tabela} nova={editando.nova} avisos={editando.avisos} outras={tabelas.filter(x => x.id !== editando.tabela.id)}
         filialNome={filialNome} tanquesConhecidos={tanquesConhecidos} onFechar={() => setEditando(null)} />
     ) : null}
   </>;
+}
+
+/** Conferência do documento da filial antes de gravar: tabelas, tanques e combustíveis reconhecidos. */
+function ImportarDocumento({ doc, arquivo, filialId, filialCodigo, tabelas, combustiveis, onFechar }: {
+  doc: DocumentoLido; arquivo: string; filialId: string; filialCodigo: string; tabelas: TabelaArqueacao[]; combustiveis: Combustivel[]; onFechar: () => void;
+}) {
+  const { colors } = useContext(ThemeContext);
+  const t = useMemo(() => createTypography(colors), [colors]);
+  const cadastro = useTanquesFilial(filialId);
+  const [secoes, setSecoes] = useState<SecaoImportar[]>(() => doc.secoes.map(s => ({ ...s, combustiveis: s.tanques.map(x => acharCombustivel(x.combustivelTexto, combustiveis)) })));
+  const [abrir, setAbrir] = useState<string | null>(null);
+  const nomeComb = (id: string) => combustiveis.find(c => c.id === id)?.nome ?? '';
+  const corComb = (id: string) => combustiveis.find(c => c.id === id)?.cor ?? colors.surfaceMuted;
+  const outraFilial = doc.filial !== null && Number(doc.filial) !== Number(filialCodigo);
+  const semComb = secoes.reduce((n, s) => n + s.combustiveis.filter(c => !c).length, 0);
+  const total = secoes.reduce((n, s) => n + s.tanques.length, 0);
+  const mudarComb = (si: number, ti: number, id: string) => {
+    setSecoes(l => l.map((s, i) => (i === si ? { ...s, combustiveis: s.combustiveis.map((c, j) => (j === ti ? id : c)) } : s)));
+    setAbrir(null);
+  };
+  const gravar = () => {
+    const r = importarDocumento(filialId, secoes, cadastro, tabelas, arquivo);
+    notify('Filial cadastrada', `${r.tabelas} tabela(s) e ${r.novos + r.atualizados} tanque(s) (${r.novos} novo(s), ${r.atualizados} atualizado(s)), cada um ligado à sua tabela.`);
+    onFechar();
+  };
+  const confirmar = () => {
+    if (outraFilial) {
+      confirmAction('Filial diferente', `O PDF é da Filial ${doc.filial}, mas você está na filial ${filialCodigo}. Cadastrar mesmo assim nesta filial?`, 'Cadastrar', gravar);
+      return;
+    }
+    gravar();
+  };
+
+  return (
+    <Sheet title="Importar PDF da filial" onClose={onFechar}
+      footer={<Button title={`Cadastrar ${total} tanque(s) e ${secoes.length} tabela(s)`} icon={CheckIcon} onPress={confirmar} />}>
+      <Text style={t.body}>{arquivo}{doc.filial ? ` · Filial ${doc.filial}` : ''}</Text>
+      {outraFilial ? (
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}><WarningIcon size={18} color={colors.danger} />
+          <Text style={[t.body, { flex: 1, color: colors.danger, fontWeight: '700' }]}>Este PDF é da Filial {doc.filial}, e você está na filial {filialCodigo}. Confira antes de cadastrar.</Text></View>
+      ) : null}
+      {semComb ? (
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}><WarningIcon size={18} color={colors.warning} />
+          <Text style={[t.body, { flex: 1 }]}>{semComb} combustível(is) não reconhecido(s): toque no tanque para escolher.</Text></View>
+      ) : null}
+      {secoes.map((s, si) => {
+        const conferir = pontosParaConferir(s.tabela.pontos).length;
+        const avisos = [
+          conferir ? `${conferir} volume(s) fora da curva: confira a tabela depois de importar.` : '',
+          s.tabela.repetidos.length ? `Alturas repetidas: ${s.tabela.repetidos.join(', ')} cm.` : '',
+          s.tabela.foraDeOrdem.length ? `Volumes que não crescem ignorados: ${s.tabela.foraDeOrdem.join(', ')} cm.` : '',
+          s.tabela.pontos.length < 10 ? 'Tabela não encontrada nesta parte do PDF.' : '',
+        ].filter(Boolean);
+        const substitui = tabelas.some(x => x.nome.trim().toLowerCase() === s.nome.trim().toLowerCase());
+        return (
+          <Card key={si} style={{ gap: 6 }}>
+            <Text style={t.bodyStrong}>{s.nome}</Text>
+            <Text style={t.caption}>
+              {s.tabela.pontos.length} alturas · {fmt(volumeTotal(s.tabela))} L em {fmt(s.tabela.diametro_cm ?? s.tabela.pontos[s.tabela.pontos.length - 1]?.[0])} cm
+              {s.tabela.comprimento_m ? ` · comp. ${fmt(s.tabela.comprimento_m)} m` : ''}{substitui ? ' · substitui a tabela de mesmo nome' : ' · tabela nova'}
+            </Text>
+            {avisos.map(a => <Text key={a} style={[t.caption, { color: colors.warning, fontWeight: '700' }]}>{a}</Text>)}
+            {s.tanques.map((tq, ti) => {
+              const comb = s.combustiveis[ti];
+              const chave = `${si}-${ti}`;
+              const ja = cadastro.some(x => x.numero.trim().toLowerCase() === tq.numero.toLowerCase());
+              return (
+                <View key={chave} style={{ gap: 6 }}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Tanque ${tq.numero}: escolher combustível`} onPress={() => setAbrir(abrir === chave ? null : chave)}
+                    style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border }, pressed && { opacity: 0.7 }]}>
+                    <View style={{ minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 6, backgroundColor: comb ? corComb(comb) : colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: '#fff', fontWeight: '800' }}>{tq.numero}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={t.bodyStrong}>Tanque {tq.numero} · {comb ? nomeComb(comb) : <Text style={{ color: colors.danger }}>escolha o combustível</Text>}</Text>
+                      <Text style={t.caption}>No PDF: {tq.combustivelTexto}{tq.capacidade ? ` · ${fmt(tq.capacidade)} L` : ''} · {ja ? 'já cadastrado (atualiza)' : 'novo'}</Text>
+                    </View>
+                  </Pressable>
+                  {abrir === chave ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {combustiveis.filter(c => c.ativo !== false).map(c => (
+                        <Pressable key={c.id} accessibilityRole="radio" accessibilityState={{ selected: comb === c.id }} onPress={() => mudarComb(si, ti, c.id)}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 10, borderRadius: radius.pill, borderWidth: 1.5, borderColor: comb === c.id ? colors.accent : colors.borderStrong, backgroundColor: comb === c.id ? colors.accentSoft : colors.campo }}>
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.cor }} />
+                          <Text style={[t.caption, { color: colors.text }, comb === c.id && { fontWeight: '800' }]}>{c.nome}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </Card>
+        );
+      })}
+      <Text style={t.caption}>Tanques com o mesmo número são atualizados (combustível, capacidade, tipo e marca) e passam a usar a tabela da sua parte do PDF. Os demais tanques da filial não mudam.</Text>
+    </Sheet>
+  );
 }
 
 function EditorTabela({ inicial, nova, avisos, outras, filialNome, tanquesConhecidos, onFechar }: {

@@ -139,6 +139,86 @@ export function lerTabela(linhas: string[]): TabelaLida {
   };
 }
 
+/* ---------- Documento da filial (tanques + tabelas, mesmo layout em todas as filiais) ---------- */
+
+export type TipoFisico = 'simples' | 'bipartido' | 'tripartido';
+export type TanqueLido = { numero: string; combustivelTexto: string; capacidade: number | null };
+export type SecaoLida = {
+  /** Ex.: "ARXO 10.000 L · Tripartido (10/10/10)". */
+  nome: string; modelo: string; tipo: TipoFisico; particao: string;
+  tanques: TanqueLido[];
+  tabela: TabelaLida;
+};
+export type DocumentoLido = { filial: string | null; secoes: SecaoLida[] };
+
+const CABECALHO = /^\s*FILIAL\s+(\d+)\s*[—–-]*\s*TANQUES?\s+[\dA-Z,\s]+?\s*\(([^)]+)\)/i;
+
+/**
+ * Lê o documento padrão da filial: uma seção por tanque físico, cada uma com
+ * "FILIAL 03 — TANQUES 3, 4 E 5 (ARXO 10.000 L)", o tipo ("TRIPARTIDO (10/10/10)"),
+ * "Tanques: Tq. 3 Gas. Comum (10.000 L) • Tq. 4 …", "Dimensões: Ø Int. = 2.549 mm • Comp. = 1.995,8 mm",
+ * "Vol. Máx. (254 cm): 10.181 L" e a tabela (pares cm/litros lado a lado, que podem continuar na página seguinte).
+ * Sem esse layout, devolve `null` (o PDF é lido como uma tabela só).
+ */
+export function lerDocumentoFilial(linhas: string[]): DocumentoLido | null {
+  const inicios = linhas.map((l, i) => (CABECALHO.test(l) ? i : -1)).filter(i => i >= 0);
+  if (!inicios.length) return null;
+  let filial: string | null = null;
+  const secoes: SecaoLida[] = [];
+  inicios.forEach((ini, k) => {
+    const bloco = linhas.slice(ini, inicios[k + 1] ?? linhas.length);
+    const texto = bloco.filter(l => !/^[\d\s.,*—–-]+$/.test(l)).join(' ').replace(/\s+/g, ' ');
+    const cab = CABECALHO.exec(bloco[0])!;
+    filial ??= cab[1];
+    const modelo = cab[2].trim();
+    const tp = /\b(SIMPLES|BIPARTIDO|TRIPARTIDO)\b\s*(?:\(([\d\s/]+)\))?/i.exec(texto);
+    const tipo = (tp?.[1].toLowerCase() ?? 'simples') as TipoFisico;
+    const particao = tp?.[2]?.replace(/\s/g, '') ?? '';
+    // Só a lista "Tanques: Tq. 3 … (10.000 L) • Tq. 4 …" (a nota técnica também cita os tanques, sem "Tq.").
+    const lista = /Tanques\s*:(.*?)(?:Dimens|Vol\.|$)/i.exec(texto)?.[1] ?? texto;
+    const tanques: TanqueLido[] = [];
+    for (const m of lista.matchAll(/Tq\.?\s*(\d+[A-Z]?)\s+([^(•]+?)\s*\(\s*([\d.]+)\s*L\b/gi)) {
+      if (tanques.some(x => x.numero === m[1])) continue;
+      const cap = numeroBR(m[3]);
+      tanques.push({ numero: m[1], combustivelTexto: m[2].trim(), capacidade: Number.isFinite(cap) ? cap : null });
+    }
+    const tabela = lerTabela(bloco);
+    const diam = /Ø\s*(?:Int\.?)?\s*=?\s*([\d.,]+)\s*mm/i.exec(texto);
+    const comp = /Comp\.?\s*=?\s*([\d.,]+)\s*mm/i.exec(texto);
+    const max = /Vol\.?\s*M[áa]x\.?\s*\(\s*(\d+(?:,\d+)?)\s*cm\s*\)/i.exec(texto);
+    const ultimo = tabela.pontos[tabela.pontos.length - 1]?.[0] ?? null;
+    const alturaMax = max ? numeroBR(max[1]) : NaN;
+    const diamMm = diam ? numeroBR(diam[1]) : NaN;
+    tabela.diametro_cm = Number.isFinite(alturaMax) ? alturaMax : Number.isFinite(diamMm) ? Math.round(diamMm / 10) : ultimo;
+    const compMm = comp ? numeroBR(comp[1]) : NaN;
+    if (Number.isFinite(compMm)) tabela.comprimento_m = Math.round(compMm * 10) / 10000;
+    const nominal = numeroBR(/([\d.]+)\s*L\b/i.exec(modelo)?.[1] ?? '');
+    tabela.capacidade = Number.isFinite(nominal) ? nominal : tabela.capacidade;
+    const nomeTipo = tipo === 'simples' ? '' : ` · ${tipo[0].toUpperCase()}${tipo.slice(1)}${particao ? ` (${particao})` : ''}`;
+    if (tanques.length || tabela.pontos.length) secoes.push({ nome: `${modelo}${nomeTipo}`, modelo, tipo, particao, tanques, tabela });
+  });
+  return secoes.some(x => x.tanques.length) ? { filial, secoes } : null;
+}
+
+/** Combustível do cadastro pelo nome no documento ("Gas. Comum" → Gasolina comum, "Diesel Comum" → Diesel S500). */
+export function acharCombustivel(texto: string, combustiveis: { id: string; nome: string; ativo?: boolean }[]): string {
+  const limpar = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/\bgas\b\.?/g, 'gasolina').replace(/\bgasol\b\.?/g, 'gasolina').replace(/\bet\b\.?/g, 'etanol').replace(/\badit\b\.?/g, 'aditivada')
+    .replace(/\bs[\s-]*(10|500)\b/g, 's$1').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  let alvo = limpar(texto);
+  if (alvo === 'diesel comum') alvo = 'diesel s500';
+  if (alvo === 'gasolina') alvo = 'gasolina comum';
+  if (alvo === 'etanol comum' || alvo === 'alcool') alvo = 'etanol';
+  const lista = combustiveis.filter(c => c.ativo !== false);
+  const exato = lista.find(c => limpar(c.nome) === alvo);
+  if (exato) return exato.id;
+  // Todas as palavras do documento no nome do cadastro (o mais curto primeiro: "Diesel aditivado" antes de outros).
+  const pal = alvo.split(' ').filter(Boolean);
+  const cand = lista.filter(c => { const n = limpar(c.nome).split(' '); return pal.every(w => n.includes(w.replace(/o$/, '')) || n.includes(w) || n.some(x => x.startsWith(w))); })
+    .sort((a, b) => a.nome.length - b.nome.length);
+  return cand[0]?.id ?? '';
+}
+
 /**
  * Pontos fora da curva (provável erro de digitação/leitura): compara cada volume com o previsto pelos dois
  * vizinhos de cada lado (interpolação cúbica). Só onde a tabela vai de 1 em 1 cm.
