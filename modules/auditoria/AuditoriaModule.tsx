@@ -19,6 +19,7 @@ import {
   type StatusReq, tituloCurto, uid,
 } from './model';
 import { Deslizavel } from '../tempos/Deslizavel';
+import { ModoCartoes } from './ModoCartoes';
 import { apagarFoto, auditoriasCol, enviarFoto, escolherFotos, fotosEmbutidas, guardarRelatorio, lerRelatorio, linksDasFotos, modelosCol, useAuditorias, useLinksFotos, useModelos } from './store';
 
 const SESSAO = 'nevoeiro.auditoria.sessao.v1';
@@ -302,6 +303,8 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
   const setores = useMemo(() => [...new Set(itens.map(i => setorDoItem(i, auditoria)).filter(Boolean))], [itens, auditoria.modelo_id]); // eslint-disable-line react-hooks/exhaustive-deps
   const nAcao = cat.lista.filter(x => x.acao).reduce((n, x) => n + c[x.codigo], 0);
   const [novoReq, setNovoReq] = useState(false);
+  /** Modo cartões (deslizar para avaliar), opcional. */
+  const [cartoes, setCartoes] = useState(false);
   const q = busca.trim().toLowerCase();
   // Número digitado = o item com esse número; texto = requisito ou observação. O item aberto fica na lista
   // mesmo saindo do filtro (ex.: avaliado em "Pendentes"), até ser concluído.
@@ -448,7 +451,10 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
     <View style={[s.stack, { marginBottom: space.sm }]}>
       {identificacao}
       {filtrosView}
-      <Button title="Adicionar requisito" icon={PlusIcon} variant="secondary" size="sm" style={s.alignStart} onPress={() => setNovoReq(true)} />
+      <View style={[s.row, { flexWrap: 'wrap' }]}>
+        <Button title="Modo cartões (deslizar)" icon={ListChecksIcon} size="sm" onPress={() => (c.pendentes ? setCartoes(true) : notify('Nada pendente', 'Todos os requisitos já foram avaliados.'))} />
+        <Button title="Adicionar requisito" icon={PlusIcon} variant="secondary" size="sm" onPress={() => setNovoReq(true)} />
+      </View>
     </View>
   );
   /** Requisito novo durante a auditoria; opcionalmente guardado também no checklist para as próximas. */
@@ -572,6 +578,7 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
         )}
       />
       {email}
+      {cartoes ? <ModoCartoes itens={itens} cat={cat} setorDe={i => setorDoItem(i, auditoria)} filial={filial} onMudar={mudarItem} onFechar={() => setCartoes(false)} /> : null}
       {novoReq ? <NovoRequisito setores={setores} modeloNome={(modelosAtuais.find(x => x.id === (auditoria.modelo_id || MODELO_PADRAO)) ?? modelosAtuais[0]).nome}
         onClose={() => setNovoReq(false)} onSalvar={adicionarRequisito} /> : null}
     </View>

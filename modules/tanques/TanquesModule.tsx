@@ -12,6 +12,7 @@ import { Button, Card, confirmAction, EmptyState, Field, IconButton, ListRow, no
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
 import { Deslizavel } from '../tempos/Deslizavel';
+import { MedicaoInterativa } from './MedicaoInterativa';
 import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
@@ -156,6 +157,8 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
 /* ---------------- Medição ---------------- */
 function NumeroCampo({ label, valor, onChange, editavel }: { label: string; valor: number | null; onChange: (v: number | null) => void; editavel: boolean }) {
   const [texto, setTexto] = useState(valor === null ? '' : String(valor).replace('.', ','));
+  // Acompanha o valor gravado por outra tela (ex.: medição interativa), sem atrapalhar o que está sendo digitado.
+  useEffect(() => { if (lerNumero(texto) !== valor) setTexto(valor === null ? '' : String(valor).replace('.', ',')); }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
   return <Field label={label} value={texto} editable={editavel} keyboardType="decimal-pad" placeholder="0" style={{ flexGrow: 1, flexBasis: 130 }}
     onChangeText={v => { setTexto(v); const n = lerNumero(v); if (n !== null || !v.trim()) onChange(n); }} />;
 }
@@ -172,6 +175,12 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
   const r = resumo(m);
   const salvar = (patch: Partial<Medicao>) => medicoesCol.put({ ...m, ...patch });
   const mudarLinha = (id: string, p: Partial<LinhaTanque>) => salvar({ tanques: m.tanques.map(l => (l.id === id ? { ...l, ...p } : l)) });
+  /** Mesma gravação, partindo da medição mais recente (a tela interativa grava altura e litros em seguida). */
+  const mudarLinhaAtual = (id: string, p: Partial<LinhaTanque>) => {
+    const atual = medicoesCol.get(m.id) ?? m;
+    medicoesCol.put({ ...atual, tanques: atual.tanques.map(l => (l.id === id ? { ...l, ...p } : l)) });
+  };
+  const [interativa, setInterativa] = useState(false);
   /** Venda e recebimento são do combustível (unificados), não do tanque. */
   const mudarCombustivel = (c: string, p: Partial<ValoresCombustivel>) => salvar({ combustiveis: valoresPorCombustivel(m).map(v => (v.combustivel === c ? { ...v, ...p } : v)) });
   const tom = (v: number) => (v < 0 ? colors.danger : v > 0 ? colors.warning : colors.success);
@@ -220,6 +229,8 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
         </View>
       </Card>
     ))}
+    {!fin && m.tanques.length ? <Button title="Medição interativa (régua no tanque)" icon={RulerIcon} onPress={() => setInterativa(true)} /> : null}
+    {interativa ? <MedicaoInterativa tanques={m.tanques} filial={filialNome} nomeComb={nomeComb} corComb={corComb} onMudar={mudarLinhaAtual} onFechar={() => setInterativa(false)} /> : null}
     {!fin ? <Button title="Adicionar tanque" icon={PlusIcon} variant="secondary" onPress={() => salvar({ tanques: [...m.tanques, linhaVazia(String(m.tanques.length + 1))] })} /> : null}
     {!fin && croqui.length && !confereComCroqui(m.tanques, croqui) ? (
       <Button title={`Usar os tanques do croqui (${croqui.length})`} icon={ResetIcon} variant="secondary"
