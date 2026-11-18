@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUsuarioLogado } from '../../lib/auth';
 import type { Filial } from '../../lib/data';
@@ -9,14 +9,14 @@ import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { imprimirHtml, pdfBase64 } from '../../lib/util';
 import {
-  ArrowLeftIcon, CalendarBlankIcon, EyeIcon, CameraIcon, CheckIcon, ClipboardTextIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, EnvelopeIcon, FilePdfIcon,
+  ArrowLeftIcon, CalendarBlankIcon, CaretDownIcon, CaretUpIcon, EyeIcon, CameraIcon, CheckIcon, ClipboardTextIcon, InfoIcon, PencilSimpleIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, EnvelopeIcon, FilePdfIcon,
   ImagesIcon, MagnifyingGlassIcon, PlusIcon, ResetIcon, SealCheckIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill, type Tone } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import {
-  type Auditoria, contar, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, novosItens, PEDE_ACAO, type RelatorioFinal, relatorioHtml, ROTULO, ROTULO_CURTO, STATUS,
-  type StatusReq, uid,
+  type Auditoria, COMO_AVALIAR, contar, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, novosItens, PEDE_ACAO, type RelatorioFinal, relatorioHtml, ROTULO, ROTULO_CURTO, SETORES, setorDo, STATUS,
+  type StatusReq, tituloCurto, uid,
 } from './model';
 import { apagarFoto, auditoriasCol, enviarFoto, escolherFotos, fotosEmbutidas, guardarRelatorio, lerRelatorio, linksDasFotos, useAuditorias, useLinksFotos } from './store';
 
@@ -63,7 +63,7 @@ export default function AuditoriaModule() {
         {syncPill}
       </View>
       {!loaded || !sessaoPronta ? <View style={s.flex} />
-        : aberta ? <AuditoriaTela key={aberta.id} auditoria={aberta} filiais={filiais} onVoltar={() => setAbertaId(null)} />
+        : aberta ? <AuditoriaTela key={aberta.id} auditoria={aberta} filiais={filiais} sincronizado={status !== 'error'} onVoltar={() => setAbertaId(null)} />
         : <ListaAuditorias auditorias={auditorias} filiais={filiais} onAbrir={setAbertaId} />}
     </SafeAreaView>
   );
@@ -180,14 +180,20 @@ function NovaAuditoria({ filiais, nomePadrao, onClose, onCriar }: { filiais: Fil
 /* =====================================================================
    Auditoria: checklist
    ===================================================================== */
-function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria; filiais: Filial[]; onVoltar: () => void }) {
+function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditoria: Auditoria; filiais: Filial[]; sincronizado: boolean; onVoltar: () => void }) {
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const s = useMemo(() => estilos(colors), [colors]);
   const [cab, setCab] = useState({ data: auditoria.data, auditores: auditoria.auditores, escopo: auditoria.escopo });
   const [itens, setItens] = useState<ItemAuditoria[]>(auditoria.itens);
-  const [filtro, setFiltro] = useState<Filtro>('todos');
+  // Execução: abre em "Pendentes" (a fila diminui sozinha conforme os itens são avaliados).
+  const [filtro, setFiltro] = useState<Filtro>(auditoria.status === 'concluida' ? 'todos' : 'pendentes');
   const [busca, setBusca] = useState('');
+  const [setor, setSetor] = useState('');
+  /** Requisito expandido (só um por vez). */
+  const [aberto, setAberto] = useState<number | null>(null);
+  const [identAberta, setIdentAberta] = useState(false);
+  const lista = useRef<FlatList<ItemAuditoria>>(null);
   const [enviando, setEnviando] = useState<Record<number, boolean>>({});
   const [emailAberto, setEmailAberto] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
@@ -247,7 +253,25 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
   const links = useLinksFotos(todasFotos);
   const c = contar(itens);
   const q = busca.trim().toLowerCase();
-  const visiveis = itens.filter(i => (filtro === 'todos' || (filtro === 'pendentes' ? !i.status : i.status === filtro)) && (!q || `${i.id} ${i.titulo} ${i.obs}`.toLowerCase().includes(q)));
+  // Número digitado = o item com esse número; texto = requisito ou observação. O item aberto fica na lista
+  // mesmo saindo do filtro (ex.: avaliado em "Pendentes"), até ser concluído.
+  const bate = (i: ItemAuditoria) => (filtro === 'todos' || (filtro === 'pendentes' ? !i.status : i.status === filtro))
+    && (!setor || setorDo(i.id) === setor)
+    && (!q || (/^\d+$/.test(q) ? String(i.id) === q : `${i.titulo} ${i.obs}`.toLowerCase().includes(q)));
+  const visiveis = itens.filter(i => i.id === aberto || bate(i));
+  const avaliados = itens.length - c.pendentes;
+  const pct = itens.length ? Math.round((avaliados / itens.length) * 100) : 0;
+  const itemAberto = aberto !== null ? itens.find(i => i.id === aberto) : undefined;
+
+  /** Abre um requisito (fecha o anterior) e o traz para o topo da lista. */
+  const abrir = useCallback((id: number | null) => {
+    setAberto(id);
+    if (id === null) return;
+    setTimeout(() => {
+      const idx = itensRef.current.filter(i => i.id === id || bate(i)).findIndex(i => i.id === id);
+      if (idx >= 0) lista.current?.scrollToIndex({ index: idx, viewPosition: 0, animated: true });
+    }, 60);
+  }, [filtro, setor, q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Concluída com relatório final guardado: usa o arquivo guardado (é ele que tem as fotos). Senão, monta na hora. */
   const gerarHtml = async (caminho = concluida ? ultimoRelatorio?.caminho : undefined) => {
@@ -310,46 +334,70 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
   });
 
   const filtros: { id: Filtro; rotulo: string; n: number; tom: Tone }[] = [
-    { id: 'todos', rotulo: 'Todos', n: itens.length, tom: 'neutral' },
     { id: 'pendentes', rotulo: 'Pendentes', n: c.pendentes, tom: 'accent' },
-    ...STATUS.map(st => ({ id: st as Filtro, rotulo: ROTULO_CURTO[st], n: c[st], tom: TOM[st] })),
+    { id: 'todos', rotulo: 'Todos', n: itens.length, tom: 'neutral' },
+    ...(['NC', 'OB', 'OM', 'C', 'PP', 'NA'] as StatusReq[]).map(st => ({ id: st as Filtro, rotulo: st, n: c[st], tom: TOM[st] })),
   ];
+  const corTom = (tom: Tone) => (tom === 'danger' ? colors.danger : tom === 'warning' ? colors.warning : tom === 'success' ? colors.success : tom === 'accent' ? colors.accentText : colors.textMuted);
+  const pilula = (key: string, rotulo: string, on: boolean, onPress: () => void, cor?: string) => (
+    <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={onPress} hitSlop={4}
+      style={[s.pilula, on && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}>
+      <Text style={[s.pilulaTxt, { color: on ? colors.accentText : cor ?? colors.text }]} numberOfLines={1}>{rotulo}</Text>
+    </Pressable>
+  );
   const filtrosView = (
-    <>
-      <View style={s.filtros}>
-        {filtros.map(f => {
-          const on = filtro === f.id;
-          return (
-            <Pressable key={f.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setFiltro(on && f.id !== 'todos' ? 'todos' : f.id)}
-              style={[s.filtro, on && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}>
-              <Text style={[s.filtroNum, { color: f.tom === 'danger' ? colors.danger : f.tom === 'warning' ? colors.warning : f.tom === 'success' ? colors.success : f.tom === 'accent' ? colors.accentText : colors.text }]}>{f.n}</Text>
-              <Text style={[t.caption, on && { color: colors.accentText, fontWeight: '700' }]} numberOfLines={1}>{f.rotulo}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar requisito ou observação" />
-    </>
+    <View style={{ gap: space.sm }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pilulas} keyboardShouldPersistTaps="handled">
+        {filtros.map(f => pilula(f.id, `${f.rotulo} (${f.n})`, filtro === f.id, () => setFiltro(f.id), corTom(f.tom)))}
+      </ScrollView>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pilulas} keyboardShouldPersistTaps="handled">
+        {pilula('setor-todos', 'Todos os setores', !setor, () => setSetor(''))}
+        {SETORES.map(x => pilula(x.id, x.nome, setor === x.id, () => setSetor(setor === x.id ? '' : x.id)))}
+      </ScrollView>
+      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar requisito, nº ou palavra-chave" autoCorrect={false} />
+    </View>
   );
 
-  const cabecalho = (
-    <View style={s.stack}>
-      <Button title="Auditorias" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={onVoltar} />
-      <View style={s.pageHead}>
-        <View style={s.flex}>
-          <Text style={t.title} numberOfLines={1}>{filial}</Text>
-          <Text style={t.caption}>{dataBR(cab.data)} · {itens.length - c.pendentes} de {itens.length} requisitos avaliados</Text>
-        </View>
-        <StatusPill label={concluida ? 'Concluída' : 'Rascunho'} tone={concluida ? 'success' : 'accent'} icon={concluida ? SealCheckIcon : undefined} />
+  /** Barra fixa no topo: filial, situação, progresso e o item que está sendo coletado. */
+  const barraFixa = (
+    <View style={s.fixo}>
+      <View style={s.row}>
+        <IconButton icon={ArrowLeftIcon} label="Voltar às auditorias" onPress={onVoltar} />
+        <Text style={s.fixoFilial} numberOfLines={1}>{filial}</Text>
+        <StatusPill label={!sincronizado ? 'Sem sincronizar' : concluida ? 'Concluída' : 'Rascunho'} tone={!sincronizado ? 'warning' : concluida ? 'success' : 'accent'} icon={sincronizado ? CloudCheckIcon : CloudSlashIcon} />
       </View>
-      <Card>
-        <Text style={t.label}>Identificação</Text>
+      <View style={s.progTrilho}><View style={[s.progBarra, { width: `${pct}%` }]} /></View>
+      <View style={s.row}>
+        <Text style={[t.caption, s.flex]} numberOfLines={1}>{avaliados} de {itens.length} avaliados · {pct}%</Text>
+        {c.NC ? <Text style={[t.caption, { color: colors.danger, fontWeight: '700' }]}>{c.NC} NC</Text> : null}
+      </View>
+      {itemAberto ? <Text style={s.coletando} numberOfLines={1}>Coletando: #{itemAberto.id} - {tituloCurto(itemAberto.titulo)}</Text> : null}
+    </View>
+  );
+
+  /** Identificação recolhida numa linha; "Editar dados" abre os campos. */
+  const identificacao = (
+    <Card style={{ gap: space.sm }}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: identAberta }} onPress={() => setIdentAberta(v => !v)} style={s.row}>
+        <CalendarBlankIcon size={16} color={colors.textMuted} />
+        <Text style={[t.caption, s.flex]} numberOfLines={1}>{dataBR(cab.data)} · {cab.auditores || 'sem auditor'} · {cab.escopo || ESCOPO_PADRAO}</Text>
+        <View style={[s.row, { gap: 4 }]}>
+          <PencilSimpleIcon size={14} color={colors.accentText} />
+          <Text style={[t.caption, { color: colors.accentText, fontWeight: '700' }]}>{identAberta ? 'Fechar' : 'Editar dados'}</Text>
+        </View>
+      </Pressable>
+      {identAberta ? <>
         <Field label="Data da auditoria" helper="Formato AAAA-MM-DD" icon={CalendarBlankIcon} value={cab.data} onChangeText={v => mudarCab('data', v)} />
         <Field label="Auditor(es)" value={cab.auditores} onChangeText={v => mudarCab('auditores', v)} placeholder="Nome de quem audita" />
         <Field label="Processo / escopo" value={cab.escopo} onChangeText={v => mudarCab('escopo', v)} />
-      </Card>
+      </> : null}
+    </Card>
+  );
+
+  const cabecalho = (
+    <View style={[s.stack, { marginBottom: space.sm }]}>
+      {identificacao}
       {filtrosView}
-      <View style={{ height: space.xs }} />
     </View>
   );
 
@@ -435,24 +483,30 @@ function AuditoriaTela({ auditoria, filiais, onVoltar }: { auditoria: Auditoria;
   );
 
   return (
-    <>
+    <View style={s.flex}>
+      {barraFixa}
       <FlatList
+        ref={lista}
         data={visiveis}
         keyExtractor={i => String(i.id)}
         contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
-        initialNumToRender={6}
-        windowSize={7}
-        ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
+        initialNumToRender={14}
+        windowSize={9}
+        ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
         ListHeaderComponent={cabecalho}
         ListFooterComponent={rodape}
-        ListEmptyComponent={<EmptyState icon={MagnifyingGlassIcon} title="Nenhum requisito neste filtro" text="Troque o filtro ou a busca." />}
+        onScrollToIndexFailed={e => lista.current?.scrollToOffset({ offset: e.averageItemLength * e.index, animated: true })}
+        ListEmptyComponent={<EmptyState icon={filtro === 'pendentes' && !q && !setor ? SealCheckIcon : MagnifyingGlassIcon}
+          title={filtro === 'pendentes' && !q && !setor ? 'Todos os requisitos avaliados' : 'Nenhum requisito neste filtro'}
+          text={filtro === 'pendentes' && !q && !setor ? 'Toque em "Todos" ou num status para revisar, ou conclua a auditoria abaixo.' : 'Troque o filtro, o setor ou a busca.'} />}
         renderItem={({ item }) => (
-          <ItemCard item={item} links={links} enviando={!!enviando[item.id]} onMudar={mudarItem} onFoto={adicionarFotos} onRemoverFoto={removerFoto} />
+          <ItemAcordeao item={item} aberto={item.id === aberto} links={links} enviando={!!enviando[item.id]}
+            onAbrir={abrir} onMudar={mudarItem} onFoto={adicionarFotos} onRemoverFoto={removerFoto} />
         )}
       />
       {email}
-    </>
+    </View>
   );
 }
 
@@ -544,6 +598,103 @@ const ItemCard = memo(function ItemCard({ item, links, enviando, somenteLeitura 
   );
 });
 
+/* ---------- Requisito em acordeão (execução em campo) ---------- */
+type AcordeaoProps = ItemProps & { aberto: boolean; onAbrir: (id: number | null) => void };
+const ItemAcordeao = memo(function ItemAcordeao({ item, aberto, links, enviando, onAbrir, onMudar, onFoto, onRemoverFoto }: AcordeaoProps) {
+  const { colors } = useContext(ThemeContext);
+  const t = useMemo(() => createTypography(colors), [colors]);
+  const s = useMemo(() => estilos(colors), [colors]);
+  const [verCriterio, setVerCriterio] = useState(false);
+  /** Muda a cada NC/OB/OM/PP escolhido: remonta o campo de observações já com o foco nele. */
+  const [foco, setFoco] = useState(0);
+  const st = item.status;
+  const pedeAcao = !!st && PEDE_ACAO.includes(st);
+  const cor = (x: StatusReq) => { const tom = TOM[x]; return tom === 'danger' ? colors.danger : tom === 'warning' ? colors.warning : tom === 'success' ? colors.success : tom === 'accent' ? colors.accentText : colors.textMuted; };
+  const selo = st ? (
+    <View style={[s.selo, { borderColor: cor(st) }]}><Text style={[s.seloTxt, { color: cor(st) }]}>{st}</Text></View>
+  ) : null;
+
+  if (!aberto) {
+    return (
+      <Pressable accessibilityRole="button" accessibilityLabel={`Item ${item.id}: ${tituloCurto(item.titulo)}${st ? `, ${ROTULO[st]}` : ', pendente'}`}
+        onPress={() => onAbrir(item.id)} style={({ pressed }) => [s.fechado, st === 'NC' && { borderColor: colors.danger }, pressed && { opacity: 0.8 }]}>
+        <View style={s.num}><Text style={s.numTxt}>{item.id}</Text></View>
+        <Text style={[t.body, s.flex]} numberOfLines={2}>{tituloCurto(item.titulo)}</Text>
+        {selo}
+        <CaretDownIcon size={14} color={colors.textFaint} />
+      </Pressable>
+    );
+  }
+
+  /** C e NA: grava e fecha. NC, OB, OM e PP: grava e fica aberto, com o foco nas observações. */
+  const escolher = (v: StatusReq) => {
+    if (v === st) { onMudar(item.id, { status: '' }, true); return; }
+    onMudar(item.id, { status: v }, true);
+    if (v === 'C' || v === 'NA') onAbrir(null);
+    else setFoco(n => n + 1);
+  };
+  return (
+    <View style={[s.aberto, { borderColor: st === 'NC' ? colors.danger : colors.accent }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Recolher item" onPress={() => onAbrir(null)} style={s.itemTopo}>
+        <View style={s.num}><Text style={s.numTxt}>{item.id}</Text></View>
+        <Text style={[t.bodyStrong, s.flex]}>{tituloCurto(item.titulo)}</Text>
+        {selo}
+        <CaretUpIcon size={16} color={colors.textMuted} />
+      </Pressable>
+
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: verCriterio }} onPress={() => setVerCriterio(v => !v)} style={[s.row, s.alignStart, { gap: 6 }]} hitSlop={6}>
+        <InfoIcon size={15} color={colors.accentText} />
+        <Text style={[t.caption, { color: colors.accentText, fontWeight: '700' }]}>{verCriterio ? 'Ocultar critério de avaliação' : 'Ver critério de avaliação'}</Text>
+      </Pressable>
+      {verCriterio ? (
+        <View style={s.criterio}>
+          <Text style={t.label}>O QUE VERIFICAR</Text>
+          <Text style={t.body}>{item.titulo}</Text>
+          <Text style={[t.label, { marginTop: 4 }]}>COMO AVALIAR</Text>
+          {STATUS.map(x => <Text key={x} style={t.caption}><Text style={{ fontWeight: '800', color: cor(x) }}>{x}</Text> · {COMO_AVALIAR[x]}</Text>)}
+        </View>
+      ) : null}
+
+      <View style={s.botoesStatus}>
+        {STATUS.map(x => {
+          const on = st === x;
+          return (
+            <Pressable key={x} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={ROTULO[x]} onPress={() => escolher(x)}
+              style={({ pressed }) => [s.botaoStatus, { borderColor: on ? cor(x) : colors.borderStrong, backgroundColor: on ? cor(x) : colors.surface }, pressed && { transform: [{ scale: 0.96 }] }]}>
+              <Text style={[s.botaoStatusTxt, { color: on ? colors.bg : cor(x) }]}>{x}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={t.caption}>{st ? ROTULO[st] : 'C ou NA gravam e fecham o item. NC, OB, OM e PP pedem a constatação.'}</Text>
+
+      <Field key={`obs-${foco}`} autoFocus={foco > 0} multiline value={item.obs} onChangeText={v => onMudar(item.id, { obs: v })}
+        placeholder={st && st !== 'C' && st !== 'NA' ? 'Observações / constatações da auditoria' : 'Observações (opcional)'} style={{ minHeight: 64 }} />
+      <View style={s.fotosLinha}>
+        {item.fotos.map(f => (
+          <View key={f} style={s.thumb}>
+            {links[f] ? <Image source={{ uri: links[f] }} style={s.thumbImg} accessibilityLabel={`Evidência do item ${item.id}`} /> : <View style={[s.thumbImg, { backgroundColor: colors.surfaceMuted }]} />}
+            <Pressable accessibilityLabel="Remover foto" hitSlop={8} onPress={() => onRemoverFoto(item.id, f)} style={s.thumbX}><XIcon size={12} color="#fff" weight="bold" /></Pressable>
+          </View>
+        ))}
+        {Platform.OS !== 'web' ? <Button title="Câmera" icon={CameraIcon} variant="secondary" size="sm" disabled={enviando} onPress={() => void onFoto(item.id, 'camera')} /> : null}
+        <Button title={enviando ? 'Enviando…' : Platform.OS === 'web' ? 'Anexar fotos' : 'Galeria'} icon={ImagesIcon} variant="secondary" size="sm" disabled={enviando} onPress={() => void onFoto(item.id, 'galeria')} />
+      </View>
+      {pedeAcao && (
+        <View style={s.acaoBox}>
+          <Text style={s.acaoLabel}>PLANO DE AÇÃO / TRATATIVA</Text>
+          <Field value={item.acao.tarefa} onChangeText={v => onMudar(item.id, { acao: { ...item.acao, tarefa: v } })} placeholder="Ação corretiva ou melhoria" />
+          <View style={s.twoCol}>
+            <Field style={s.flex} value={item.acao.responsavel} onChangeText={v => onMudar(item.id, { acao: { ...item.acao, responsavel: v } })} placeholder="Responsável" />
+            <Field style={{ width: 130 }} value={item.acao.prazo} onChangeText={v => onMudar(item.id, { acao: { ...item.acao, prazo: v } })} placeholder="Prazo AAAA-MM-DD" />
+          </View>
+        </View>
+      )}
+      {st ? <Button title="Concluir item" icon={CheckIcon} onPress={() => onAbrir(null)} /> : null}
+    </View>
+  );
+});
+
 /* ---------- Envio do relatório por e-mail ---------- */
 function EmailRelatorio({ titulo, arquivo, gerarHtml, onClose }: { titulo: string; arquivo: string; gerarHtml: () => Promise<string>; onClose: () => void }) {
   const { colors } = useContext(ThemeContext);
@@ -612,4 +763,21 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   thumbX: { position: 'absolute', right: -6, top: -6, width: 22, height: 22, borderRadius: 11, backgroundColor: '#182536', alignItems: 'center', justifyContent: 'center' },
   acaoBox: { gap: space.sm, padding: space.md, borderRadius: radius.control, borderWidth: 1, borderColor: '#f3e3b7', backgroundColor: c.surfaceMuted },
   acaoLabel: { fontSize: 11, fontWeight: '800', color: '#c17a13', letterSpacing: 0.5 },
+  // Execução em campo: barra fixa, pílulas e acordeão
+  fixo: { gap: 6, paddingHorizontal: space.md, paddingTop: 6, paddingBottom: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+  fixoFilial: { flex: 1, fontSize: 17, fontWeight: '800', color: c.text, letterSpacing: -0.2 },
+  progTrilho: { height: 6, borderRadius: 3, backgroundColor: c.neutralSoft, overflow: 'hidden' },
+  progBarra: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: c.mint },
+  coletando: { fontSize: 12.5, fontWeight: '700', color: c.accentText },
+  pilulas: { gap: 6, paddingRight: space.md },
+  pilula: { borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
+  pilulaTxt: { fontSize: 13, fontWeight: '700' },
+  fechado: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10, borderRadius: radius.control, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
+  aberto: { gap: space.sm, padding: space.md, borderRadius: radius.card, borderWidth: 1.5, backgroundColor: c.surface },
+  selo: { minWidth: 34, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill, borderWidth: 1.5, alignItems: 'center' },
+  seloTxt: { fontSize: 12, fontWeight: '800' },
+  criterio: { gap: 4, padding: space.md, borderRadius: radius.control, backgroundColor: c.surfaceMuted, borderWidth: 1, borderColor: c.border },
+  botoesStatus: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  botaoStatus: { flexGrow: 1, minWidth: 48, minHeight: 44, borderRadius: radius.control, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  botaoStatusTxt: { fontSize: 15, fontWeight: '800' },
 });

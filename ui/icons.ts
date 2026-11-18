@@ -93,3 +93,5 @@ export const GoogleLogoIcon: Icon = require('phosphor-react-native/src/icons/Goo
 export const BarcodeIcon: Icon = require('phosphor-react-native/src/icons/Barcode').BarcodeIcon;
 export const PackageIcon: Icon = require('phosphor-react-native/src/icons/Package').PackageIcon;
 export const CaretLeftIcon: Icon = require('phosphor-react-native/src/icons/CaretLeft').CaretLeftIcon;
+export const InfoIcon: Icon = require('phosphor-react-native/src/icons/Info').InfoIcon;
+export const CaretUpIcon: Icon = require('phosphor-react-native/src/icons/CaretUp').CaretUpIcon;

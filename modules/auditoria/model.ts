@@ -85,6 +85,34 @@ export const REQUISITOS: string[] = [
   'Na próxima auditoria será verificado se as não conformidades encontradas foram ajustadas adequadamente.',
 ];
 
+/* ---------- Setores, título curto e critério de avaliação ---------- */
+/** Setores do checklist, pela faixa de itens da planilha (filtro opcional na execução). */
+export const SETORES: { id: string; nome: string; de: number; ate: number }[] = [
+  { id: 'caixa', nome: 'Caixa e combustíveis', de: 1, ate: 6 },
+  { id: 'docs', nome: 'Documentação', de: 7, ate: 16 },
+  { id: 'produtos', nome: 'Produtos e qualidade', de: 17, ate: 26 },
+  { id: 'pessoas', nome: 'Pessoas', de: 27, ate: 34 },
+  { id: 'estrutura', nome: 'Estrutura e pista', de: 35, ate: 49 },
+  { id: 'gestao', nome: 'Gestão', de: 50, ate: 53 },
+];
+export const setorDo = (id: number) => SETORES.find(x => id >= x.de && id <= x.ate)?.id ?? '';
+
+/** Título curto do requisito (a primeira frase), para a lista compacta. */
+export function tituloCurto(titulo: string) {
+  const m = titulo.match(/^(.+?[.?!])(\s|$)/);
+  return (m ? m[1] : titulo).replace(/\.$/, '');
+}
+
+/** Como avaliar cada status (vale para todos os requisitos). */
+export const COMO_AVALIAR: Record<StatusReq, string> = {
+  C: 'atende ao requisito por completo.',
+  OB: 'atende, mas há um ponto a registrar ou acompanhar.',
+  OM: 'atende, mas pode melhorar (oportunidade de melhoria).',
+  NC: 'não atende ao requisito: registre a constatação e o plano de ação.',
+  PP: 'destaque positivo, acima do esperado.',
+  NA: 'não se aplica a esta filial.',
+};
+
 /* ---------- Utilidades ---------- */
 export const uid = (p: string) => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 export const hoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
