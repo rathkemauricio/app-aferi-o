@@ -4,7 +4,8 @@ import type { SyncRow } from '../../lib/sync';
 // Hierarquia: Filial (cadastro único) → Auditoria (data, auditores, escopo) → Requisitos.
 
 export const STATUS = ['C', 'OB', 'OM', 'NC', 'PP', 'NA'] as const;
-export type StatusReq = (typeof STATUS)[number];
+/** Código do status (os 6 padrão ou os criados num modelo de checklist). */
+export type StatusReq = string;
 export const ROTULO: Record<StatusReq, string> = {
   C: 'Conforme', OB: 'Observação', OM: 'Oportunidade de melhoria', NC: 'Não conforme', PP: 'Ponto positivo', NA: 'Não aplicável',
 };
@@ -13,7 +14,13 @@ export const ROTULO_CURTO: Record<StatusReq, string> = { C: 'Conforme', OB: 'Obs
 export const PEDE_ACAO: StatusReq[] = ['NC', 'OM', 'OB'];
 
 export type Acao = { tarefa: string; responsavel: string; prazo: string };
-export type ItemAuditoria = { id: number; titulo: string; status: StatusReq | ''; obs: string; acao: Acao; fotos: string[] };
+export type ItemAuditoria = {
+  id: number; titulo: string; status: StatusReq | ''; obs: string; acao: Acao; fotos: string[];
+  /** Setor do requisito (filtro na execução). */
+  setor?: string;
+  /** Requisito acrescentado durante a auditoria (não veio do modelo). */
+  extra?: boolean;
+};
 export type Auditoria = SyncRow & {
   filial_id: string;
   data: string;
@@ -23,7 +30,51 @@ export type Auditoria = SyncRow & {
   itens: ItemAuditoria[];
   /** Relatórios finais guardados (um por conclusão). As fotos ficam embutidas neles e são apagadas do Storage. */
   relatorios?: RelatorioFinal[];
+  /** Modelo de checklist usado ('padrao' ou o id do modelo cadastrado). Sem ele: o padrão. */
+  modelo_id?: string | null;
+  /** Status desta auditoria (copiados do modelo ao abrir; mudar o modelo depois não mexe nela). */
+  status_lista?: StatusDef[] | null;
 };
+
+/* ---------- Status configuráveis ---------- */
+/** Um status de avaliação: código curto, nome, cor; `acao` pede constatação e plano de ação; `fecha` grava e fecha o item. */
+export type StatusDef = { codigo: string; nome: string; cor: string; acao: boolean; fecha: boolean };
+export const STATUS_PADRAO: StatusDef[] = [
+  { codigo: 'C', nome: 'Conforme', cor: '#12b05a', acao: false, fecha: true },
+  { codigo: 'OB', nome: 'Observação', cor: '#1f7bff', acao: true, fecha: false },
+  { codigo: 'OM', nome: 'Oportunidade de melhoria', cor: '#ff8a00', acao: true, fecha: false },
+  { codigo: 'NC', nome: 'Não conforme', cor: '#ff2442', acao: true, fecha: false },
+  { codigo: 'PP', nome: 'Ponto positivo', cor: '#8b4dff', acao: false, fecha: false },
+  { codigo: 'NA', nome: 'Não aplicável', cor: '#7d8799', acao: false, fecha: true },
+];
+/** Cores oferecidas ao criar um status. */
+export const CORES_STATUS = ['#12b05a', '#1f7bff', '#ff8a00', '#ff2442', '#8b4dff', '#7d8799', '#00a6a6', '#e0a800', '#d6336c', '#5c4033'];
+export type Catalogo = {
+  lista: StatusDef[];
+  def: (c: string) => StatusDef | undefined;
+  cor: (c: string) => string;
+  nome: (c: string) => string;
+  acao: (c: string) => boolean;
+  fecha: (c: string) => boolean;
+};
+export function catalogo(lista?: StatusDef[] | null): Catalogo {
+  const l = lista?.length ? lista : STATUS_PADRAO;
+  const def = (c: string) => l.find(x => x.codigo === c) ?? STATUS_PADRAO.find(x => x.codigo === c);
+  return {
+    lista: l, def,
+    cor: c => def(c)?.cor ?? '#7d8799',
+    nome: c => def(c)?.nome ?? c,
+    acao: c => !!def(c)?.acao,
+    fecha: c => !!def(c)?.fecha,
+  };
+}
+export const catalogoDa = (a: Pick<Auditoria, 'status_lista'>) => catalogo(a.status_lista);
+
+/* ---------- Modelos de checklist ---------- */
+export type RequisitoModelo = { texto: string; setor?: string };
+/** Modelo de checklist (requisitos e status). O id 'padrao', se gravado, substitui o checklist padrão. */
+export type ModeloChecklist = SyncRow & { nome: string; requisitos: RequisitoModelo[]; status: StatusDef[] };
+export const MODELO_PADRAO = 'padrao';
 export type RelatorioFinal = { caminho: string; em: string; fotos: number };
 
 export const ESCOPO_PADRAO = 'Sistema de Gestão Integrada';
@@ -119,30 +170,43 @@ export const hoje = () => { const d = new Date(); return `${d.getFullYear()}-${S
 export const dataBR = (v: string) => { const p = String(v ?? '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : v; };
 export const dataValida = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00`));
 
-export const novosItens = (): ItemAuditoria[] =>
-  REQUISITOS.map((titulo, i) => ({ id: i + 1, titulo, status: '', obs: '', acao: { tarefa: '', responsavel: '', prazo: '' }, fotos: [] }));
+export const novosItens = (): ItemAuditoria[] => itensDoModelo(modeloPadrao());
 
-export type Contagem = Record<StatusReq | 'pendentes', number>;
+/** Checklist padrão (53 requisitos da planilha, com setor, e os 6 status). */
+export const modeloPadrao = (): ModeloChecklist => ({
+  id: MODELO_PADRAO, nome: ESCOPO_PADRAO, status: STATUS_PADRAO,
+  requisitos: REQUISITOS.map((texto, i) => ({ texto, setor: SETORES.find(x => i + 1 >= x.de && i + 1 <= x.ate)?.nome })),
+});
+/** Requisitos do modelo viram os itens da auditoria. */
+export const itensDoModelo = (m: Pick<ModeloChecklist, 'requisitos'>): ItemAuditoria[] =>
+  m.requisitos.map((r, i) => ({ id: i + 1, titulo: r.texto, setor: r.setor || undefined, status: '', obs: '', acao: { tarefa: '', responsavel: '', prazo: '' }, fotos: [] }));
+/** Setor do item: o gravado nele ou, nas auditorias antigas do checklist padrão, pela faixa de itens. */
+export const setorDoItem = (i: ItemAuditoria, a: Pick<Auditoria, 'modelo_id'>) =>
+  i.setor ?? (!a.modelo_id || a.modelo_id === MODELO_PADRAO ? SETORES.find(x => i.id >= x.de && i.id <= x.ate)?.nome ?? '' : '');
+
+/** Quantos itens em cada status (qualquer código) e quantos pendentes. */
+export type Contagem = Record<string, number> & { pendentes: number };
 export function contar(itens: ItemAuditoria[]): Contagem {
-  const c = { C: 0, OB: 0, OM: 0, NC: 0, PP: 0, NA: 0, pendentes: 0 } as Contagem;
-  itens.forEach(i => { if (i.status) c[i.status]++; else c.pendentes++; });
-  return c;
+  const c = { pendentes: 0 } as Contagem;
+  itens.forEach(i => { if (i.status) c[i.status] = (c[i.status] ?? 0) + 1; else c.pendentes++; });
+  return new Proxy(c, { get: (o, k) => (typeof k === 'string' && !(k in o) ? 0 : (o as Record<string | symbol, unknown>)[k]) }) as Contagem;
 }
 
 /* ---------- Relatório (HTML para PDF, impressão e e-mail) ---------- */
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c));
-const COR: Record<StatusReq, string> = { C: '#16845b', OB: '#52677b', OM: '#c17a13', NC: '#c43d48', PP: '#6d5bd0', NA: '#8794a3' };
 
 /** Relatório da auditoria. `fotoUrl` converte o caminho salvo da foto num endereço que o PDF consegue carregar. */
 export function relatorioHtml(a: Auditoria, filial: string, fotoUrl: (caminho: string) => string | undefined) {
   const c = contar(a.itens);
-  const constatacoes = a.itens.filter(i => i.status && PEDE_ACAO.includes(i.status));
-  const positivos = a.itens.filter(i => i.status === 'PP');
+  const cat = catalogoDa(a);
+  const constatacoes = a.itens.filter(i => i.status && cat.acao(i.status));
+  // Itens avaliados que não pedem ação nem são simples conforme/não aplicável (ex.: ponto positivo).
+  const positivos = a.itens.filter(i => i.status && !cat.acao(i.status) && !cat.fecha(i.status));
   const comFoto = a.itens.filter(i => i.fotos.some(f => fotoUrl(f)));
   const linha = (i: ItemAuditoria) => {
-    const st = i.status as StatusReq;
+    const st = i.status;
     const temAcao = i.acao.tarefa || i.acao.responsavel || i.acao.prazo;
-    return `<div class="row"><b>${i.id}. ${esc(i.titulo)}</b><div class="st" style="color:${COR[st]}">${esc(ROTULO[st])}</div>
+    return `<div class="row"><b>${i.id}. ${esc(i.titulo)}</b><div class="st" style="color:${cat.cor(st)}">${esc(cat.nome(st))}</div>
       <p>${esc(i.obs || 'Sem observação registrada.')}</p>
       ${temAcao ? `<p class="acao"><b>Ação:</b> ${esc(i.acao.tarefa || 'A definir')} · <b>Responsável:</b> ${esc(i.acao.responsavel || 'A definir')} · <b>Prazo:</b> ${i.acao.prazo ? esc(dataBR(i.acao.prazo)) : 'A definir'}</p>` : ''}</div>`;
   };
@@ -160,10 +224,10 @@ h3{border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin:22px 0 8px;font-siz
 <div class="head"><div><div class="marca">GRUPO NEVOEIRO</div><h1>Relatório de Auditoria</h1><div class="muted">${esc(a.escopo || ESCOPO_PADRAO)}</div></div>
 <div style="text-align:right"><b>${esc(filial)}</b><div>${esc(dataBR(a.data))}</div><small class="muted">${a.status === 'concluida' ? 'AUDITORIA CONCLUÍDA' : 'RASCUNHO'}</small></div></div>
 <h3>Identificação</h3><p><b>Auditor(es):</b> ${esc(a.auditores || 'Não informado')}<br><b>Processo / escopo:</b> ${esc(a.escopo || ESCOPO_PADRAO)}</p>
-<h3>Resumo executivo</h3><div class="grid">${STATUS.map(s => `<div class="stat"><b style="color:${COR[s]}">${c[s]}</b>${ROTULO[s]}</div>`).join('')}${c.pendentes ? `<div class="stat"><b>${c.pendentes}</b>Não avaliados</div>` : ''}</div>
-<p>Foram registrados <b>${constatacoes.length}</b> itens que demandam atenção (observações, oportunidades de melhoria ou não conformidades).</p>
-<h3>Constatações e planos de ação</h3>${constatacoes.map(linha).join('') || '<p>Não há itens classificados como observação, melhoria ou não conformidade.</p>'}
-${positivos.length ? `<h3>Pontos positivos</h3>${positivos.map(linha).join('')}` : ''}
+<h3>Resumo executivo</h3><div class="grid">${cat.lista.map(s => `<div class="stat"><b style="color:${s.cor}">${c[s.codigo]}</b>${esc(s.nome)}</div>`).join('')}${c.pendentes ? `<div class="stat"><b>${c.pendentes}</b>Não avaliados</div>` : ''}</div>
+<p>Foram registrados <b>${constatacoes.length}</b> itens que demandam atenção (${esc(cat.lista.filter(x => x.acao).map(x => x.nome.toLowerCase()).join(', ') || 'constatações')}).</p>
+<h3>Constatações e planos de ação</h3>${constatacoes.map(linha).join('') || '<p>Não há itens que demandem plano de ação.</p>'}
+${positivos.length ? `<h3>Destaques</h3>${positivos.map(linha).join('')}` : ''}
 <h3>Evidências fotográficas</h3>${comFoto.length ? comFoto.map(i => `<div class="row"><b>Item ${i.id} · ${esc(i.titulo)}</b><div class="fotos">${i.fotos.map(f => fotoUrl(f)).filter(Boolean).map(u => `<img src="${esc(u)}">`).join('')}</div></div>`).join('') : '<p>Nenhuma fotografia anexada.</p>'}
 <h3>Encaminhamento</h3><p>Relatório destinado à gestão para ciência, acompanhamento das constatações e monitoramento dos planos de ação registrados.</p>
 <p class="assin">__________________________________<br>Responsável pela auditoria</p>

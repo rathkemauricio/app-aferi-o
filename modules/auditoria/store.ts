@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useFiliais } from '../../lib/data';
 import { supabase } from '../../lib/supabase';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
-import type { Auditoria } from './model';
+import { type Auditoria, MODELO_PADRAO, type ModeloChecklist, modeloPadrao } from './model';
 
 /* ---------- Auditorias (sincronizadas, funcionam sem internet) ---------- */
 export const auditoriasCol = new Collection<Auditoria>({ table: 'aud_auditorias', storageKey: 'nevoeiro.auditoria.auditorias.v1' });
@@ -14,6 +14,18 @@ export function useAuditorias() {
   const a = useCollection(auditoriasCol);
   const lista = useMemo(() => [...a.list].sort((x, y) => y.data.localeCompare(x.data) || (y.updated_at ?? '').localeCompare(x.updated_at ?? '')), [a.list]);
   return { filiais: f.filiais, auditorias: lista, loaded: a.loaded && f.loaded, status: combinedStatus([a.status, f.status]) };
+}
+
+/* ---------- Modelos de checklist ---------- */
+export const modelosCol = new Collection<ModeloChecklist>({ table: 'aud_modelos', storageKey: 'nevoeiro.auditoria.modelos.v1' });
+/** Modelos disponíveis: o padrão (o gravado com id 'padrao' ou o embutido) primeiro, depois os cadastrados por nome. */
+export function useModelos() {
+  const m = useCollection(modelosCol);
+  return useMemo(() => {
+    const padrao = m.list.find(x => x.id === MODELO_PADRAO) ?? modeloPadrao();
+    const outros = m.list.filter(x => x.id !== MODELO_PADRAO).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    return [padrao, ...outros];
+  }, [m.list]);
 }
 
 /* ---------- Fotos (Storage, bucket privado) ----------
