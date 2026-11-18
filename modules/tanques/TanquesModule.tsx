@@ -251,7 +251,7 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.control, borderWidth: 1, borderColor: tab ? colors.accent : colors.border, backgroundColor: tab ? colors.accentSoft : colors.campo, alignSelf: 'flex-start', maxWidth: '100%' }}>
               <RulerIcon size={14} color={tab ? colors.accentText : colors.textMuted} />
               <Text style={[t.caption, { fontWeight: '700', color: tab ? colors.accentText : colors.textMuted, flexShrink: 1 }]} numberOfLines={1}>
-                {tab ? `Tabela: ${tab.nome}` : tabelas.length ? 'Sem tabela de arqueação (escolher)' : 'Sem tabela de arqueação: importe na tela da filial'}
+                {tab ? `Tabela: ${tab.nome}` : tabelas.length ? 'Sem tabela de arqueação (escolher)' : 'Sem tabela de arqueação: importe pelo painel web'}
               </Text>
               {!fin && tabelas.length ? <CaretDownIcon size={12} color={tab ? colors.accentText : colors.textMuted} /> : null}
             </Pressable>
@@ -312,7 +312,7 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
       const atual = tabelaDoTanque(tabelas, l.tanque)?.id ?? null;
       return (
         <Sheet title={`Tabela de arqueação do tanque ${l.tanque}`} onClose={() => setTabelaDe(null)}>
-          <Text style={t.caption}>A escolha fica guardada para as próximas medições deste tanque. As tabelas são importadas na tela da filial.</Text>
+          <Text style={t.caption}>A escolha fica guardada para as próximas medições deste tanque. As tabelas são importadas por PDF no painel web, na tela da filial.</Text>
           {[...tabelas, null].map(tab => {
             const on = atual === (tab?.id ?? null);
             return (

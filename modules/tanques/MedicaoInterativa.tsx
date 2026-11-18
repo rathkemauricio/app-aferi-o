@@ -238,7 +238,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
             </View>
             <Text style={e.sub}>Arraste no tanque para marcar a altura do combustível; use a roleta para o ajuste fino. {tab
               ? `Régua de 0 a ${DIAM} cm, pela tabela ${tab.nome}.`
-              : `Sem tabela de arqueação: escala de referência de 0 a ${DIAM} cm (importe a tabela na tela da filial).`}</Text>
+              : `Sem tabela de arqueação: escala de referência de 0 a ${DIAM} cm (importe a tabela por PDF no painel web).`}</Text>
 
             {/* Litros */}
             <View style={e.caixa}>

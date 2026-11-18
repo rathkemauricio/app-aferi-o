@@ -1,6 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { useContext, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { imprimirHtml } from '../../lib/util';
 import { CheckIcon, FileArrowUpIcon, PrinterIcon, RulerIcon, TrashIcon, WarningIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
@@ -70,7 +70,10 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
         </Card>
       );
     })}
-    <Button title={lendo ?? 'Importar tabela de arqueação (PDF)'} icon={FileArrowUpIcon} variant="secondary" disabled={!!lendo} onPress={() => void importar()} />
+    {/* A tabela é importada pelo PDF no painel web; no app ela só é consultada e usada na medição. */}
+    {Platform.OS === 'web'
+      ? <Button title={lendo ?? 'Importar tabela de arqueação (PDF)'} icon={FileArrowUpIcon} variant="secondary" disabled={!!lendo} onPress={() => void importar()} />
+      : <Text style={t.caption}>{tabelas.length ? 'Para importar outra tabela, use o painel web (PDF).' : 'Nenhuma tabela ainda: importe o PDF da tabela de arqueação pelo painel web.'}</Text>}
     {editando ? (
       <EditorTabela inicial={editando.tabela} nova={editando.nova} avisos={editando.avisos} outras={tabelas.filter(x => x.id !== editando.tabela.id)}
         filialNome={filialNome} tanquesConhecidos={tanquesConhecidos} onFechar={() => setEditando(null)} />
