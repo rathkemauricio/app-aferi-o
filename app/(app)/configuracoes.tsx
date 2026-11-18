@@ -1,18 +1,17 @@
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { useContext, useMemo, useState } from 'react';
-import { Platform, ScrollView, Switch, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFiliais } from '../../lib/data';
 import { PADRAO, restaurarPadrao, setPreferencia, usePreferencias } from '../../lib/preferencias';
 import { tocar } from '../../lib/sons';
 import { rotuloFilial } from '../../lib/util';
 import { rotuloVersao, VERSAO } from '../../lib/versao';
-import { ArrowLeftIcon, MinusIcon, PlusIcon, ResetIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, MinusIcon, PlusIcon, ResetIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, IconButton, notify, SectionHeader, Sheet } from '../../ui/kit';
-import { createTypography, ESCALAS, pageMaxWidth, type PreferenciaTema, space, ThemeContext } from '../../ui/theme';
+import { createTypography, ESCALAS, pageMaxWidth, radius, space, type Tema, TEMAS, ThemeContext } from '../../ui/theme';
 
-const TEMAS: [PreferenciaTema, string][] = [['light', 'Claro'], ['dark', 'Escuro'], ['auto', 'Automático']];
 const LIMITES: [number, string][] = [[0, 'Nunca'], [50, 'Acima de 50'], [100, 'Acima de 100'], [500, 'Acima de 500']];
 const TIPOS: ['completo' | 'parcial', string][] = [['completo', 'Completo'], ['parcial', 'Parcial']];
 const LAYOUTS: ['simples' | 'completo', string][] = [['simples', 'Simples'], ['completo', 'Completo']];
@@ -44,6 +43,45 @@ export default function ConfiguracoesScreen() {
     <ChoiceChips value={opcoes.find(o => o[0] === valor)?.[1] ?? ''} options={opcoes.map(o => o[1])} onChange={rot => { const o = opcoes.find(x => x[1] === rot); if (o) mudar(o[0]); }} />
   );
 
+  /** Miniatura do tema: fundo, cartão sólido, botão e destaque nas cores dele. */
+  const amostra = (tm: Tema) => {
+    const on = preferenciaTema === tm.id;
+    const k = tm.cores;
+    return (
+      <Pressable key={tm.id} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`Tema ${tm.nome}`} onPress={() => setPreferenciaTema(tm.id)}
+        style={({ pressed }) => [{ width: 148, flexGrow: 1, borderRadius: radius.control, borderWidth: on ? 2.5 : 1, borderColor: on ? colors.accent : colors.border, overflow: 'hidden' }, pressed && { opacity: 0.85 }]}>
+        <View style={{ backgroundColor: k.bg, padding: 10, gap: 6 }}>
+          <View style={{ backgroundColor: k.surface, borderRadius: 8, padding: 8, gap: 5, borderWidth: 1, borderColor: k.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 16, height: 16, borderRadius: 5, backgroundColor: k.surfaceMuted }} />
+              <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: k.text, opacity: 0.85 }} />
+              <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: k.mint }} />
+            </View>
+            <View style={{ height: 5, width: '70%', borderRadius: 3, backgroundColor: k.textMuted, opacity: 0.7 }} />
+          </View>
+          <View style={{ height: 16, borderRadius: 6, backgroundColor: k.accent }} />
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.surface }}>
+          <Text style={{ flex: 1, fontSize: 12.5, fontWeight: '700', color: colors.text }} numberOfLines={2}>{tm.nome}</Text>
+          {on ? <CheckIcon size={14} color={colors.accentText} weight="bold" /> : null}
+        </View>
+      </Pressable>
+    );
+  };
+  const amostraAuto = (
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected: preferenciaTema === 'auto' }} onPress={() => setPreferenciaTema('auto')}
+      style={({ pressed }) => [{ width: 148, flexGrow: 1, borderRadius: radius.control, borderWidth: preferenciaTema === 'auto' ? 2.5 : 1, borderColor: preferenciaTema === 'auto' ? colors.accent : colors.border, overflow: 'hidden' }, pressed && { opacity: 0.85 }]}>
+      <View style={{ flexDirection: 'row', height: 86 }}>
+        <View style={{ flex: 1, backgroundColor: TEMAS[0].cores.bg }} />
+        <View style={{ flex: 1, backgroundColor: TEMAS[1].cores.bg }} />
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.surface }}>
+        <Text style={{ flex: 1, fontSize: 12.5, fontWeight: '700', color: colors.text }} numberOfLines={2}>Automático</Text>
+        {preferenciaTema === 'auto' ? <CheckIcon size={14} color={colors.accentText} weight="bold" /> : null}
+      </View>
+    </Pressable>
+  );
+
   const procurarAtualizacao = async () => {
     setProcurando(true);
     try {
@@ -67,8 +105,11 @@ export default function ConfiguracoesScreen() {
 
         <SectionHeader title="Aparência" />
         <Card>
-          {linha('Tema', preferenciaTema === 'auto' ? 'Segue o tema do aparelho' : '', null)}
-          {escolha(TEMAS, preferenciaTema, setPreferenciaTema)}
+          {linha('Tema', preferenciaTema === 'auto' ? 'Automático: EasyAudit claro ou escuro, conforme o aparelho' : 'Toque numa aparência para usar. O sol/lua do topo troca entre a versão clara e a escura.', null)}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+            {amostraAuto}
+            {TEMAS.map(tm => amostra(tm))}
+          </View>
           {linha('Tamanho de fontes e ícones', escala === 1 ? 'Padrão' : `${Math.round(escala * 100)}% do padrão`,
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <IconButton icon={MinusIcon} label="Diminuir fontes e ícones" onPress={() => { if (iEscala > 0) setEscala(ESCALAS[iEscala - 1]); }} />

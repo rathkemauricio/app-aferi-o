@@ -69,7 +69,7 @@ export function Field({ label, helper, icon: IconCmp, multiline = false, style, 
   return (
     <View style={[k.field, style as ViewStyle]}>
       {label ? <Text style={[t.label, { color: colors.textMuted }]}>{label}</Text> : null}
-      <View style={[k.inputWrap, { backgroundColor: colors.surface, borderColor: colors.borderStrong }, multiline && k.inputWrapMulti, focused && { borderColor: colors.accent }]}>
+      <View style={[k.inputWrap, { backgroundColor: colors.bg, borderColor: colors.borderStrong }, multiline && k.inputWrapMulti, focused && { borderColor: colors.accent }]}>
         {IconCmp ? <IconCmp size={18} color={colors.textFaint} /> : null}
         <TextInput
           {...input}
@@ -97,8 +97,9 @@ export function IconTile({ icon: IconCmp, tint = 'indigo', size = 40 }: { icon: 
   const c = tints[tint];
   const { mode, colors } = useContext(ThemeContext);
   return (
-    <View style={[k.tile, { width: size, height: size, backgroundColor: mode === 'dark' ? colors.surfaceMuted : c.bg }]}>
-      <IconCmp size={Math.round(size * 0.5)} color={mode === 'dark' ? colors.accentText : c.fg} weight="duotone" />
+    // Quadradinho sólido nas cores do tema (os tons por categoria ficam só no EasyAudit claro).
+    <View style={[k.tile, { width: size, height: size, backgroundColor: mode === 'light' && colors === color ? c.bg : colors.surfaceMuted }]}>
+      <IconCmp size={Math.round(size * 0.5)} color={mode === 'light' && colors === color ? c.fg : colors.accentText} weight="duotone" />
     </View>
   );
 }

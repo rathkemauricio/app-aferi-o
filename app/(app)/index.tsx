@@ -95,7 +95,7 @@ export default function ModuleLauncher() {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <LogoSimbolo altura={26} cor={mode === 'dark' ? '#ffffff' : colors.text} />
+        <LogoSimbolo altura={26} cor={colors.text} check={colors.mint} />
         <View style={s.flex}>
           <Text style={s.brandName}>EasyAudit</Text>
           <Text style={s.brandSub}>Central de módulos</Text>
@@ -169,8 +169,8 @@ function ModuleCard({ module: m, onOpen, desktop = false }: { module: AppModule;
     >
       <View style={s.tileTop}>
         {/* Ícone num quadrado neutro e seta no círculo verde-menta (marca EasyAudit) */}
-        <View style={[s.iconeModulo, { backgroundColor: mode === 'dark' ? '#26344d' : '#eef0f4' }]}>
-          <Icone size={24} color={mode === 'dark' ? '#aeb8ef' : colors.text} />
+        <View style={[s.iconeModulo, { backgroundColor: colors.surfaceMuted }]}>
+          <Icone size={24} color={mode === 'dark' ? colors.accentText : colors.text} />
         </View>
         <View style={s.open}><ArrowRightIcon size={16} color={colors.onMint} weight="bold" /></View>
       </View>

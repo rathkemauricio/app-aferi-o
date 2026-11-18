@@ -9,7 +9,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
 import { DropIcon, GearIcon, HouseIcon, MoonIcon, SidebarSimpleIcon, SignOutIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
 import { IconButton, confirmAction } from '../ui/kit';
-import { darkColor, radius, ThemeContext, type ThemeColors } from '../ui/theme';
+import { radius, ThemeContext, type ThemeColors } from '../ui/theme';
 
 type LinkItem = { label: string; route: Href; icon: Icon };
 
@@ -36,7 +36,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
         onPress={() => router.push(item.route)}
         style={({ pressed }) => [styles.navItem, active && styles.navItemActive, pressed && styles.navPressed]}
       >
-        <item.icon size={18} color={active ? colors.mint : colors.textMuted} weight={active ? 'fill' : 'regular'} />
+        <item.icon size={18} color={active ? colors.primaryText : colors.textMuted} weight={active ? 'fill' : 'regular'} />
         {!compact ? <Text numberOfLines={1} style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text> : null}
       </Pressable>
     );
@@ -95,9 +95,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   navContent: { gap: 4, paddingBottom: 12 },
   groupLabel: { color: c.textFaint, fontSize: 9, fontWeight: '800', letterSpacing: 1.2, paddingHorizontal: 11, paddingTop: 12, paddingBottom: 5 },
   navItem: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 11, borderRadius: 10 },
-  navItemActive: { backgroundColor: c.bg === darkColor.bg ? '#26344d' : '#0f1f3d' },
+  navItemActive: { backgroundColor: c.accent },
   navLabel: { flex: 1, color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
-  navLabelActive: { color: '#ffffff', fontWeight: '700' },
+  navLabelActive: { color: c.primaryText, fontWeight: '700' },
   navPressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   sidebarFooter: { width: '100%', gap: 10, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 10 },
   footerActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 2 },
