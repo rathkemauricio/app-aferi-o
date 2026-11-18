@@ -35,10 +35,13 @@ export function auditReportHtml(a: AuditRelatorio, marca = 'EasyAudit') {
     return `<td class="cod ${cls}"><b>${c ? esc(c) : '—'}</b>${nota}</td>`;
   };
 
+  // "Erro" saiu da coleta: a coluna só aparece em aferições antigas que tenham esse valor.
+  const comErro = a.results.some(r => r.done && String(r.checks[2] ?? '').trim() !== '');
+  const escala = comErro ? ESCALA : ESCALA.filter(i => i !== 2);
   const linhas = a.results.map(r => {
     const id = `<td class="bb">${esc(r.pump)} / Bico ${esc(r.nozzle)}</td><td>${esc(r.fuel)}</td>`;
-    if (!r.done) return `<tr>${id}<td colspan="10" class="nao">NÃO REALIZADO</td></tr>`;
-    return `<tr>${id}${ESCALA.map(i => `<td class="num">${mL(r.checks[i])}</td>`).join('')}${CODIGOS.map(i => celulaCodigo(r, i)).join('')}<td class="num">${vazio(r.checks[8])}</td><td class="num">${vazio(r.checks[9])}</td></tr>`;
+    if (!r.done) return `<tr>${id}<td colspan="${comErro ? 10 : 9}" class="nao">NÃO REALIZADO</td></tr>`;
+    return `<tr>${id}${escala.map(i => `<td class="num">${mL(r.checks[i])}</td>`).join('')}${CODIGOS.map(i => celulaCodigo(r, i)).join('')}<td class="num">${vazio(r.checks[8])}</td><td class="num">${vazio(r.checks[9])}</td></tr>`;
   }).join('');
 
   const ocorrencias = feitos.flatMap(r => CODIGOS.filter(i => r.checks[i] === 'OB' || r.checks[i] === 'NC').map(i => ({ r, i })));
@@ -107,7 +110,7 @@ footer{margin-top:8px;text-align:right;color:#5b6b80;font-size:8px}
 <section class="meta">${meta.map(([k, v]) => `<div><small>${esc(k)}</small><b>${vazio(v)}</b></div>`).join('')}</section>
 <div class="chips"><span class="k-c">C: ${cont.C}</span><span class="k-ob">OB: ${cont.OB}</span><span class="k-nc">NC: ${cont.NC}</span><span class="k-na">NA: ${cont.NA}</span><span>${feitos.length} de ${a.results.length} bico(s) aferido(s)</span></div>
 <h2>Inspeção por bico</h2>
-<table><thead><tr><th style="width:12%">Bomba / Bico</th><th style="width:11%">Combustível</th><th>Lenta mL</th><th>Rápida mL</th><th>Erro mL</th><th style="width:10%">Luz</th><th style="width:10%">Mangueira</th><th>BICO</th><th>Lacres</th><th>Sump</th><th>Vazão</th><th>Des. 60s</th></tr></thead><tbody>${linhas}</tbody></table>
+<table><thead><tr><th style="width:12%">Bomba / Bico</th><th style="width:11%">Combustível</th><th>Lenta mL</th><th>Rápida mL</th>${comErro ? '<th>Erro mL</th>' : ''}<th style="width:10%">Luz</th><th style="width:10%">Mangueira</th><th>BICO</th><th>Lacres</th><th>Sump</th><th>Vazão</th><th>Des. 60s</th></tr></thead><tbody>${linhas}</tbody></table>
 <section class="duas">
 <div><h2>Não conformidades e observações (OB / NC)</h2>${tabelaOcorrencias}</div>
 <div><h2>Observações / irregularidades encontradas</h2><div class="obs">${obs.length ? obs.map(esc).join('\n') : '—'}</div>

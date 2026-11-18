@@ -43,6 +43,8 @@ const SESSION_KEY = STORAGE_KEY + '.session.v1';
 const ULTIMO_AFERIDOR = 'nevoeiro.afericoes.ultimo-aferidor';
 const CRITERIA = ['Lenta', 'Rápida', 'Erro', 'Luz', 'Mangueira', 'BICO', 'Lacres', 'Sump', 'Vazão', 'Des. 60s'];
 const SCALE = ['Lenta', 'Rápida', 'Erro'];
+/** Critérios fora da coleta (continuam na lista só para manter a posição dos valores já gravados). */
+const FORA_DA_COLETA = ['Erro'];
 /** Lenta, Rápida e Erro com sinal: positivos aparecem como +20 (o valor guardado continua só o número). */
 const comSinal = (v: string | undefined) => { const x = String(v ?? '').trim(); const n = Number(x.replace(',', '.')); return x && !x.startsWith('+') && !Number.isNaN(n) && n > 0 ? `+${x}` : x; };
 const NUMERIC = ['Vazão', 'Des. 60s'];
@@ -555,10 +557,11 @@ export default function AfericoesModule() {
         </View>
         {croquiDaAfericao(true)}
         <View style={s.note}>
-          <Text style={s.noteText}>Lenta, Rápida e Erro: use − e + (passos de 20 mL) ou toque no valor para escolher na roleta, de −200 a +200 mL. Vazão e Des. 60s também pela roleta. Em OB ou NC, descreva a observação ou o local do erro.</Text>
+          <Text style={s.noteText}>Lenta e Rápida: use − e + (passos de 20 mL) ou toque no valor para escolher na roleta, de −200 a +200 mL. Vazão e Des. 60s também pela roleta. Em OB ou NC, descreva a observação ou o local do erro.</Text>
         </View>
         <Card style={s.listCard}>
           {CRITERIA.map((criterion, index) => {
+            if (FORA_DA_COLETA.includes(criterion)) return null;
             const value = entry.checks[index] ?? '';
             const unit = SCALE.includes(criterion) ? 'mL' : NUMERIC.includes(criterion) ? (criterion === 'Vazão' ? 'L/min' : 's') : '';
             // Toque no valor: abre a roleta transparente por cima, com os valores prontos (sem teclado).
