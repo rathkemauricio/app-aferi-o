@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture, type PanGestureConfig } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { ClipPath, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ArrowRightIcon, CheckIcon, XIcon } from '../../ui/icons';
+import { ArrowRightIcon, CheckIcon, PlayIcon, ResetIcon, StopIcon, TimerIcon, XIcon } from '../../ui/icons';
+import { darkColor, ThemeContext } from '../../ui/theme';
+import { faixa, Roleta } from './Roleta';
+
+const VALORES_VAZAO = faixa(0, 80, 1);
+const VALORES_SEGUNDOS = faixa(0, 120, 1);
 
 /*
  * Aferição interativa em tela cheia (opcional; o modo normal continua igual):
@@ -159,6 +164,22 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
   const corRegua = fora ? VERMELHO : MINT;
   const yv = yDoValor(valor), b = 26;
   const dRegua = `M${RX} ${RY0} L${RX} ${yv - 46} C ${RX} ${yv - 22}, ${RX - b} ${yv - 22}, ${RX - b} ${yv} C ${RX - b} ${yv + 22}, ${RX} ${yv + 22}, ${RX} ${yv + 46} L${RX} ${RY1}`;
+
+  /* ----- Vazão e desligamento em 60 s (roletas no campo + cronômetro; N/A para bombas que não desligam) ----- */
+  const ctxTema = useContext(ThemeContext);
+  const temaEscuro = useMemo(() => ({ ...ctxTema, mode: 'dark' as const, colors: { ...darkColor, bg: NAVY, surface: PAINEL, surfaceMuted: PAINEL2, accent: MINT, primaryText: NAVY } }), [ctxTema]);
+  const iVazao = indiceCodigo('Vazão'), iDes = indiceCodigo('Des. 60s');
+  const vazao = checks[iVazao] ?? '', des = checks[iDes] ?? '';
+  const [cronoInicio, setCronoInicio] = useState<number | null>(null);
+  const [agora, setAgora] = useState(0);
+  useEffect(() => { if (cronoInicio === null) return; const id = setInterval(() => setAgora(Date.now()), 100); return () => clearInterval(id); }, [cronoInicio]);
+  useEffect(() => { setCronoInicio(null); }, [atual]);
+  const cronometro = () => {
+    if (!bico) return;
+    if (cronoInicio === null) { setCronoInicio(Date.now()); setAgora(Date.now()); return; }
+    onCheck(bico.id, iDes, String(Math.max(0, Math.min(120, Math.round((Date.now() - cronoInicio) / 1000)))));
+    setCronoInicio(null);
+  };
 
   /* ----- Itens C/OB/NC/NA e conclusão do bico ----- */
   const marcar = (crit: string, v: string) => { if (!bico) return; const i = indiceCodigo(crit); onCheck(bico.id, i, checks[i] === v ? '' : v); };
@@ -328,9 +349,55 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
             })}
           </View>
 
+          {/* Vazão e desligamento em 60 s */}
+          <ThemeContext.Provider value={temaEscuro}>
+            <View style={e.itens}>
+              <Text style={[e.titulo, { fontSize: 15 }]}>Vazão e desligamento</Text>
+              <View style={e.linha}>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Text style={e.sub}>Vazão (L/min){vazao === '' ? ' · não medida' : ''}</Text>
+                  <View style={e.campoRoleta}>
+                    <Roleta rotulo="Vazão em litros por minuto" valores={VALORES_VAZAO} valor={vazao} vazio={vazao === ''} onChange={v => onCheck(bico.id, iVazao, v)} altura={42} visiveis={3} />
+                  </View>
+                </View>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <View style={e.linha}>
+                    <Text style={[e.sub, { flex: 1 }]}>Des. 60s (s){des === '' ? ' · não medido' : ''}</Text>
+                    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: des === 'NA' }} accessibilityLabel="Des. 60s não se aplica"
+                      onPress={() => { setCronoInicio(null); onCheck(bico.id, iDes, des === 'NA' ? '' : 'NA'); }}
+                      style={[e.na, des === 'NA' && { backgroundColor: MUTED, borderColor: MUTED }]}>
+                      <Text style={[e.naTxt, des === 'NA' && { color: NAVY }]}>N/A</Text>
+                    </Pressable>
+                  </View>
+                  {des === 'NA' ? (
+                    <View style={[e.campoRoleta, { height: 126, alignItems: 'center', justifyContent: 'center', padding: 10 }]}>
+                      <Text style={[e.sub, { textAlign: 'center' }]}>Não desliga em 60 s. Toque em N/A para medir.</Text>
+                    </View>
+                  ) : (
+                    <View style={e.campoRoleta}>
+                      <Roleta rotulo="Tempo até desligar, em segundos" valores={VALORES_SEGUNDOS} valor={des} vazio={des === ''} formatar={v => `${v} s`} onChange={v => onCheck(bico.id, iDes, v)} altura={42} visiveis={3} />
+                    </View>
+                  )}
+                </View>
+              </View>
+              {des !== 'NA' ? (
+                <View style={e.crono}>
+                  <TimerIcon size={20} color={MUTED} />
+                  <Text style={e.cronoTxt}>{cronoInicio === null ? '0,0 s' : `${((agora - cronoInicio) / 1000).toFixed(1).replace('.', ',')} s`}</Text>
+                  <Pressable accessibilityRole="button" onPress={cronometro} style={[e.cronoBtn, { backgroundColor: cronoInicio === null ? PAINEL2 : MINT }]}>
+                    {cronoInicio === null ? <PlayIcon size={16} color={FG} weight="fill" /> : <StopIcon size={16} color={NAVY} weight="fill" />}
+                    <Text style={{ color: cronoInicio === null ? FG : NAVY, fontWeight: '800' }}>{cronoInicio === null ? 'Iniciar' : 'Parar e salvar'}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Zerar cronômetro" onPress={() => setCronoInicio(null)} hitSlop={8} style={e.cronoZerar}><ResetIcon size={18} color={MUTED} /></Pressable>
+                </View>
+              ) : null}
+              <Text style={e.sub}>Deslize dentro do campo para girar a roleta. Cronômetro: inicie quando parar de abastecer e pare quando a bomba desligar; o tempo vai para o Des. 60s.</Text>
+            </View>
+          </ThemeContext.Provider>
+
           <View style={e.linha}>
             <Pressable accessibilityRole="button" onPress={() => onModoNormal(bico.id)} style={[e.btn, { backgroundColor: PAINEL2, flex: 1 }]}>
-              <Text style={e.btnTxt}>Vazão, Des. 60s e observações</Text>
+              <Text style={e.btnTxt}>Abrir no modo normal (observações)</Text>
             </Pressable>
           </View>
           <Pressable accessibilityRole="button" onPress={proximo} style={[e.btn, { backgroundColor: MINT, flexDirection: 'row', gap: 8, justifyContent: 'center' }]}>
@@ -403,6 +470,13 @@ const e = StyleSheet.create({
   val: { flex: 1, backgroundColor: PAINEL, borderRadius: 14, padding: 12, borderWidth: 1.5, borderColor: 'transparent' },
   valNum: { color: FG, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
   itens: { backgroundColor: PAINEL, borderRadius: 18, padding: 12, gap: 10 },
+  campoRoleta: { borderRadius: 12, borderWidth: 1, borderColor: LINHA, backgroundColor: NAVY, overflow: 'hidden' },
+  na: { borderWidth: 1.5, borderColor: LINHA, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  naTxt: { color: MUTED, fontWeight: '800', fontSize: 12 },
+  crono: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: NAVY, borderRadius: 12, padding: 8, paddingLeft: 12 },
+  cronoTxt: { flex: 1, color: FG, fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  cronoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  cronoZerar: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: PAINEL2 },
   tudoC: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: MINT, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   itemNome: { color: FG, fontWeight: '700', fontSize: 14, width: 86 },

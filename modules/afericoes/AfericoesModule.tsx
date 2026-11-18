@@ -596,14 +596,24 @@ export default function AfericoesModule() {
                 <View style={s.rowCenter}>
                   <Text style={[textStyles.bodyStrong, s.flex]}>{criterion}</Text>
                   {(SCALE.includes(criterion) || NUMERIC.includes(criterion)) && value === '' ? <Text style={textStyles.caption}>não medido · </Text> : null}
-                  {unit ? <Text style={textStyles.caption}>{unit}</Text> : null}
+                  {unit && value !== 'NA' ? <Text style={textStyles.caption}>{unit}</Text> : null}
+                  {criterion === 'Des. 60s' ? (
+                    // Bombas que não desligam em 60 s: N/A bloqueia a roleta; desmarcando, o campo volta para a coleta.
+                    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: value === 'NA' }} accessibilityLabel="Des. 60s não se aplica"
+                      onPress={() => { setFlowStarted(null); setAuditCheck(index, value === 'NA' ? '' : 'NA'); }}
+                      style={[s.naBtn, value === 'NA' && { backgroundColor: colors.textMuted, borderColor: colors.textMuted }]}>
+                      <Text style={[s.naTxt, value === 'NA' && { color: colors.bg }]}>N/A</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
                 {SCALE.includes(criterion) ? campoRoleta(`${criterion} em mL`, VALORES_ML, comSinal)
                 : NUMERIC.includes(criterion) ? <>
                   {criterion === 'Vazão'
                     ? campoRoleta('Vazão em litros por minuto', VALORES_VAZAO)
-                    : campoRoleta('Tempo até desligar, em segundos', VALORES_SEGUNDOS, v => `${v} s`)}
-                  {criterion === 'Des. 60s' && (
+                    : value === 'NA'
+                      ? <View style={[s.roletaCampo, s.naCampo]}><Text style={textStyles.caption}>Não se aplica: esta bomba não desliga em 60 s. Toque em N/A para medir.</Text></View>
+                      : campoRoleta('Tempo até desligar, em segundos', VALORES_SEGUNDOS, v => `${v} s`)}
+                  {criterion === 'Des. 60s' && value !== 'NA' && (
                     <View style={s.timer}>
                       <TimerIcon size={20} color={colors.textMuted} />
                       <Text style={s.timerText}>{flowStarted === null ? '0,0 s' : ((flowNow - flowStarted) / 1000).toFixed(1).replace('.', ',') + ' s'}</Text>
@@ -617,7 +627,7 @@ export default function AfericoesModule() {
                       <IconButton icon={ResetIcon} label="Zerar cronômetro" onPress={() => setFlowStarted(null)} />
                     </View>
                   )}
-                  {criterion === 'Des. 60s' && <Text style={textStyles.caption}>Inicie quando parar de abastecer e toque em Parar e salvar quando a bomba desligar. O tempo vai para o campo acima.</Text>}
+                  {criterion === 'Des. 60s' && value !== 'NA' && <Text style={textStyles.caption}>Inicie quando parar de abastecer e toque em Parar e salvar quando a bomba desligar. O tempo vai para o campo acima.</Text>}
                 </> : (
                   <ChoiceChips value={value} options={['C', 'OB', 'NC', 'NA']} toneFor={codeTone} onChange={code => setAuditCheck(index, value === code ? '' : code)} />
                 )}
@@ -1013,6 +1023,9 @@ const createScreenStyles = (colors: ThemeColors) => StyleSheet.create({
   note: { padding: space.md, borderRadius: radius.control, backgroundColor: colors.accentSoft },
   noteText: { fontSize: 13, lineHeight: 19, color: colors.accentText },
   criterion: { gap: space.sm, padding: space.md },
+  naBtn: { marginLeft: 6, borderWidth: 1.5, borderColor: colors.borderStrong, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  naTxt: { fontSize: 12, fontWeight: '800', color: colors.textMuted },
+  naCampo: { minHeight: 64, alignItems: 'center', justifyContent: 'center', padding: space.md },
   roletaCampo: { borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, overflow: 'hidden' },
   valorBox: { minHeight: 46, borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.md },
   valorTxt: { fontSize: 17, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
