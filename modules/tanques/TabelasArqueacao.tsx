@@ -155,7 +155,7 @@ function EditorTabela({ inicial, nova, avisos, outras, filialNome, tanquesConhec
             );
           })}
         </View>
-      ) : <Text style={t.caption}>Esta filial ainda não tem tanques no croqui nem em medições. Desenhe os tanques no Croqui ou faça uma medição e volte aqui.</Text>}
+      ) : <Text style={t.caption}>Esta filial ainda não tem tanques cadastrados. Cadastre-os em Tanques da filial (lá também se escolhe a tabela de cada tanque).</Text>}
 
       <Text style={t.label}>Testar a tabela</Text>
       <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' }}>
