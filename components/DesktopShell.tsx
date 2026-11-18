@@ -17,6 +17,7 @@ type LinkItem = { label: string; route: Href; icon: Icon };
 const W_ABERTA = 252;
 const W_FECHADA = 78;
 const RAIO = 24; // curva da aba ativa (e dos cantos da barra)
+const CURVA = 22; // curvas invertidas em cima e embaixo da aba ativa
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 
 /** 0 = barra recolhida, 1 = aberta (acompanha a largura animada). */
@@ -174,7 +175,11 @@ export function DesktopShell({ children }: { children: ReactNode }) {
         </View>
 
         <ScrollView style={styles.navScroll} contentContainerStyle={styles.navContent} showsVerticalScrollIndicator={false}>
-          <Animated.View pointerEvents="none" style={[styles.aba, sAba]} />
+          {/* Aba da página atual: arredondada à esquerda e com curvas invertidas em cima e embaixo, abraçando o conteúdo. */}
+          <Animated.View pointerEvents="none" style={[styles.aba, sAba]}>
+            <View style={[styles.abaCanto, { top: -CURVA }]}><View style={[styles.abaCantoMiolo, { borderBottomRightRadius: CURVA }]} /></View>
+            <View style={[styles.abaCanto, { bottom: -CURVA }]}><View style={[styles.abaCantoMiolo, { borderTopRightRadius: CURVA }]} /></View>
+          </Animated.View>
           {grupos.map(g => (g.itens.length ? (
             // Rótulo e itens ficam direto no conteúdo da lista: a posição medida de cada item vale para a aba deslizante.
             <Fragment key={g.titulo}>
@@ -234,7 +239,10 @@ const makeStyles = (c: ThemeColors, p: Paleta) => StyleSheet.create({
   brandSub: { color: p.suave, fontSize: 11 },
   navScroll: { flex: 1 },
   navContent: { paddingLeft: 12, paddingBottom: 12, gap: 4 },
-  aba: { position: 'absolute', top: 0, left: 12, right: 0, backgroundColor: p.abaFundo, borderTopLeftRadius: RAIO, borderBottomLeftRadius: RAIO },
+  aba: { position: 'absolute', top: 0, left: 12, right: 0, overflow: 'visible', backgroundColor: p.abaFundo, borderTopLeftRadius: RAIO, borderBottomLeftRadius: RAIO },
+  // Curva invertida: quadrado da cor da aba com um "miolo" da cor da barra arredondado no canto de fora.
+  abaCanto: { position: 'absolute', right: 0, width: CURVA, height: CURVA, backgroundColor: p.abaFundo },
+  abaCantoMiolo: { flex: 1, backgroundColor: p.fundo },
   sidebarFooter: { gap: 8, marginHorizontal: 14, borderTopWidth: 1, borderTopColor: p.linha, paddingTop: 12 },
   footerActions: { flexDirection: 'row', gap: 4, paddingLeft: 7 },
   footerActionsCompact: { flexDirection: 'column' },
