@@ -11,6 +11,7 @@ import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
 import { afericoesCol } from './registros';
 import { Deslizavel } from '../tempos/Deslizavel';
+import { faixa, Roleta } from './Roleta';
 import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { CroquiCanvas } from '../croqui/Canvas';
 import { Bico3D, BicoFlutuante, Brilho } from './BicoEmFoco';
@@ -45,6 +46,10 @@ const SCALE = ['Lenta', 'Rápida', 'Erro'];
 /** Lenta, Rápida e Erro com sinal: positivos aparecem como +20 (o valor guardado continua só o número). */
 const comSinal = (v: string | undefined) => { const x = String(v ?? '').trim(); const n = Number(x.replace(',', '.')); return x && !x.startsWith('+') && !Number.isNaN(n) && n > 0 ? `+${x}` : x; };
 const NUMERIC = ['Vazão', 'Des. 60s'];
+/** Valores prontos das roletas: mL (−200 a +200 de 20 em 20), vazão (0 a 80 L/min) e segundos (0 a 120). */
+const VALORES_ML = faixa(-200, 200, 20);
+const VALORES_VAZAO = faixa(0, 80, 1);
+const VALORES_SEGUNDOS = faixa(0, 120, 1);
 const EMPTY_DATA: DashboardData = { branches: [], audits: [] };
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const uid = (prefix: string) => prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -536,7 +541,6 @@ export default function AfericoesModule() {
 
     if (auditStage === 'nozzle' && currentNozzle) {
       const entry = draft.data[currentNozzle.id] ?? { checks: [], notes: [] };
-      const step = (index: number, value: string, delta: number) => setAuditCheck(index, String(Math.max(-200, Math.min(200, (Number(value) || 0) + delta))));
       return <>
         <Button title="Voltar aos bicos" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => { setAuditStage('equipment'); setFlowStarted(null); }} />
         <View style={s.rowCenter}>
@@ -548,45 +552,69 @@ export default function AfericoesModule() {
         </View>
         {croquiDaAfericao(true)}
         <View style={s.note}>
-          <Text style={s.noteText}>Lenta, Rápida e Erro usam escala de -200 a +200 mL, em passos de 20. Em OB ou NC, descreva a observação ou o local do erro.</Text>
+          <Text style={s.noteText}>Lenta, Rápida, Erro, Vazão e Des. 60s são escolhidos nas roletas (sem digitar). Em OB ou NC, descreva a observação ou o local do erro.</Text>
         </View>
+        {/* Medições em roletas verticais: valores prontos, sem digitar e sem teclado */}
+        <Card>
+          <Text style={textStyles.bodyStrong}>Medições (mL)</Text>
+          <View style={s.roletas}>
+            {SCALE.map(criterion => {
+              const index = CRITERIA.indexOf(criterion);
+              const value = entry.checks[index] ?? '';
+              return (
+                <View key={criterion} style={s.roletaCol}>
+                  <Text style={[textStyles.label, { textAlign: 'center' }]}>{criterion}</Text>
+                  <Roleta rotulo={`${criterion} em mL`} valores={VALORES_ML} valor={value} vazio={value === ''} formatar={comSinal} onChange={v => setAuditCheck(index, v)} />
+                  <Text style={[textStyles.caption, { textAlign: 'center' }]}>{value === '' ? 'não medido' : `${comSinal(value)} mL`}</Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={textStyles.caption}>Role e solte no valor, ou toque nele. De −200 a +200 mL, de 20 em 20.</Text>
+        </Card>
+        <Card>
+          <Text style={textStyles.bodyStrong}>Vazão e desligamento</Text>
+          <View style={s.roletas}>
+            {(() => {
+              const iVazao = CRITERIA.indexOf('Vazão'), iDes = CRITERIA.indexOf('Des. 60s');
+              const vazao = entry.checks[iVazao] ?? '', des = entry.checks[iDes] ?? '';
+              return <>
+                <View style={s.roletaCol}>
+                  <Text style={[textStyles.label, { textAlign: 'center' }]}>Vazão (L/min)</Text>
+                  <Roleta rotulo="Vazão em litros por minuto" valores={VALORES_VAZAO} valor={vazao} vazio={vazao === ''} onChange={v => setAuditCheck(iVazao, v)} />
+                  <Text style={[textStyles.caption, { textAlign: 'center' }]}>{vazao === '' ? 'não medida' : 'litros em 6 s × 10'}</Text>
+                </View>
+                <View style={s.roletaCol}>
+                  <Text style={[textStyles.label, { textAlign: 'center' }]}>Des. 60s (s)</Text>
+                  <Roleta rotulo="Tempo até desligar, em segundos" valores={VALORES_SEGUNDOS} valor={des} vazio={des === ''} formatar={v => `${v} s`} onChange={v => setAuditCheck(iDes, v)} />
+                  <Text style={[textStyles.caption, { textAlign: 'center' }]}>{des === '' ? 'não medido' : 'segundos até desligar'}</Text>
+                </View>
+              </>;
+            })()}
+          </View>
+          <View style={s.timer}>
+            <TimerIcon size={20} color={colors.textMuted} />
+            <Text style={s.timerText}>{flowStarted === null ? '0,0 s' : ((flowNow - flowStarted) / 1000).toFixed(1).replace('.', ',') + ' s'}</Text>
+            <Button title={flowStarted === null ? 'Iniciar' : 'Parar e salvar'} icon={flowStarted === null ? PlayIcon : StopIcon} variant={flowStarted === null ? 'secondary' : 'primary'} size="sm"
+              onPress={() => {
+                if (flowStarted === null) { setFlowStarted(Date.now()); return; }
+                // Ao parar, a roleta do Des. 60s trava no tempo medido (em segundos inteiros).
+                const seg = Math.max(0, Math.min(120, Math.round((Date.now() - flowStarted) / 1000)));
+                setAuditCheck(CRITERIA.indexOf('Des. 60s'), String(seg));
+                setFlowStarted(null);
+              }} />
+            <IconButton icon={ResetIcon} label="Zerar cronômetro" onPress={() => setFlowStarted(null)} />
+          </View>
+          <Text style={textStyles.caption}>Inicie quando parar de abastecer e toque em Parar e salvar quando a bomba desligar: a roleta do Des. 60s vai sozinha para o tempo medido.</Text>
+        </Card>
         <Card style={s.listCard}>
           {CRITERIA.map((criterion, index) => {
+            if (SCALE.includes(criterion) || NUMERIC.includes(criterion)) return null;
             const value = entry.checks[index] ?? '';
-            const unit = SCALE.includes(criterion) ? 'mL' : NUMERIC.includes(criterion) ? 'L/min ou mL' : '';
             return (
-              <View key={criterion} style={[s.criterion, index > 0 && s.divided]}>
-                <View style={s.rowCenter}>
-                  <Text style={[textStyles.bodyStrong, s.flex]}>{criterion}</Text>
-                  {unit ? <Text style={textStyles.caption}>{unit}</Text> : null}
-                </View>
-                {SCALE.includes(criterion) ? (
-                  <View style={s.stepper}>
-                    <Pressable accessibilityLabel="Diminuir 20" onPress={() => step(index, value, -20)} style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed]}><MinusIcon size={18} color={colors.text} weight="bold" /></Pressable>
-                    <Field estavel value={comSinal(value)} keyboardType="numeric" placeholder="0" textAlign="center" style={s.flex}
-                      onChangeText={v => { const parsed = Number(v.replace(',', '.')); setAuditCheck(index, v === '' || Number.isNaN(parsed) ? v : String(Math.max(-200, Math.min(200, Math.round(parsed / 20) * 20)))); }} />
-                    <Pressable accessibilityLabel="Aumentar 20" onPress={() => step(index, value, 20)} style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed]}><PlusIcon size={18} color={colors.text} weight="bold" /></Pressable>
-                  </View>
-                ) : NUMERIC.includes(criterion) ? <>
-                  <Field estavel value={value} keyboardType="decimal-pad" placeholder={criterion === 'Vazão' ? 'Litros em 6 s × 10' : 'Segundos até desligar'} onChangeText={v => setAuditCheck(index, v)} />
-                  {criterion === 'Des. 60s' && (
-                    <View style={s.timer}>
-                      <TimerIcon size={20} color={colors.textMuted} />
-                      <Text style={s.timerText}>{flowStarted === null ? '0,0 s' : ((flowNow - flowStarted) / 1000).toFixed(1).replace('.', ',') + ' s'}</Text>
-                      <Button title={flowStarted === null ? 'Iniciar' : 'Parar e salvar'} icon={flowStarted === null ? PlayIcon : StopIcon} variant={flowStarted === null ? 'secondary' : 'primary'} size="sm"
-                        onPress={() => {
-                          if (flowStarted === null) { setFlowStarted(Date.now()); return; }
-                          // Ao parar, o tempo medido é gravado no campo Des. 60s.
-                          setAuditCheck(index, ((Date.now() - flowStarted) / 1000).toFixed(1).replace('.', ','));
-                          setFlowStarted(null);
-                        }} />
-                      <IconButton icon={ResetIcon} label="Zerar cronômetro" onPress={() => setFlowStarted(null)} />
-                    </View>
-                  )}
-                  {criterion === 'Des. 60s' && <Text style={textStyles.caption}>Inicie quando parar de abastecer e toque em Parar e salvar quando a bomba desligar. O tempo vai para o campo acima.</Text>}
-                </> : (
-                  <ChoiceChips value={value} options={['C', 'OB', 'NC', 'NA']} toneFor={codeTone} onChange={code => setAuditCheck(index, value === code ? '' : code)} />
-                )}
+              <View key={criterion} style={[s.criterion, s.divided]}>
+                <Text style={textStyles.bodyStrong}>{criterion}</Text>
+                <ChoiceChips value={value} options={['C', 'OB', 'NC', 'NA']} toneFor={codeTone} onChange={code => setAuditCheck(index, value === code ? '' : code)} />
                 {(value === 'NC' || value === 'OB') && <Field value={entry.notes[index] ?? ''} onChangeText={v => setAuditNote(index, v)} placeholder={value === 'OB' ? 'Descreva a observação' : 'Onde está o erro?'} />}
               </View>
             );
@@ -979,6 +1007,8 @@ const createScreenStyles = (colors: ThemeColors) => StyleSheet.create({
   note: { padding: space.md, borderRadius: radius.control, backgroundColor: colors.accentSoft },
   noteText: { fontSize: 13, lineHeight: 19, color: colors.accentText },
   criterion: { gap: space.sm, padding: space.md },
+  roletas: { flexDirection: 'row', gap: space.sm },
+  roletaCol: { flex: 1, gap: 4 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   stepBtn: { width: 46, height: 46, borderRadius: radius.control, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   stepBtnPressed: { backgroundColor: colors.neutralSoft, transform: [{ scale: 0.96 }] },
