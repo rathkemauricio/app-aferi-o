@@ -98,7 +98,7 @@ export function importarDocumento(filialId: string, secoes: SecaoImportar[], cad
       const ja = cadastro.find(x => norm(x.numero) === norm(tq.numero));
       tanquesCol.put({
         ...(ja ?? { id: uid('tqf'), filial_id: filialId }), numero: tq.numero,
-        combustivel: s.combustiveis[i] || ja?.combustivel || '', tipo: s.tipo, modelo: s.modelo, capacidade: tq.capacidade ?? ja?.capacidade ?? null,
+        combustivel: s.combustiveis[i] || ja?.combustivel || '', tipo: s.tipo, modelo: tq.modelo || s.modelo || ja?.modelo || '', capacidade: tq.capacidade ?? ja?.capacidade ?? null,
       } as TanqueFilial);
       if (ja) atualizados++; else novos++;
       ligar.set(tq.numero, tab.id);

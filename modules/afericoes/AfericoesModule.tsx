@@ -22,10 +22,11 @@ import { isSupabaseConfigured } from '../../lib/supabase';
 import { imprimirHtml, pdfBase64 } from '../../lib/util';
 import { Collection, combinedStatus, isSyncEnabled, type SyncRow, useCollection } from '../../lib/sync';
 
-type Nozzle = { id: string; number: string; fuel: string };
-type Pump = { id: string; number: string; nozzles: Nozzle[] };
+/** `tanque` e `modelo` vêm do documento da filial importado na Medição de Tanques (Esquema das Ligações). */
+type Nozzle = { id: string; number: string; fuel: string; tanque?: string };
+type Pump = { id: string; number: string; modelo?: string; nozzles: Nozzle[] };
 type Branch = { id: string; code: string; name: string; city: string; state: string; pumps: Pump[] };
-type NozzleResult = { pumpId: string; nozzleId: string; pump: string; nozzle: string; fuel: string; done: boolean; checks: string[]; notes: string[] };
+type NozzleResult = { pumpId: string; nozzleId: string; pump: string; nozzle: string; fuel: string; tanque?: string; done: boolean; checks: string[]; notes: string[] };
 type Audit = { id: string; branchId: string; branchName: string; branchCode: string; branchCity: string; branchState: string; date: string; auditor: string; aferidor?: string; seal: string; inmetro: string; panels: string; rodilhas: string; condBombas?: string; condBombasObs?: string; condIlhas?: string; condIlhasObs?: string; generalNotes: string; observations: string; results: NozzleResult[] };
 type DashboardData = { branches: Branch[]; audits: Audit[] };
 type ModuleSession = { tab: Tab; branchSearch: string; historyBranch: string; historyFrom: string; historyTo: string; draft: AuditDraft; auditStage: 'branch' | 'equipment' | 'nozzle' | 'final'; selectedPumpId: string; selectedNozzleId: string; auditMeta: Record<string, string>; formKind: FormKind | null; form: Record<string, string>; editingId: string; formBranchId: string; formPumpId: string; flowStarted: number | null };
@@ -235,11 +236,13 @@ export default function AfericoesModule() {
       else branches.push({ id: uid('filial'), code: form.code.trim(), name: form.name.trim(), city: form.city?.trim() ?? '', state: form.state?.trim().toUpperCase() || 'RS', pumps: [] });
     } else if (formKind === 'pump') {
       const branch = branches.find(b => b.id === formBranchId); if (!branch || !form.number?.trim()) { notify('Campo obrigatório', 'Informe a identificação da bomba.'); return; }
-      if (editingId) { const p = branch.pumps.find(x => x.id === editingId); if (p) p.number = form.number.trim(); }
-      else branch.pumps.push({ id: uid('bomba'), number: form.number.trim(), nozzles: [] });
+      const modelo = form.modelo?.trim() || undefined;
+      if (editingId) { const p = branch.pumps.find(x => x.id === editingId); if (p) { p.number = form.number.trim(); p.modelo = modelo; } }
+      else branch.pumps.push({ id: uid('bomba'), number: form.number.trim(), modelo, nozzles: [] });
     } else if (formKind === 'nozzle') {
       const pump = branches.find(b => b.id === formBranchId)?.pumps.find(p => p.id === formPumpId); if (!pump || !form.number?.trim()) { notify('Campo obrigatório', 'Informe a identificação do bico.'); return; }
-      const nozzle = { id: editingId || uid('bico'), number: form.number.trim(), fuel: form.fuel || FUELS[0] };
+      const antigo = editingId ? pump.nozzles.find(n => n.id === editingId) : undefined; // mantém o tanque ligado
+      const nozzle = { ...antigo, id: editingId || uid('bico'), number: form.number.trim(), fuel: form.fuel || FUELS[0] };
       if (editingId) { const idx = pump.nozzles.findIndex(n => n.id === editingId); if (idx >= 0) pump.nozzles[idx] = nozzle; } else pump.nozzles.push(nozzle);
     }
     void persist({ ...data, branches }); closeForm();
@@ -297,7 +300,7 @@ export default function AfericoesModule() {
   const saveAudit = () => {
     if (!branch) return;
     const results: NozzleResult[] = [];
-    branch.pumps.forEach(p => p.nozzles.forEach(n => { const entry = draft.data[n.id]; results.push({ pumpId: p.id, nozzleId: n.id, pump: p.number, nozzle: n.number, fuel: n.fuel, done: !!entry, checks: entry?.checks ?? CRITERIA.map(() => ''), notes: entry?.notes ?? CRITERIA.map(() => '') }); }));
+    branch.pumps.forEach(p => p.nozzles.forEach(n => { const entry = draft.data[n.id]; results.push({ pumpId: p.id, nozzleId: n.id, pump: p.number, nozzle: n.number, fuel: n.fuel, ...(n.tanque ? { tanque: n.tanque } : {}), done: !!entry, checks: entry?.checks ?? CRITERIA.map(() => ''), notes: entry?.notes ?? CRITERIA.map(() => '') }); }));
     if (!results.some(r => r.done)) { notify('Nenhum bico aferido', 'Registre ao menos um bico antes de salvar.'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(auditMeta.date)) { notify('Data inválida', 'Informe a data no formato AAAA-MM-DD.'); return; }
     const editId = auditMeta.editId || '';
@@ -478,18 +481,18 @@ export default function AfericoesModule() {
                   <Pressable accessibilityRole="button" accessibilityState={{ expanded: pAberta }} accessibilityLabel={`${p.number}, ${p.nozzles.length} bicos`}
                     onPress={() => setBombaAberta(pAberta ? null : p.id)} style={({ pressed }) => [s.rowCenter, s.flex, { minHeight: 40 }, pressed && { opacity: 0.7 }]}>
                     <GasPumpIcon size={18} color={tint.indigo.fg} weight="duotone" />
-                    <Text style={[textStyles.bodyStrong, s.flex]} numberOfLines={1}>{p.number}</Text>
+                    <Text style={[textStyles.bodyStrong, s.flex]} numberOfLines={1}>{p.number}{p.modelo ? <Text style={textStyles.caption}>{`  ${p.modelo}`}</Text> : null}</Text>
                     <Text style={textStyles.caption}>{p.nozzles.length} bico(s)</Text>
                     {seta(pAberta)}
                   </Pressable>
-                  <IconButton icon={PencilSimpleIcon} label="Editar bomba" onPress={() => openForm('pump', { number: p.number }, p.id, b.id)} />
+                  <IconButton icon={PencilSimpleIcon} label="Editar bomba" onPress={() => openForm('pump', { number: p.number, modelo: p.modelo ?? '' }, p.id, b.id)} />
                   <IconButton icon={TrashIcon} tone="danger" label="Excluir bomba" onPress={() => removePump(b.id, p.id)} />
                 </View>
                 {pAberta && <>
                   {p.nozzles.map(n => (
                     <View key={n.id} style={s.nozzle}>
                       <DropIcon size={15} color={tint.emerald.fg} weight="duotone" />
-                      <Text style={textStyles.body}>Bico {n.number}</Text>
+                      <Text style={textStyles.body}>Bico {n.number}{n.tanque ? <Text style={textStyles.caption}>{` · tanque ${n.tanque}`}</Text> : null}</Text>
                       <View style={s.flex}><StatusPill label={n.fuel} /></View>
                       <IconButton icon={PencilSimpleIcon} label="Editar bico" onPress={() => openForm('nozzle', { number: n.number, fuel: n.fuel }, n.id, b.id, p.id)} />
                       <IconButton icon={XIcon} tone="danger" label="Excluir bico" onPress={() => removeNozzle(b.id, p.id, n.id)} />
@@ -846,7 +849,10 @@ export default function AfericoesModule() {
             <Field label="UF" style={{ width: 80 }} value={form.state ?? ''} onChangeText={v => setFormValue('state', v)} placeholder="RS" autoCapitalize="characters" maxLength={2} />
           </View>
         </>}
-        {formKind === 'pump' && <Field label="Identificação da bomba" value={form.number ?? ''} onChangeText={v => setFormValue('number', v)} placeholder="Bomba 01" />}
+        {formKind === 'pump' && <>
+          <Field label="Identificação da bomba" value={form.number ?? ''} onChangeText={v => setFormValue('number', v)} placeholder="Bomba 01" />
+          <Field label="Marca / modelo (opcional)" value={form.modelo ?? ''} onChangeText={v => setFormValue('modelo', v)} placeholder="Ex.: Wayne 3B2201P" />
+        </>}
         {formKind === 'nozzle' && <>
           <Field label="Número do bico" value={form.number ?? ''} onChangeText={v => setFormValue('number', v)} placeholder="01" />
           <View style={s.group}><Text style={textStyles.label}>Combustível</Text><ChoiceChips value={form.fuel ?? FUELS[0]} options={form.fuel && !FUELS.includes(form.fuel) ? [...FUELS, form.fuel] : FUELS} onChange={v => setFormValue('fuel', v)} /></View>

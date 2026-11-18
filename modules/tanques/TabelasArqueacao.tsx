@@ -11,7 +11,12 @@ import {
   acharCombustivel, alturaMaxima, type DocumentoLido, htmlTabela, lerDocumentoFilial, lerTabela, linhasDoPdf, litrosPelaTabela, pontosParaConferir,
   type TabelaArqueacao, tabelasCol, useTabelas, volumeTotal,
 } from './arqueacao';
+import { useAuth } from '../../lib/auth';
 import { importarDocumento, type SecaoImportar, useTanquesFilial } from './cadastro';
+import { htmlDocumentoFilial } from './documento';
+import { bombasDaFilial, gravarLigacoes, type LigacaoTanque } from './ligacoes';
+import { docsCol } from '../../lib/data';
+import { useCollection } from '../../lib/sync';
 import { lerNumero, uid } from './model';
 
 const fmt = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('pt-BR'));
@@ -30,6 +35,13 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
   const [lendo, setLendo] = useState<string | null>(null);
   const [editando, setEditando] = useState<{ tabela: TabelaArqueacao; nova: boolean; avisos: string[] } | null>(null);
   const [documento, setDocumento] = useState<{ doc: DocumentoLido; arquivo: string } | null>(null);
+  const cadastro = useTanquesFilial(filialId);
+  useCollection(docsCol); // bombas e bicos da filial (para o PDF exportado)
+  /** PDF da filial no mesmo layout que a importação reconhece (tanques, ligações e tabelas). */
+  const exportar = () => {
+    const nomeComb = (id: string) => combustiveis.find(c => c.id === id)?.nome ?? id;
+    void imprimirHtml(htmlDocumentoFilial({ filialCodigo, filialNome, cadastro, tabelas, bombas: bombasDaFilial(filialId), nomeComb }), `Tanques e tabelas · Filial ${filialCodigo}`);
+  };
 
   const importar = async () => {
     if (lendo) return;
@@ -38,10 +50,11 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
       const a = r.canceled ? undefined : r.assets?.[0];
       if (!a) return;
       setLendo('Abrindo o PDF…');
-      const linhas = linhasDoPdf(await lerTextosPdf(a, 'arqueacao', setLendo));
+      const paginas = await lerTextosPdf(a, 'arqueacao', setLendo);
+      const linhas = linhasDoPdf(paginas);
       setLendo(null);
-      // Documento padrão da filial (tanques + tabelas): cadastra tudo de uma vez, depois de mostrar o que foi lido.
-      const doc = lerDocumentoFilial(linhas);
+      // Documento da filial (tanques, tabelas e ligações de bombas/bicos): cadastra tudo de uma vez, depois de mostrar o que foi lido.
+      const doc = lerDocumentoFilial(linhas, paginas);
       if (doc) { setDocumento({ doc, arquivo: a.name }); return; }
       const lida = lerTabela(linhas);
       if (lida.pontos.length < 10) { notify('Tabela não reconhecida', `Não encontrei as colunas de altura (cm) e volume (L) em "${a.name}". O PDF precisa ter texto (não pode ser só uma foto).`); return; }
@@ -80,14 +93,17 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
     })}
     {/* A tabela é importada pelo PDF no painel web; no app ela só é consultada e usada na medição. */}
     {Platform.OS === 'web' ? <>
-      <Button title={lendo ?? 'Importar PDF da filial (tanques e tabelas)'} icon={FileArrowUpIcon} variant="secondary" disabled={!!lendo} onPress={() => void importar()} />
-      <Text style={t.caption}>O PDF padrão da filial cadastra os tanques (número, combustível, capacidade, tipo e marca) e as tabelas de cada um. Um PDF só com a tabela de um tanque também serve.</Text>
+      <Button title={lendo ?? 'Importar PDF da filial (tanques, bicos e tabelas)'} icon={FileArrowUpIcon} variant="secondary" disabled={!!lendo} onPress={() => void importar()} />
+      <Text style={t.caption}>O PDF da filial cadastra os tanques (número, combustível, capacidade, tipo e marca), as tabelas de cada um e as bombas e bicos ligados a eles (Aferições e Croqui). Um PDF só com a tabela de um tanque também serve.</Text>
     </>
       : <Text style={t.caption}>{tabelas.length ? 'Para importar outra tabela, use o painel web (PDF).' : 'Nenhuma tabela ainda: importe o PDF da tabela de arqueação pelo painel web.'}</Text>}
     {documento ? (
       <ImportarDocumento doc={documento.doc} arquivo={documento.arquivo} filialId={filialId} filialCodigo={filialCodigo} tabelas={tabelas}
         combustiveis={combustiveis} onFechar={() => setDocumento(null)} />
     ) : null}
+    {cadastro.length || tabelas.length
+      ? <Button title="Exportar PDF da filial (tanques, bicos e tabelas)" icon={PrinterIcon} variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onPress={exportar} />
+      : null}
     {editando ? (
       <EditorTabela inicial={editando.tabela} nova={editando.nova} avisos={editando.avisos} outras={tabelas.filter(x => x.id !== editando.tabela.id)}
         filialNome={filialNome} tanquesConhecidos={tanquesConhecidos} onFechar={() => setEditando(null)} />
@@ -102,6 +118,9 @@ function ImportarDocumento({ doc, arquivo, filialId, filialCodigo, tabelas, comb
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const cadastro = useTanquesFilial(filialId);
+  const { podeAcessar } = useAuth();
+  const podeBombas = podeAcessar('afericoes');
+  const [gravando, setGravando] = useState(false);
   const [secoes, setSecoes] = useState<SecaoImportar[]>(() => doc.secoes.map(s => ({ ...s, combustiveis: s.tanques.map(x => acharCombustivel(x.combustivelTexto, combustiveis)) })));
   const [abrir, setAbrir] = useState<string | null>(null);
   const nomeComb = (id: string) => combustiveis.find(c => c.id === id)?.nome ?? '';
@@ -113,22 +132,35 @@ function ImportarDocumento({ doc, arquivo, filialId, filialCodigo, tabelas, comb
     setSecoes(l => l.map((s, i) => (i === si ? { ...s, combustiveis: s.combustiveis.map((c, j) => (j === ti ? id : c)) } : s)));
     setAbrir(null);
   };
-  const gravar = () => {
-    const r = importarDocumento(filialId, secoes, cadastro, tabelas, arquivo);
-    notify('Filial cadastrada', `${r.tabelas} tabela(s) e ${r.novos + r.atualizados} tanque(s) (${r.novos} novo(s), ${r.atualizados} atualizado(s)), cada um ligado à sua tabela.`);
-    onFechar();
+  // Ligações de pista (bomba, modelo e bicos de cada tanque), com o combustível do tanque.
+  const ligacoes: LigacaoTanque[] = secoes.flatMap(s => s.tanques.flatMap((tq, i) => (tq.ligacoes ?? []).map(l => ({ ...l, tanque: tq.numero, combustivel: nomeComb(s.combustiveis[i]) }))));
+  const bombasLidas = [...new Set(ligacoes.map(l => l.bomba))].sort((a, b) => Number(a) - Number(b) || a.localeCompare(b))
+    .map(b => { const ls = ligacoes.filter(l => l.bomba === b); return { bomba: b, modelo: ls.find(l => l.modelo)?.modelo ?? '', bicos: ls.flatMap(l => l.bicos.map(n => ({ n, tanque: l.tanque }))).sort((x, y) => Number(x.n) - Number(y.n)) }; });
+  const gravar = async () => {
+    if (gravando) return;
+    setGravando(true);
+    try {
+      const r = importarDocumento(filialId, secoes, cadastro, tabelas, arquivo);
+      let bombas = '';
+      if (ligacoes.length && podeBombas) {
+        const b = await gravarLigacoes(filialId, ligacoes);
+        bombas = `\n\nBombas e bicos (Aferições e Croqui): ${b.bombasNovas} bomba(s) nova(s), ${b.bicosNovos} bico(s) novo(s), ${b.bicosAtualizados} bico(s) atualizado(s).`;
+      } else if (ligacoes.length) bombas = '\n\nBombas e bicos não foram atualizados: sua conta não tem o módulo Aferições.';
+      notify('Filial cadastrada', `${r.tabelas} tabela(s) e ${r.novos + r.atualizados} tanque(s) (${r.novos} novo(s), ${r.atualizados} atualizado(s)), cada um ligado à sua tabela.${bombas}`);
+      onFechar();
+    } finally { setGravando(false); }
   };
   const confirmar = () => {
     if (outraFilial) {
-      confirmAction('Filial diferente', `O PDF é da Filial ${doc.filial}, mas você está na filial ${filialCodigo}. Cadastrar mesmo assim nesta filial?`, 'Cadastrar', gravar);
+      confirmAction('Filial diferente', `O PDF é da Filial ${doc.filial}, mas você está na filial ${filialCodigo}. Cadastrar mesmo assim nesta filial?`, 'Cadastrar', () => void gravar());
       return;
     }
-    gravar();
+    void gravar();
   };
 
   return (
     <Sheet title="Importar PDF da filial" onClose={onFechar}
-      footer={<Button title={`Cadastrar ${total} tanque(s) e ${secoes.length} tabela(s)`} icon={CheckIcon} onPress={confirmar} />}>
+      footer={<Button title={gravando ? 'Cadastrando…' : `Cadastrar ${total} tanque(s) e ${secoes.length} tabela(s)${bombasLidas.length && podeBombas ? ` e ${bombasLidas.length} bomba(s)` : ''}`} icon={CheckIcon} disabled={gravando} onPress={confirmar} />}>
       <Text style={t.body}>{arquivo}{doc.filial ? ` · Filial ${doc.filial}` : ''}</Text>
       {outraFilial ? (
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}><WarningIcon size={18} color={colors.danger} />
@@ -168,7 +200,8 @@ function ImportarDocumento({ doc, arquivo, filialId, filialCodigo, tabelas, comb
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={t.bodyStrong}>Tanque {tq.numero} · {comb ? nomeComb(comb) : <Text style={{ color: colors.danger }}>escolha o combustível</Text>}</Text>
-                      <Text style={t.caption}>No PDF: {tq.combustivelTexto}{tq.capacidade ? ` · ${fmt(tq.capacidade)} L` : ''} · {ja ? 'já cadastrado (atualiza)' : 'novo'}</Text>
+                      <Text style={t.caption}>No PDF: {tq.combustivelTexto || '—'}{tq.capacidade ? ` · ${fmt(tq.capacidade)} L` : ''}{tq.modelo ? ` · ${tq.modelo}` : ''} · {ja ? 'já cadastrado (atualiza)' : 'novo'}</Text>
+                      {tq.ligacoes?.length ? <Text style={t.caption}>{tq.ligacoes.map(l => `Bomba ${l.bomba}: bico${l.bicos.length > 1 ? 's' : ''} ${l.bicos.join(', ')}`).join(' · ')}</Text> : null}
                     </View>
                   </Pressable>
                   {abrir === chave ? (
@@ -188,6 +221,19 @@ function ImportarDocumento({ doc, arquivo, filialId, filialCodigo, tabelas, comb
           </Card>
         );
       })}
+      {bombasLidas.length ? (
+        <Card style={{ gap: 6 }}>
+          <Text style={t.bodyStrong}>Bombas e bicos ({bombasLidas.length} bomba(s), {bombasLidas.reduce((n, b) => n + b.bicos.length, 0)} bico(s))</Text>
+          {bombasLidas.map(b => (
+            <Text key={b.bomba} style={t.caption}>
+              <Text style={{ fontWeight: '800', color: colors.text }}>Bomba {b.bomba}</Text>{b.modelo ? ` (${b.modelo})` : ''}: {b.bicos.map(x => `bico ${x.n} → tanque ${x.tanque}`).join(' · ')}
+            </Text>
+          ))}
+          {podeBombas
+            ? <Text style={t.caption}>Vão para o cadastro de bombas da filial (Aferições → Filiais) e aparecem no croqui. Bomba e bico de mesmo número são atualizados (combustível do tanque, tanque e modelo); os demais não mudam.</Text>
+            : <Text style={[t.caption, { color: colors.warning, fontWeight: '700' }]}>Sua conta não tem o módulo Aferições: tanques e tabelas são cadastrados, mas as bombas e bicos não.</Text>}
+        </Card>
+      ) : null}
       <Text style={t.caption}>Tanques com o mesmo número são atualizados (combustível, capacidade, tipo e marca) e passam a usar a tabela da sua parte do PDF. Os demais tanques da filial não mudam.</Text>
     </Sheet>
   );

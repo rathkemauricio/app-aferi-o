@@ -139,82 +139,219 @@ export function lerTabela(linhas: string[]): TabelaLida {
   };
 }
 
-/* ---------- Documento da filial (tanques + tabelas, mesmo layout em todas as filiais) ---------- */
+/* ---------- Documento da filial (tanques + tabelas) ---------- */
 
 export type TipoFisico = 'simples' | 'bipartido' | 'tripartido';
-export type TanqueLido = { numero: string; combustivelTexto: string; capacidade: number | null };
+/** Ligação de pista: bomba (com o modelo) e os bicos dela que puxam deste tanque. */
+export type Ligacao = { bomba: string; modelo: string; bicos: string[] };
+export type TanqueLido = { numero: string; combustivelTexto: string; capacidade: number | null; modelo?: string; ligacoes?: Ligacao[] };
 export type SecaoLida = {
-  /** Ex.: "ARXO 10.000 L · Tripartido (10/10/10)". */
+  /** Nome da tabela (ex.: "ARXO 10.000 L · Tripartido (10/10/10)"). */
   nome: string; modelo: string; tipo: TipoFisico; particao: string;
   tanques: TanqueLido[];
   tabela: TabelaLida;
 };
 export type DocumentoLido = { filial: string | null; secoes: SecaoLida[] };
 
+/** "FILIAL 03 — TANQUES 3, 4 E 5 (ARXO 10.000 L)" (layout com a marca/modelo entre parênteses). */
 const CABECALHO = /^\s*FILIAL\s+(\d+)\s*[—–-]*\s*TANQUES?\s+[\dA-Z,\s]+?\s*\(([^)]+)\)/i;
+const RODAPE = /\b(page|p[áa]gina)\s+\d+\s+(of|de)\s+\d+\b/i;
+/** Números de tanque citados: "TANQUES 1, 2, 4 E 8", "TANQUE 7:", "Tq. 3", "TQ. 1, 2" (não pega "Tanque 30.000 L"). */
+const NUMEROS_TANQUE = /\bT(?:Q|ANQUES?)\.?\s*(\d+[A-Z]?(?![.\d])(?:\s*(?:,|\be\b|\/)\s*\d+[A-Z]?(?![.\d]))*)(?!\s*(?:L|LTS|LITROS)\b)/gi;
+const ehDado = (l: string) => /\d/.test(l) && /^[\d\s.,*—–-]+$/.test(l) && l.split(/\s+/).filter(x => /\d/.test(x)).length >= 2;
+const tituloLimpo = (l: string) => l.replace(/\s+/g, ' ').trim();
 
+function numerosDeTanque(linha: string): string[] {
+  const out: string[] = [];
+  for (const m of linha.matchAll(NUMEROS_TANQUE)) {
+    for (const n of m[1].split(/\s*(?:,|\be\b|\/)\s*/i)) if (n.trim() && !out.includes(n.trim().toUpperCase())) out.push(n.trim().toUpperCase());
+  }
+  return out;
+}
 /**
- * Lê o documento padrão da filial: uma seção por tanque físico, cada uma com
- * "FILIAL 03 — TANQUES 3, 4 E 5 (ARXO 10.000 L)", o tipo ("TRIPARTIDO (10/10/10)"),
- * "Tanques: Tq. 3 Gas. Comum (10.000 L) • Tq. 4 …", "Dimensões: Ø Int. = 2.549 mm • Comp. = 1.995,8 mm",
- * "Vol. Máx. (254 cm): 10.181 L" e a tabela (pares cm/litros lado a lado, que podem continuar na página seguinte).
- * Sem esse layout, devolve `null` (o PDF é lido como uma tabela só).
+ * Ligações de pista no texto: "Bomba 6 (Wayne 3B2201P): Bico 1", "Bomba 1 (…): Bico 3 • Bomba 6 (…): Bico 5",
+ * "Bomba 4 (Wayne 3B2203P) — Bicos 6, 8 e 9".
  */
-export function lerDocumentoFilial(linhas: string[]): DocumentoLido | null {
-  const inicios = linhas.map((l, i) => (CABECALHO.test(l) ? i : -1)).filter(i => i >= 0);
-  if (!inicios.length) return null;
-  let filial: string | null = null;
-  const secoes: SecaoLida[] = [];
-  inicios.forEach((ini, k) => {
-    const bloco = linhas.slice(ini, inicios[k + 1] ?? linhas.length);
-    const texto = bloco.filter(l => !/^[\d\s.,*—–-]+$/.test(l)).join(' ').replace(/\s+/g, ' ');
-    const cab = CABECALHO.exec(bloco[0])!;
-    filial ??= cab[1];
-    const modelo = cab[2].trim();
-    const tp = /\b(SIMPLES|BIPARTIDO|TRIPARTIDO)\b\s*(?:\(([\d\s/]+)\))?/i.exec(texto);
-    const tipo = (tp?.[1].toLowerCase() ?? 'simples') as TipoFisico;
-    const particao = tp?.[2]?.replace(/\s/g, '') ?? '';
-    // Só a lista "Tanques: Tq. 3 … (10.000 L) • Tq. 4 …" (a nota técnica também cita os tanques, sem "Tq.").
-    const lista = /Tanques\s*:(.*?)(?:Dimens|Vol\.|$)/i.exec(texto)?.[1] ?? texto;
-    const tanques: TanqueLido[] = [];
-    for (const m of lista.matchAll(/Tq\.?\s*(\d+[A-Z]?)\s+([^(•]+?)\s*\(\s*([\d.]+)\s*L\b/gi)) {
-      if (tanques.some(x => x.numero === m[1])) continue;
-      const cap = numeroBR(m[3]);
-      tanques.push({ numero: m[1], combustivelTexto: m[2].trim(), capacidade: Number.isFinite(cap) ? cap : null });
-    }
-    const tabela = lerTabela(bloco);
-    const diam = /Ø\s*(?:Int\.?)?\s*=?\s*([\d.,]+)\s*mm/i.exec(texto);
-    const comp = /Comp\.?\s*=?\s*([\d.,]+)\s*mm/i.exec(texto);
-    const max = /Vol\.?\s*M[áa]x\.?\s*\(\s*(\d+(?:,\d+)?)\s*cm\s*\)/i.exec(texto);
-    const ultimo = tabela.pontos[tabela.pontos.length - 1]?.[0] ?? null;
-    const alturaMax = max ? numeroBR(max[1]) : NaN;
-    const diamMm = diam ? numeroBR(diam[1]) : NaN;
-    tabela.diametro_cm = Number.isFinite(alturaMax) ? alturaMax : Number.isFinite(diamMm) ? Math.round(diamMm / 10) : ultimo;
-    const compMm = comp ? numeroBR(comp[1]) : NaN;
-    if (Number.isFinite(compMm)) tabela.comprimento_m = Math.round(compMm * 10) / 10000;
-    const nominal = numeroBR(/([\d.]+)\s*L\b/i.exec(modelo)?.[1] ?? '');
-    tabela.capacidade = Number.isFinite(nominal) ? nominal : tabela.capacidade;
-    const nomeTipo = tipo === 'simples' ? '' : ` · ${tipo[0].toUpperCase()}${tipo.slice(1)}${particao ? ` (${particao})` : ''}`;
-    if (tanques.length || tabela.pontos.length) secoes.push({ nome: `${modelo}${nomeTipo}`, modelo, tipo, particao, tanques, tabela });
-  });
-  return secoes.some(x => x.tanques.length) ? { filial, secoes } : null;
+export function lerLigacoes(texto: string): Ligacao[] {
+  const out: Ligacao[] = [];
+  const re = /Bomba\s+(\d+[A-Z]?)\s*(?:\(([^)]*)\))?\s*[:—–-]?\s*Bicos?\s+(\d+(?:\s*(?:,|\be\b)\s*\d+)*)/gi;
+  for (const m of texto.matchAll(re)) {
+    const bicos = m[3].split(/\s*(?:,|\be\b)\s*/i).map(x => x.trim()).filter(Boolean);
+    const ja = out.find(x => x.bomba === m[1]);
+    if (ja) bicos.forEach(b => { if (!ja.bicos.includes(b)) ja.bicos.push(b); });
+    else out.push({ bomba: m[1], modelo: (m[2] ?? '').trim(), bicos });
+  }
+  return out;
+}
+const juntarLigacoes = (a: Ligacao[] = [], b: Ligacao[] = []) => {
+  const out = a.map(x => ({ ...x, bicos: [...x.bicos] }));
+  for (const l of b) {
+    const ja = out.find(x => x.bomba === l.bomba);
+    if (ja) { l.bicos.forEach(n => { if (!ja.bicos.includes(n)) ja.bicos.push(n); }); if (!ja.modelo) ja.modelo = l.modelo; } else out.push({ ...l, bicos: [...l.bicos] });
+  }
+  return out;
+};
+
+/** Medida com unidade em cm ("2,549 m", "2.549 mm", "254,9 cm"). */
+function medidaCm(valor: string, unidade: string) {
+  const v = numeroBR(valor);
+  if (!Number.isFinite(v)) return NaN;
+  return unidade.toLowerCase() === 'mm' ? v / 10 : unidade.toLowerCase() === 'm' ? v * 100 : v;
 }
 
-/** Combustível do cadastro pelo nome no documento ("Gas. Comum" → Gasolina comum, "Diesel Comum" → Diesel S500). */
+/**
+ * Tabela de cadastro em colunas ("Tanque | Combustível | Capacidade | Tabela … | Ligações"), lida pela posição de cada
+ * texto na página (as células quebram em várias linhas). Devolve os tanques com combustível, capacidade e modelo.
+ */
+function cadastroEmColunas(paginas: Texto[][]): TanqueLido[] {
+  const out: TanqueLido[] = [];
+  for (const textos of paginas) {
+    const cab = textos.find(t => /^tanques?$/i.test(t.s) && textos.some(o => Math.abs(o.y - t.y) <= 3 && /^combust/i.test(o.s)));
+    if (!cab) continue;
+    const colunas = textos.filter(o => Math.abs(o.y - cab.y) <= 3 && o.x >= cab.x - 2).sort((a, b) => a.x - b.x);
+    const col = (t: Texto) => { let c = -1; colunas.forEach((h, i) => { if (t.x >= h.x - 4) c = i; }); return c; };
+    const iComb = colunas.findIndex(h => /^combust/i.test(h.s));
+    const iCap = colunas.findIndex(h => /^capac/i.test(h.s));
+    const iTab = colunas.findIndex(h => /^tabela/i.test(h.s));
+    const iMod = colunas.findIndex(h => /^(modelo|marca)/i.test(h.s));
+    const iLig = colunas.findIndex(h => /^(esquema|liga)/i.test(h.s));
+    const marca = iTab >= 0 ? colunas[iTab].s.replace(/^tabela\s*/i, '').trim() : '';
+    const abaixo = textos.filter(t => t.y < cab.y - 3);
+    // Início de cada linha: "Tanque" na 1ª coluna (o PDF pode partir a palavra em pedaços, ex.: "T" + "anque 1").
+    const primeira = abaixo.filter(t => col(t) === 0).sort((a, b) => b.y - a.y || a.x - b.x);
+    const inicios = primeira.filter((t, i) => {
+      if (i > 0 && Math.abs(primeira[i - 1].y - t.y) <= 1.5) return false;
+      const linha = primeira.filter(o => Math.abs(o.y - t.y) <= 1.5).map(o => o.s).join('').replace(/\s+/g, '');
+      return /^tanque/i.test(linha);
+    });
+    inicios.forEach((ini, k) => {
+      const prox = inicios[k + 1];
+      const altura = prox ? ini.y - prox.y : (k > 0 ? inicios[k - 1].y - ini.y : 40);
+      const naLinha = abaixo.filter(t => t.y <= ini.y + 4 && t.y > ini.y - altura + 2);
+      const celula = (i: number) => naLinha.filter(t => col(t) === i).sort((a, b) => b.y - a.y || a.x - b.x).map(t => t.s).join(' ').replace(/\s+/g, ' ').trim();
+      const numero = /(\d+[A-Z]?)\s*$/i.exec(celula(0).replace(/\s+/g, ''))?.[1]?.toUpperCase();
+      if (!numero || out.some(x => x.numero === numero)) return;
+      const cap = /([\d.]+)\s*(?:L|LTS|litros)\b/i.exec(iCap >= 0 ? celula(iCap) : '')?.[1];
+      const tab = iTab >= 0 ? celula(iTab).replace(/\((?:esta\s+)?p[áa]gina[^)]*\)/gi, '').replace(/\s+/g, ' ').trim() : '';
+      out.push({
+        numero, combustivelTexto: iComb >= 0 ? celula(iComb) : '', capacidade: cap ? numeroBR(cap) : null,
+        modelo: (iMod >= 0 ? celula(iMod) : [marca, tab].filter(Boolean).join(' ')) || undefined,
+        ligacoes: iLig >= 0 ? lerLigacoes(celula(iLig)) : undefined,
+      });
+    });
+  }
+  return out;
+}
+
+/**
+ * Lê o documento da filial (tanques + tabelas). Funciona com layouts diferentes:
+ * - cada tabela de medição é reconhecida pelo título logo acima dela, que diz quais tanques ela atende
+ *   ("… (TANQUES 1, 2, 4 E 8)", "… TANQUE 7: …", "Tanques: Tq. 3 … • Tq. 4 …"); títulos repetidos no alto da página
+ *   seguinte continuam a mesma tabela;
+ * - os dados de cada tanque (combustível e capacidade) vêm de "Tq. 3 Gas. Comum (10.000 L)",
+ *   "Tanque 7 — Óleo Diesel B S10 (30.000 L)" ou da tabela de cadastro em colunas;
+ * - "FILIAL 03 — TANQUES 3, 4 E 5 (ARXO 10.000 L)" e "TRIPARTIDO (10/10/10)" dão marca/modelo e tipo;
+ *   "Tabela: …" (PDF exportado pelo sistema) dá o nome da tabela.
+ * Sem tabela ligada a tanques, devolve `null` (o PDF é lido como uma tabela só).
+ */
+export function lerDocumentoFilial(linhas: string[], paginas: Texto[][] = []): DocumentoLido | null {
+  type Bloco = { titulo: string; preambulo: string[]; dados: string[] };
+  const blocos: Bloco[] = [];
+  let preambulo: string[] = [];
+  let atual: Bloco | null = null;
+  for (const l of linhas) {
+    if (RODAPE.test(l)) continue;
+    if (!ehDado(l)) { preambulo.push(l); continue; }
+    const titulos = preambulo.filter(x => numerosDeTanque(x).length);
+    const titulo = titulos.length ? tituloLimpo(titulos[titulos.length - 1]) : null;
+    if (!atual || (titulo !== null && titulo !== atual.titulo)) {
+      // O cabeçalho da tabela começa no último título "FILIAL …" (antes dele vêm notas da tabela anterior).
+      const ini = preambulo.reduce((k, x, i) => (/^\s*FILIAL\s+\d+\s*[—–-]/i.test(x) ? i : k), 0);
+      atual = { titulo: titulo ?? '', preambulo: preambulo.slice(ini), dados: [] };
+      blocos.push(atual);
+    }
+    atual.dados.push(l);
+    preambulo = [];
+  }
+  const texto = linhas.join('\n');
+  const filial = /FILIAL\s*:?\s*(\d+)/i.exec(texto)?.[1] ?? null;
+
+  // Dados de cada tanque, de onde aparecerem no documento.
+  const info = new Map<string, TanqueLido>();
+  const juntar = (t: TanqueLido) => {
+    const ja = info.get(t.numero);
+    info.set(t.numero, {
+      numero: t.numero, combustivelTexto: ja?.combustivelTexto || t.combustivelTexto,
+      capacidade: ja?.capacidade ?? t.capacidade, modelo: ja?.modelo ?? t.modelo, ligacoes: juntarLigacoes(ja?.ligacoes, t.ligacoes),
+    });
+  };
+  cadastroEmColunas(paginas).forEach(juntar);
+  for (const l of linhas) {
+    for (const m of l.matchAll(/Tq\.?\s*(\d+[A-Z]?)\s+([^(•]+?)\s*\(\s*([\d.]+)\s*L\b/gi)) {
+      juntar({ numero: m[1].toUpperCase(), combustivelTexto: m[2].trim(), capacidade: numeroBR(m[3]) });
+    }
+    const id = /Tanque\s+(\d+[A-Z]?)\s*[—–-]\s*([^(]+?)\s*\(\s*([\d.]+)\s*L\b/i.exec(l);
+    if (id) juntar({ numero: id[1].toUpperCase(), combustivelTexto: id[2].trim(), capacidade: numeroBR(id[3]) });
+  }
+
+  const secoes: SecaoLida[] = [];
+  for (const b of blocos) {
+    const numeros = numerosDeTanque(b.titulo);
+    const tabela = lerTabela(b.dados);
+    if (!numeros.length || tabela.pontos.length < 10) continue;
+    // "Ligações de Pista: Bomba 4 (…) — Bicos 6, 8 e 9" no cabeçalho de uma tabela de um tanque só.
+    if (numeros.length === 1) {
+      const lig = lerLigacoes(b.preambulo.filter(x => /liga[çc][õo]es/i.test(x)).join(' '));
+      if (lig.length) { const x = info.get(numeros[0]); info.set(numeros[0], { numero: numeros[0], combustivelTexto: x?.combustivelTexto ?? '', capacidade: x?.capacidade ?? null, modelo: x?.modelo, ligacoes: juntarLigacoes(x?.ligacoes, lig) }); }
+    }
+    const pre = b.preambulo.join(' ').replace(/\s+/g, ' ');
+    const cab = b.preambulo.map(x => CABECALHO.exec(x)).find(Boolean);
+    const tp = /\b(BIPARTIDO|TRIPARTIDO)\b\s*(?:\(([\d\s/]+)\))?/i.exec(pre);
+    const tipo = (tp?.[1].toLowerCase() ?? 'simples') as TipoFisico;
+    const particao = tp?.[2]?.replace(/\s/g, '') ?? '';
+    const nomeTabela = /(?:^|\s)Tabela\s*:\s*(.+?)\s*$/i.exec(b.preambulo.find(x => /^\s*Tabela\s*:/i.test(x)) ?? '')?.[1];
+    const modelo = cab?.[2].trim() ?? '';
+    const nomeTipo = tipo === 'simples' ? '' : ` · ${tipo[0].toUpperCase()}${tipo.slice(1)}${particao ? ` (${particao})` : ''}`;
+    const nome = nomeTabela
+      ?? (modelo ? `${modelo}${nomeTipo}` : b.titulo.replace(/\(\s*TANQUES?\b[^)]*\)/gi, '').replace(/^FILIAL\s+\d+\s*[—–-]\s*/i, '').replace(/\s+/g, ' ').trim());
+    // Medidas: altura máxima = última altura da tabela (ou "Vol. Máx. (254 cm)"); comprimento do cabeçalho.
+    const max = /Vol\.?\s*M[áa]x\.?\s*\(\s*(\d+(?:,\d+)?)\s*cm\s*\)/i.exec(pre);
+    const ultimo = tabela.pontos[tabela.pontos.length - 1]?.[0] ?? null;
+    const diam = /(?:Ø|∅)\s*(?:Int\.?)?\s*=?\s*([\d.,]+)\s*(mm|cm|m)\b/i.exec(pre);
+    const alturaMax = max ? numeroBR(max[1]) : NaN;
+    const diamCm = diam ? medidaCm(diam[1], diam[2]) : NaN;
+    tabela.diametro_cm = Number.isFinite(alturaMax) ? alturaMax : ultimo ?? (Number.isFinite(diamCm) ? Math.round(diamCm * 10) / 10 : null);
+    const comp = /\b(?:Comp\.?|C)\s*=\s*([\d.,]+)\s*(mm|cm|m)\b/i.exec(pre);
+    const compCm = comp ? medidaCm(comp[1], comp[2]) : NaN;
+    if (Number.isFinite(compCm)) tabela.comprimento_m = Math.round(compCm * 100) / 10000;
+    const nominal = numeroBR(/([\d.]+)\s*(?:L|LTS|litros)\b/i.exec(modelo || b.titulo)?.[1] ?? /capacidade\s+nominal\s*:?\s*([\d.]+)/i.exec(pre)?.[1] ?? '');
+    tabela.capacidade = Number.isFinite(nominal) ? nominal : tabela.capacidade;
+    const tanques = numeros.map(n => {
+      const x = info.get(n);
+      return { numero: n, combustivelTexto: x?.combustivelTexto ?? '', capacidade: x?.capacidade ?? null, modelo: modelo || x?.modelo || undefined, ligacoes: x?.ligacoes ?? [] };
+    });
+    secoes.push({ nome, modelo, tipo, particao, tanques, tabela });
+  }
+  return secoes.length ? { filial, secoes } : null;
+}
+
+/** Combustível do cadastro pelo nome no documento ("Gas. Comum" → Gasolina comum, "Óleo Diesel B S500" → Diesel S500). */
 export function acharCombustivel(texto: string, combustiveis: { id: string; nome: string; ativo?: boolean }[]): string {
   const limpar = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
     .replace(/\bgas\b\.?/g, 'gasolina').replace(/\bgasol\b\.?/g, 'gasolina').replace(/\bet\b\.?/g, 'etanol').replace(/\badit\b\.?/g, 'aditivada')
+    .replace(/\boleo\b/g, ' ').replace(/\bdiesel\s+b\b/g, 'diesel').replace(/\bgasolina\s+c\b/g, 'gasolina').replace(/\betanol\s+(?:hidratado|comum)\b/g, 'etanol')
     .replace(/\bs[\s-]*(10|500)\b/g, 's$1').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   let alvo = limpar(texto);
   if (alvo === 'diesel comum') alvo = 'diesel s500';
   if (alvo === 'gasolina') alvo = 'gasolina comum';
-  if (alvo === 'etanol comum' || alvo === 'alcool') alvo = 'etanol';
+  if (alvo === 'alcool') alvo = 'etanol';
   const lista = combustiveis.filter(c => c.ativo !== false);
   const exato = lista.find(c => limpar(c.nome) === alvo);
   if (exato) return exato.id;
-  // Todas as palavras do documento no nome do cadastro (o mais curto primeiro: "Diesel aditivado" antes de outros).
+  // Todas as palavras do documento no nome do cadastro (o nome mais curto primeiro).
   const pal = alvo.split(' ').filter(Boolean);
-  const cand = lista.filter(c => { const n = limpar(c.nome).split(' '); return pal.every(w => n.includes(w.replace(/o$/, '')) || n.includes(w) || n.some(x => x.startsWith(w))); })
+  if (!pal.length) return '';
+  const cand = lista.filter(c => { const n = limpar(c.nome).split(' '); return pal.every(w => n.includes(w) || n.some(x => x.startsWith(w))); })
     .sort((a, b) => a.nome.length - b.nome.length);
   return cand[0]?.id ?? '';
 }

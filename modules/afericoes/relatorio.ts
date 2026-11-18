@@ -1,6 +1,6 @@
 // Relatório de aferição em HTML (A4 paisagem), usado para imprimir e gerar o PDF.
 
-type Resultado = { pump: string; nozzle: string; fuel: string; done: boolean; checks: string[]; notes: string[] };
+type Resultado = { pump: string; nozzle: string; fuel: string; tanque?: string; done: boolean; checks: string[]; notes: string[] };
 export type AuditRelatorio = {
   branchName: string; branchCode: string; branchCity: string; branchState: string; date: string; auditor: string; aferidor?: string;
   seal: string; inmetro: string; panels: string; rodilhas: string; generalNotes: string; observations: string; results: Resultado[];
@@ -39,7 +39,7 @@ export function auditReportHtml(a: AuditRelatorio, marca = 'EasyAudit') {
   const comErro = a.results.some(r => r.done && String(r.checks[2] ?? '').trim() !== '');
   const escala = comErro ? ESCALA : ESCALA.filter(i => i !== 2);
   const linhas = a.results.map(r => {
-    const id = `<td class="bb">${esc(r.pump)} / Bico ${esc(r.nozzle)}</td><td>${esc(r.fuel)}</td>`;
+    const id = `<td class="bb">${esc(r.pump)} / Bico ${esc(r.nozzle)}</td><td>${esc(r.fuel)}${r.tanque ? `<br><small>Tanque ${esc(r.tanque)}</small>` : ''}</td>`;
     if (!r.done) return `<tr>${id}<td colspan="${comErro ? 10 : 9}" class="nao">NÃO REALIZADO</td></tr>`;
     return `<tr>${id}${escala.map(i => `<td class="num">${mL(r.checks[i])}</td>`).join('')}${CODIGOS.map(i => celulaCodigo(r, i)).join('')}<td class="num">${vazio(r.checks[8])}</td><td class="num">${vazio(r.checks[9])}</td></tr>`;
   }).join('');
@@ -47,7 +47,7 @@ export function auditReportHtml(a: AuditRelatorio, marca = 'EasyAudit') {
   const ocorrencias = feitos.flatMap(r => CODIGOS.filter(i => r.checks[i] === 'OB' || r.checks[i] === 'NC').map(i => ({ r, i })));
   const tabelaOcorrencias = ocorrencias.length
     ? `<table class="oc"><thead><tr><th style="width:19%">Bomba / Bico</th><th style="width:13%">Combustível</th><th style="width:12%">Item</th><th style="width:9%" class="ce">Situação</th><th>Descrição / local do erro</th></tr></thead><tbody>${
-        ocorrencias.map(({ r, i }) => `<tr><td>${esc(r.pump)} / Bico ${esc(r.nozzle)}</td><td>${esc(r.fuel)}</td><td>${esc(CRITERIOS[i])}</td><td class="cod ${r.checks[i] === 'NC' ? 'nc' : 'ob'}"><b>${esc(r.checks[i])}</b></td><td>${vazio(r.notes[i])}</td></tr>`).join('')
+        ocorrencias.map(({ r, i }) => `<tr><td>${esc(r.pump)} / Bico ${esc(r.nozzle)}</td><td>${esc(r.fuel)}${r.tanque ? ` · Tq ${esc(r.tanque)}` : ''}</td><td>${esc(CRITERIOS[i])}</td><td class="cod ${r.checks[i] === 'NC' ? 'nc' : 'ob'}"><b>${esc(r.checks[i])}</b></td><td>${vazio(r.notes[i])}</td></tr>`).join('')
       }</tbody></table>`
     : '<p class="vazio">Nenhuma não conformidade ou observação registrada.</p>';
 
