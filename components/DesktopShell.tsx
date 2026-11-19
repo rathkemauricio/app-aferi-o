@@ -8,7 +8,7 @@ import { Avatar } from './Avatar';
 import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
-import { CaretLeftIcon, DropIcon, GearIcon, HouseIcon, MoonIcon, SignOutIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
+import { CaretLeftIcon, DropIcon, GearIcon, HouseIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
 import { confirmAction } from '../ui/kit';
 import { ThemeContext, type ThemeColors } from '../ui/theme';
 
@@ -107,7 +107,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { colors, mode, toggleTheme } = useContext(ThemeContext);
-  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa } = useAuth();
+  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa, dono } = useAuth();
   const reduz = useReducedMotion();
   const p = useMemo(() => paletaDa(colors, mode === 'dark'), [colors, mode]);
   const styles = useMemo(() => makeStyles(colors, p), [colors, p]);
@@ -148,6 +148,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
       { label: 'Bandeiras', route: '/bandeiras', icon: StorefrontIcon },
     ] },
     ...(isAdmin ? [{ titulo: 'ADMINISTRAÇÃO', itens: [{ label: 'Usuários e permissões', route: '/usuarios' as Href, icon: UserCircleIcon }] }] : []),
+    ...(dono ? [{ titulo: 'PLATAFORMA', itens: [{ label: 'Empresas e planos', route: '/plataforma' as Href, icon: SquaresFourIcon }] }] : []),
     { titulo: 'PREFERÊNCIAS', itens: [{ label: 'Configurações', route: '/configuracoes', icon: GearIcon }] },
   ];
   const chaveAtiva = grupos.flatMap(g => g.itens).find(i => isActive(String(i.route)))?.route;

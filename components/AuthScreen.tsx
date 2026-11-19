@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -250,6 +251,7 @@ const DESTAQUES = ['Aferições, coleta de estoque e medição de tanques', 'Rel
  * o texto convida para o lado oposto ao formulário que está à mostra.
  */
 function PainelMarca({ p, lado, onTrocar }: { p: SharedValue<number>; lado: 0 | 1; onTrocar: (m: Mode) => void }) {
+  const router = useRouter();
   const blocoCriar = useAnimatedStyle(() => ({
     opacity: interpolate(p.get(), [0, 0.45], [1, 0], Extrapolation.CLAMP),
     transform: [{ translateX: interpolate(p.get(), [0, 1], [0, -36]) }],
@@ -265,8 +267,8 @@ function PainelMarca({ p, lado, onTrocar }: { p: SharedValue<number>; lado: 0 | 
       <View style={pm.textos}>
         <Animated.View style={[pm.bloco, blocoCriar]} pointerEvents={lado === 0 ? 'auto' : 'none'} {...oculto(lado !== 0)}>
           <Text style={pm.titulo}>Novo por aqui?</Text>
-          <Text style={pm.texto}>Crie sua conta com o seu e-mail. Depois o administrador libera os módulos que você vai usar.</Text>
-          <BotaoContorno label="Criar conta" onPress={() => onTrocar('signup')} />
+          <Text style={pm.texto}>Se a sua empresa já usa o EasyAudit, peça um convite ao administrador. Para usar na sua empresa, cadastre-a.</Text>
+          <BotaoContorno label="Criar minha empresa" onPress={() => router.push('/criar-empresa')} />
         </Animated.View>
         <Animated.View style={[pm.bloco, pm.sobreposto, blocoEntrar]} pointerEvents={lado === 1 ? 'auto' : 'none'} {...oculto(lado !== 1)}>
           <Text style={pm.titulo}>Já tem conta?</Text>
@@ -486,7 +488,7 @@ export default function AuthScreen() {
         else if (!data.session) {
           void AsyncStorage.setItem(ULTIMO_EMAIL, mail).catch(() => undefined);
           switchMode('login');
-          setInfo(`Conta criada. Abra o link de confirmação enviado para ${mail} e depois entre. O administrador precisa liberar o seu acesso.`);
+          setInfo(`Conta criada. Abra o link de confirmação enviado para ${mail} e depois entre. Para ver os dados, a conta precisa do convite do administrador da sua empresa (ou cadastre a sua empresa ao entrar).`);
           setPodeReenviar(true);
         }
       } else {

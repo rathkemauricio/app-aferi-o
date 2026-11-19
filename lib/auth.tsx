@@ -23,6 +23,8 @@ type AuthState = {
   ativo: boolean;
   /** Empresa da conta (nula: conta sem empresa, ainda sem convite). */
   empresa: Empresa | null;
+  /** Dono da plataforma EasyAudit (vê o painel Empresas e planos). */
+  dono: boolean;
   isAdmin: boolean;
   /** Módulos liberados pelo administrador para esta conta (administrador acessa todos). */
   modulos: string[];
@@ -36,7 +38,7 @@ type AuthState = {
 };
 
 const AuthContext = createContext<AuthState>({
-  ready: false, userEmail: null, userId: null, papel: null, ativo: false, empresa: null, isAdmin: false, modulos: [], nome: '', avatar: null, podeAcessar: () => false, perfilPronto: false,
+  ready: false, userEmail: null, userId: null, papel: null, ativo: false, empresa: null, dono: false, isAdmin: false, modulos: [], nome: '', avatar: null, podeAcessar: () => false, perfilPronto: false,
   recarregarPerfil: async () => undefined, signOut: async () => undefined,
 });
 
@@ -51,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
+  const [dono, setDono] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -66,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const recarregarPerfil = useCallback(async () => {
-    if (!supabase || !userId) { setPapel(null); setModulos([]); setNome(''); setAvatar(null); setEmpresa(null); setAtivo(!supabase); setPerfilPronto(!supabase || !userId); return; }
+    if (!supabase || !userId) { setPapel(null); setModulos([]); setNome(''); setAvatar(null); setEmpresa(null); setDono(false); setAtivo(!supabase); setPerfilPronto(!supabase || !userId); return; }
     const { data, error } = await supabase.from('profiles').select('papel,ativo,modulos,nome,avatar,empresa_id,empresas(id,nome,status,modulos,limite_contas,plano_id)').eq('user_id', userId).maybeSingle();
     let perfil: PerfilCache | null;
     if (error) {
@@ -95,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAtivo(perfil ? perfil.ativo && (perfil.empresa === undefined || perfil.empresa?.status === 'ativa') : !!error);
     setModulos(perfil?.modulos ?? []); setNome(perfil?.nome ?? ''); setAvatar(perfil?.avatar ?? null); setEmpresa(perfil?.empresa ?? null);
     setPerfilPronto(true);
+    if (!error) void supabase.rpc('sou_dono').then(r => setDono(r.data === true), () => undefined);
   }, [userId]);
 
   useEffect(() => { setPerfilPronto(false); void recarregarPerfil(); }, [recarregarPerfil]);
@@ -105,10 +109,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // O plano da empresa limita os módulos; dentro dele, o administrador usa todos e o usuário, os liberados.
     const doPlano = (m: string) => !supabase || !empresa || empresa.modulos.includes(m);
     return {
-      ready, userEmail, userId, papel, ativo, empresa, isAdmin, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut,
+      ready, userEmail, userId, papel, ativo, empresa, dono, isAdmin, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut,
       podeAcessar: (m: string) => doPlano(m) && (isAdmin || modulos.includes(m)),
     };
-  }, [ready, userEmail, userId, papel, ativo, empresa, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut]);
+  }, [ready, userEmail, userId, papel, ativo, empresa, dono, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

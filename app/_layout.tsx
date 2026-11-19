@@ -19,7 +19,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 
 /**
  * Casca do app com rotas protegidas:
- * - sem sessão: só /login (e /redefinir-senha, aberta pelo link do e-mail);
+ * - sem sessão: o site (/inicio, /criar-empresa) e /login (e /redefinir-senha, aberta pelo link do e-mail);
  * - com sessão, conta não liberada: /aguardando;
  * - conta liberada: área (app) com a central e os módulos.
  * Sem servidor configurado não há "modo local": a tela fica bloqueada (é preciso saber quem faz cada atividade).
@@ -30,6 +30,8 @@ function Shell() {
   if (!isSupabaseConfigured) return <SemServidor />;
   const logado = !isSupabaseConfigured || !!userEmail;
   const liberado = !isSupabaseConfigured || (logado && ativo);
+  // Visitante: no navegador vê o site; no app do celular vai direto para o login.
+  const paraVisitante = Platform.OS === 'web' ? '/inicio' : '/login';
 
   if (!ready || (userEmail && !perfilPronto)) {
     return (
@@ -42,13 +44,17 @@ function Shell() {
   return <>
     <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-      <Stack.Protected guard={liberado}>
+      {/* Destinos explícitos quando a guarda falha (o padrão do Expo Router é a primeira rota livre pelo nome do arquivo). */}
+      <Stack.Protected guard={liberado} redirectTo={logado ? '/aguardando' : paraVisitante}>
         <Stack.Screen name="(app)" />
       </Stack.Protected>
-      <Stack.Protected guard={logado && !liberado}>
+      <Stack.Protected guard={logado && !liberado} redirectTo={logado ? '/' : paraVisitante}>
         <Stack.Screen name="aguardando" />
       </Stack.Protected>
-      <Stack.Protected guard={!logado}>
+      <Stack.Protected guard={!logado} redirectTo={liberado ? '/' : '/aguardando'}>
+        {/* Site público (visitante): apresentação e cadastro da empresa; o endereço raiz cai aqui. */}
+        <Stack.Screen name="inicio" />
+        <Stack.Screen name="criar-empresa" />
         <Stack.Screen name="login" />
       </Stack.Protected>
       <Stack.Screen name="redefinir-senha" />

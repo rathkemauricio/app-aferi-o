@@ -14,6 +14,10 @@ export type Conta = {
   admin: boolean;
 };
 
+/** Dono da plataforma (mesmo e-mail de private.dono_plataforma() no banco); DONO_EMAIL no servidor substitui. */
+export const DONO_EMAIL = (Deno.env.get('DONO_EMAIL') ?? 'mauriciotestesdev@gmail.com').toLowerCase();
+export const ehDono = (u: User) => (u.email ?? '').toLowerCase() === DONO_EMAIL && !!u.email_confirmed_at;
+
 /** Mesma empresa da migração 20261119000100_multiempresa (dados que já existiam). */
 export const REDE_NEVOEIRO = '0e7e0e10-0000-4000-8000-000000000001';
 

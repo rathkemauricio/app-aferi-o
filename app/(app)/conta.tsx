@@ -9,14 +9,14 @@ import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
 import { rotuloVersao } from '../../lib/versao';
-import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, GearIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, GearIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SquaresFourIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 
 /** Informações da conta: foto, nome, e-mail, senha, módulos liberados, tema e saída. */
 export default function ContaScreen() {
   const router = useRouter();
-  const { userEmail, isAdmin, ativo, podeAcessar, signOut, nome, avatar, recarregarPerfil } = useAuth();
+  const { userEmail, isAdmin, ativo, podeAcessar, signOut, nome, avatar, recarregarPerfil, dono } = useAuth();
   const { colors, mode, toggleTheme } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const liberados = MODULES.filter(m => podeAcessar(m.id));
@@ -105,6 +105,7 @@ export default function ContaScreen() {
         <SectionHeader title="Configurações" />
         <Card style={{ padding: space.xs, gap: 0 }}>
           {isAdmin && isSupabaseConfigured ? <ListRow icon={UserCircleIcon} tint="indigo" title="Usuários e permissões" subtitle="Aprovar contas, papel e módulos de cada uma" onPress={() => router.push('/usuarios')} /> : null}
+          {dono ? <ListRow icon={SquaresFourIcon} tint="sky" title="Empresas e planos" subtitle="Clientes do EasyAudit, liberação e planos" onPress={() => router.push('/plataforma')} /> : null}
           <ListRow style={isAdmin && isSupabaseConfigured && divisor} icon={GearIcon} tint="slate" title="Configurações" subtitle="Tema, tamanho das letras, sons, teclado, padrões e atualizações" onPress={() => router.push('/configuracoes')} />
           <ListRow style={divisor} icon={mode === 'dark' ? SunIcon : MoonIcon} tint="slate" title={mode === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onPress={toggleTheme} />
         </Card>
