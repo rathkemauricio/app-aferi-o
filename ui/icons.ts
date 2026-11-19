@@ -108,3 +108,4 @@ export const EnvelopeSimpleIcon: Icon = require('phosphor-react-native/src/icons
 export const FunnelSimpleIcon: Icon = require('phosphor-react-native/src/icons/FunnelSimple').FunnelSimpleIcon;
 export const FlashlightIcon: Icon = require('phosphor-react-native/src/icons/Flashlight').FlashlightIcon;
 export const BuildingsIcon: Icon = require('phosphor-react-native/src/icons/Buildings').BuildingsIcon;
+export const QuestionIcon: Icon = require('phosphor-react-native/src/icons/Question').QuestionIcon;

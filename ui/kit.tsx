@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View, type ViewStyle, type StyleProp } from 'react-native';
+import { avisosProntos, mostrarToast, perguntar, type TomAviso } from './avisos';
 import { CaretRightIcon, XIcon, type Icon } from './icons';
 import { color, radius, shadow, space, ThemeContext, tint as tints, type Tint, type as t } from './theme';
 
@@ -7,12 +8,19 @@ const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object
 const ICON_WEIGHT = 'regular' as const;
 
 /* ---------- Diálogos que também funcionam na web ---------- */
-export function notify(title: string, message = '') {
+/**
+ * Aviso rápido (toast no topo, some sozinho). `tom` e `fixo` são opcionais: sem `tom`, o título decide
+ * (erro, sucesso ou informação); `fixo` deixa o aviso na tela até fechar (ex.: senha para anotar).
+ */
+export function notify(title: string, message = '', opcoes?: { tom?: TomAviso; fixo?: boolean }) {
+  if (avisosProntos()) { mostrarToast(title, message, opcoes); return; }
   if (Platform.OS === 'web') { window.alert(message ? `${title}\n\n${message}` : title); return; }
   Alert.alert(title, message);
 }
 
+/** Pergunta de confirmação (modal com Cancelar e a ação; vermelha quando a ação apaga, zera ou bloqueia). */
 export function confirmAction(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
+  if (avisosProntos()) { perguntar(title, message, confirmLabel, onConfirm); return; }
   if (Platform.OS === 'web') { if (window.confirm(message ? `${title}\n\n${message}` : title)) onConfirm(); return; }
   Alert.alert(title, message, [{ text: 'Cancelar', style: 'cancel' }, { text: confirmLabel, style: 'destructive', onPress: onConfirm }]);
 }

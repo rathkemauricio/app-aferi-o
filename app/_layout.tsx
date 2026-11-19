@@ -5,6 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-n
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { AvisosHost } from '../ui/avisos';
 import { SheetHost } from '../ui/kit';
 import { ThemeContext, ThemeProvider } from '../ui/theme';
 import { Zoom } from '../ui/zoom';
@@ -80,6 +81,8 @@ export default function RootLayout() {
                 <Shell />
               </SheetHost>
               <AvisoAtualizacao />
+              {/* Toasts e confirmações do app (no lugar do alert/confirm do navegador e do Alert do Android). */}
+              <AvisosHost />
             </Zoom>
           </KeyboardAvoidingView>
         </AuthProvider>

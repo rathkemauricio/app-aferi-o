@@ -153,7 +153,7 @@ export default function UsuariosScreen() {
       setCriando(false);
       if (!r.ok) { notify('Conta não criada', r.erro); return; }
       setNovo(null); void carregar();
-      notify('Conta criada', `Passe para ${novo.nome.trim()} o login ${email} e a senha ${novo.senha}. A pessoa já pode entrar (e trocar a senha em Minha conta).`);
+      notify('Conta criada', `Passe para ${novo.nome.trim()} o login ${email} e a senha ${novo.senha}. A pessoa já pode entrar (e trocar a senha em Minha conta).`, { fixo: true, tom: 'sucesso' });
       return;
     }
     if (novo.papel === 'usuario' && !novo.modulos.length) { notify('Marque os módulos', 'Escolha ao menos um módulo que a pessoa vai usar.'); return; }
