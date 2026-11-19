@@ -25,7 +25,7 @@ import {
 import { lerPdfBarras } from './barras';
 import { htmlDivergencias, htmlDoInventario, type LinhaDivergente } from './impressao';
 import { Deslizavel } from '../tempos/Deslizavel';
-import { LeitorCamera, SeletorModo } from './SemLeitor';
+import { LeitorCamera, LeitorDaFilial, SeletorModo } from './SemLeitor';
 
 // Cores do design da Contagem de Estoque (cabeçalho azul-marinho, ação principal âmbar).
 /** A coleta (leitura dos códigos) é feita só no app do celular; no painel web as contagens ficam para consulta. */
@@ -222,6 +222,7 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
           { id: 'abertos', titulo: 'Em aberto', sub: `${abertos.length} filia${abertos.length === 1 ? 'l' : 'is'}` },
           { id: 'encerrados', titulo: 'Encerrados', sub: `${encerrados.length} inventário${encerrados.length === 1 ? '' : 's'}` },
         ]} valor={aba} onChange={setAba} />
+        {aba === 'abertos' && filialConta ? <LeitorDaFilial /> : null}
         {aba === 'abertos' && !filialConta ? (
           <Cartao onPress={() => nav.ir({ n: 'bases' })}>
             <View style={k.linha}>

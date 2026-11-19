@@ -20,7 +20,7 @@
 // o administrador chamou (painel web).
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 import { contaDe, type Empresa } from '../_shared/conta.ts';
-import { EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
+import { APP_URL, EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -29,7 +29,6 @@ const cors = {
 };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
-const APP_URL = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
 
 const emailEmUso = (error: unknown) => /already|registered|exists/i.test(String((error as { message?: string })?.message ?? '')) || (error as { code?: string } | null)?.code === 'email_exists';
 const limiteAtingido = (error: unknown) => /limite de contas/i.test(String((error as { message?: string })?.message ?? ''));
@@ -39,7 +38,8 @@ const BANIDO = '876000h';
 type Ctx = { empresa: Empresa; eu: string; euNome: string; origem: string };
 type Convite = { email?: string; nome?: string; senha?: string; papel?: string; modulos?: unknown };
 
-const enderecoApp = (ctx: Ctx) => APP_URL || ctx.origem;
+// Links dos e-mails: sempre o endereço do EasyAudit na web (APP_URL), mesmo se o convite sair do app do celular.
+const enderecoApp = (_ctx: Ctx) => APP_URL;
 
 /** Contas ativas que ocupam vaga do plano (as contas de filial não ocupam). */
 async function contasAtivas(empresaId: string) {
@@ -68,11 +68,15 @@ async function emailDeAcesso(ctx: Ctx, para: string, nome: string, link: string,
     para,
     assunto: novo ? `Convite para o EasyAudit · ${ctx.empresa.nome}` : `Seu acesso ao EasyAudit · ${ctx.empresa.nome}`,
     html: layout({
-      titulo: novo ? 'Você foi convidado para o EasyAudit' : 'Acesso ao EasyAudit',
+      etiqueta: novo ? 'Convite' : 'Acesso',
+      titulo: novo ? 'Você foi convidado para o EasyAudit' : 'Seu acesso ao EasyAudit',
       paragrafos: [
-        `Olá${nome ? `, ${esc(nome)}` : ''}! <b>${esc(ctx.euNome)}</b> ${novo ? 'convidou você para usar' : 'liberou o seu acesso a'} o EasyAudit da empresa <b>${esc(ctx.empresa.nome)}</b>.`,
-        novo ? 'Toque no botão para criar a sua senha. Depois é só entrar no app ou no painel web com o seu e-mail e essa senha.'
-          : 'Toque no botão para definir a sua senha e entrar.',
+        `Olá${nome ? `, ${esc(nome)}` : ''}! <b style="color:#0f1f3d">${esc(ctx.euNome)}</b> ${novo ? 'convidou você para usar' : 'liberou o seu acesso a'} o EasyAudit da empresa <b style="color:#0f1f3d">${esc(ctx.empresa.nome)}</b>.`,
+      ],
+      destaques: [{ rotulo: 'Empresa', valor: ctx.empresa.nome }, { rotulo: 'Seu login', valor: para }],
+      passos: [
+        novo ? 'Toque no botão abaixo e crie a sua senha.' : 'Toque no botão abaixo e defina a sua senha.',
+        `Entre no app do celular ou em <a href="${APP_URL}" style="color:#0f1f3d;font-weight:700">${esc(APP_URL.replace(/^https?:\/\//, ''))}</a> com este e-mail e a senha.`,
         'O link vale por pouco tempo. Se expirar, peça ao administrador para enviar de novo.',
       ],
       botao: { texto: novo ? 'Criar minha senha' : 'Definir senha e entrar', url: link },
@@ -219,15 +223,19 @@ async function emailDaFilial(ctx: Ctx, para: string, filial: string, link: strin
     para,
     assunto: `Acesso da filial ${filial} ao EasyAudit · ${ctx.empresa.nome}`,
     html: layout({
-      titulo: 'Acesso da filial ao EasyAudit',
+      etiqueta: 'Acesso da filial',
+      titulo: 'A sua filial já pode fazer as contagens',
       paragrafos: [
-        `<b>${esc(ctx.euNome)}</b> liberou o acesso da filial <b>${esc(filial)}</b> ao EasyAudit da empresa <b>${esc(ctx.empresa.nome)}</b>.`,
-        'Com este e-mail a filial usa o módulo <b>Contagens</b>: abre a contagem do estoque, conta pelo celular (câmera, digitando ou pela lista) e vê o relatório.',
-        'Toque no botão para criar a senha. Depois é só entrar no app ou no painel web com este e-mail e essa senha.',
-        'O link vale por pouco tempo. Se expirar, peça ao administrador para enviar de novo.',
+        `<b style="color:#0f1f3d">${esc(ctx.euNome)}</b> liberou o acesso da filial ao EasyAudit da empresa <b style="color:#0f1f3d">${esc(ctx.empresa.nome)}</b>. Com ele a filial abre a contagem do estoque, conta pelo celular ou pelo coletor e vê o relatório na hora.`,
+      ],
+      destaques: [{ rotulo: 'Filial', valor: filial }, { rotulo: 'Empresa', valor: ctx.empresa.nome }, { rotulo: 'Login', valor: para }, { rotulo: 'Módulo', valor: 'Contagens' }],
+      passos: [
+        'Toque no botão abaixo e crie a senha da filial.',
+        `Entre no app do celular ou em <a href="${APP_URL}" style="color:#0f1f3d;font-weight:700">${esc(APP_URL.replace(/^https?:\/\//, ''))}</a> com este e-mail e a senha.`,
+        'Em Contagens, escolha como a filial conta: com leitor de código ou pelo celular (lista, câmera ou digitando).',
       ],
       botao: { texto: 'Criar a senha da filial', url: link },
-      rodape: 'Se você não esperava este e-mail, ignore-o.',
+      rodape: 'O link vale por pouco tempo. Se expirar, peça ao administrador para enviar de novo. Se você não esperava este e-mail, ignore-o.',
     }),
   });
 }

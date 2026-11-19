@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Animated, { type SharedValue, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { CheckCircleIcon, CheckIcon, ClipboardTextIcon, ClockIcon, KeyboardIcon, MagnifyingGlassIcon, TrashIcon, WarningCircleIcon } from '../../ui/icons';
 import { c01, Celular, fase, Folha, Palco, Planilha, sai } from './motion';
@@ -189,7 +189,10 @@ export function Historia({ scrollY, vh, desktop }: { scrollY: SharedValue<number
   const topo = useSharedValue(0);
   const altura = Math.round(vh * (reduz ? 1 : 3.6));
   const p = useDerivedValue(() => (reduz ? 1 : c01((scrollY.value - topo.value) / Math.max(1, altura - vh))));
-  const palco = useAnimatedStyle(() => ({ transform: [{ translateY: Math.min(Math.max(scrollY.value - topo.value, 0), Math.max(0, altura - vh)) }] }));
+  // Palco parado na tela durante a seção. Na web, `position: sticky` do navegador: fica preso no mesmo quadro da
+  // rolagem. (Empurrar com translateY a cada evento de rolagem chega um quadro atrasado e o palco treme.)
+  const palcoNativo = useAnimatedStyle(() => ({ transform: [{ translateY: Math.min(Math.max(scrollY.value - topo.value, 0), Math.max(0, altura - vh)) }] }));
+  const palco = Platform.OS === 'web' ? PRESO : palcoNativo;
 
   if (reduz) {
     // Sem movimento: os quatro atos em texto e a cena final.
@@ -229,6 +232,9 @@ export function Historia({ scrollY, vh, desktop }: { scrollY: SharedValue<number
     </View>
   );
 }
+
+/** Web: o palco gruda no topo da área rolável enquanto a seção passa. */
+const PRESO = { position: 'sticky', top: 0 } as unknown as ViewStyle;
 
 const st = StyleSheet.create({
   abs: { position: 'absolute', left: 0, top: 0 },

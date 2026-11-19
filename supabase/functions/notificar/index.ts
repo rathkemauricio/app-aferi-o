@@ -10,7 +10,7 @@
 // O JWT do usuário é conferido aqui dentro (as chaves novas do Supabase não são JWT, por isso --no-verify-jwt).
 // Secret opcional: APP_URL (endereço do EasyAudit na web) para os links dos avisos.
 import { createClient, type User } from 'npm:@supabase/supabase-js@2.57.0';
-import { EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
+import { APP_URL, EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +23,6 @@ const json = (status: number, body: unknown) =>
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
-const APP_URL = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
 
 // Mesmos ids e nomes de modules/registry.ts.
 const MODULOS: Record<string, string> = { afericoes: 'Aferições', tempos: 'Tempos e Movimentos', croqui: 'Croqui', auditoria: 'Auditoria', riscos: 'Mapa de Risco', inventarios: 'Inventários', agenda: 'Agenda', coleta: 'Contagens', tanques: 'Conferência de Estoque de Combustíveis' };

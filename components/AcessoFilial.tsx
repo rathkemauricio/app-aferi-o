@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Switch, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { type Filial, filiaisCol } from '../lib/data';
 import { supabase } from '../lib/supabase';
 import { EnvelopeSimpleIcon, LockSimpleIcon } from '../ui/icons';
@@ -22,7 +22,7 @@ async function chamarUsuarios(body: Record<string, unknown>): Promise<string | n
  * Acesso da filial às Contagens (só o administrador vê):
  * - e-mail da filial: a conta desse e-mail só usa Contagens e só vê as contagens que a própria filial abrir
  *   (as contagens da auditoria não aparecem para ela);
- * - modo de contagem da filial: com leitor de código (coletor) ou celular sem leitor (câmera, digitação ou lista).
+ * - mostra como a filial conta (com leitor ou celular sem leitor): quem escolhe é a própria filial.
  */
 export function AcessoFilial({ filial }: { filial: Filial }) {
   const { colors } = useContext(ThemeContext);
@@ -82,14 +82,11 @@ export function AcessoFilial({ filial }: { filial: Filial }) {
       </View>
 
       <View style={{ height: 1, backgroundColor: colors.border, marginVertical: space.xs }} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={t.bodyStrong}>Contagem com leitor de código</Text>
-          <Text style={t.caption}>{leitor
-            ? 'Ligado: a contagem espera o leitor do coletor.'
-            : 'Desligado: celular sem leitor. A contagem usa a câmera, a digitação do código ou a lista dos itens.'}</Text>
-        </View>
-        <Switch value={leitor} onValueChange={v => filiaisCol.put({ ...filial, contagem_leitor: v })} accessibilityLabel="Contagem com leitor de código" />
+      <View style={{ gap: 2 }}>
+        <Text style={t.bodyStrong}>Como a filial conta: {leitor ? 'com leitor de código' : 'celular sem leitor'}</Text>
+        <Text style={t.caption}>{leitor
+          ? 'Coletor com leitor de código.'
+          : 'Celular sem leitor: a contagem usa a lista dos itens, a câmera ou a digitação do código.'} Quem escolhe é a própria filial, em Contagens.</Text>
       </View>
     </Card>
   </>;

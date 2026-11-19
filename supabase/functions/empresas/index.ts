@@ -14,7 +14,7 @@
 // Secrets opcionais: APP_URL (endereço do EasyAudit na web, para os links dos e-mails) e DONO_EMAIL.
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 import { contaDe, DONO_EMAIL, ehDono } from '../_shared/conta.ts';
-import { enviar, esc, layout } from '../_shared/mailer.ts';
+import { APP_URL, enviar, esc, layout } from '../_shared/mailer.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +23,6 @@ const cors = {
 };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
-const APP_URL = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
 
 // Mesmos ids de modules/registry.ts.
 const MODULOS = ['afericoes', 'tempos', 'croqui', 'auditoria', 'riscos', 'inventarios', 'agenda', 'coleta', 'tanques'];
@@ -56,7 +55,7 @@ async function criar(body: Pedido, conta: NonNullable<Awaited<ReturnType<typeof 
   if (meta.empresa_pendente) await admin.auth.admin.updateUserById(conta.user.id, { user_metadata: { ...meta, empresa_pendente: null } });
 
   // Aviso ao dono da plataforma (falha no e-mail não desfaz o cadastro).
-  const base = APP_URL || origem;
+  const base = APP_URL;
   await enviar({
     para: DONO_EMAIL,
     assunto: `Nova empresa aguardando liberação: ${nome}`,
@@ -119,7 +118,7 @@ async function atualizar(body: Record<string, unknown>, origem: string) {
 
   if (mudar.status === 'ativa' && atual.status !== 'ativa') {
     const { data: adms } = await admin.from('profiles').select('email,nome').eq('empresa_id', id).eq('papel', 'admin').eq('ativo', true);
-    const base = APP_URL || origem;
+    const base = APP_URL;
     for (const a of adms ?? []) {
       await enviar({
         para: a.email,

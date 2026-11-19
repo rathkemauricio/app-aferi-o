@@ -63,11 +63,17 @@ const textoDe = (html: string) =>
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-// Cores do tema do app (ui/theme.ts).
-const COR = { fundo: '#f5f6f8', cartao: '#ffffff', borda: '#e3e6ec', texto: '#1b2230', suave: '#5b6475', destaque: '#4f46e5' };
+/** Endereço do EasyAudit na web (links dos e-mails). A secret APP_URL substitui. */
+export const APP_URL = (Deno.env.get('APP_URL') || 'https://postoaudit.vercel.app').replace(/\/$/, '');
+const SITE = APP_URL.replace(/^https?:\/\//, '');
+
+// Cores da marca (site e app): azul-marinho e verde-menta.
+const COR = { fundo: '#eef1f6', cartao: '#ffffff', borda: '#e2e7ef', texto: '#0f1f3d', suave: '#4a5873', fraco: '#76829a', marinho: '#0f1f3d', menta: '#5fd39a', caixa: '#f5f7fa' };
+const FONTE = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 /**
  * Layout padrão dos e-mails do EasyAudit. `paragrafos` aceita HTML: escape com `esc()` tudo o que vier do usuário.
+ * `destaques`: quadro com dados (ex.: Empresa, Filial, E-mail). `passos`: lista numerada do que fazer.
  */
 export function layout(o: {
   titulo: string;
@@ -75,30 +81,52 @@ export function layout(o: {
   botao?: { texto: string; url: string };
   codigo?: string;
   rodape?: string;
+  /** Linha pequena acima do título (ex.: "Convite"). */
+  etiqueta?: string;
+  destaques?: { rotulo: string; valor: string }[];
+  passos?: string[];
 }) {
-  const p = (html: string) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:${COR.texto}">${html}</p>`;
+  const p = (html: string) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:${COR.suave}">${html}</p>`;
+  const etiqueta = o.etiqueta
+    ? `<p style="margin:0 0 10px;font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#17865a">${esc(o.etiqueta)}</p>`
+    : '';
+  const destaques = o.destaques?.length
+    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:6px 0 20px;background:${COR.caixa};border:1px solid ${COR.borda};border-radius:12px">
+        ${o.destaques.map((d, i) => `<tr><td style="padding:11px 16px;${i ? `border-top:1px solid ${COR.borda};` : ''}font-size:13px;color:${COR.fraco};width:34%">${esc(d.rotulo)}</td><td style="padding:11px 16px;${i ? `border-top:1px solid ${COR.borda};` : ''}font-size:14.5px;font-weight:700;color:${COR.texto};word-break:break-word">${esc(d.valor)}</td></tr>`).join('')}
+      </table>`
+    : '';
+  const passos = o.passos?.length
+    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:4px 0 22px">
+        ${o.passos.map((t, i) => `<tr><td valign="top" style="padding:0 12px 12px 0;width:28px"><div style="width:26px;height:26px;border-radius:13px;background:${COR.marinho};color:#ffffff;font-size:13px;font-weight:800;line-height:26px;text-align:center">${i + 1}</div></td><td valign="top" style="padding:3px 0 12px;font-size:14.5px;line-height:1.5;color:${COR.texto}">${t}</td></tr>`).join('')}
+      </table>`
+    : '';
   const botao = o.botao
-    ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:8px 0 18px"><tr><td style="border-radius:10px;background:${COR.destaque}">
-         <a href="${esc(o.botao.url)}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px">${esc(o.botao.texto)}</a>
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:6px 0 22px"><tr><td style="border-radius:999px;background:${COR.marinho}">
+         <a href="${esc(o.botao.url)}" style="display:inline-block;padding:15px 30px;font-size:15.5px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:999px">${esc(o.botao.texto)}&nbsp;&nbsp;<span style="color:${COR.menta}">&rarr;</span></a>
        </td></tr></table>
-       <p style="margin:0 0 14px;font-size:12.5px;line-height:1.5;color:${COR.suave}">Se o botão não funcionar, copie e cole este endereço no navegador:<br><a href="${esc(o.botao.url)}" style="color:${COR.destaque};word-break:break-all">${esc(o.botao.url)}</a></p>`
+       <p style="margin:0;font-size:12.5px;line-height:1.55;color:${COR.fraco}">Se o botão não abrir, copie este endereço no navegador:<br><a href="${esc(o.botao.url)}" style="color:${COR.marinho};word-break:break-all">${esc(o.botao.url)}</a></p>`
     : '';
   const codigo = o.codigo
-    ? `<p style="margin:4px 0 18px;font-size:28px;font-weight:800;letter-spacing:6px;color:${COR.texto}">${esc(o.codigo)}</p>`
+    ? `<p style="margin:4px 0 20px;padding:14px 0;text-align:center;background:${COR.caixa};border-radius:12px;font-size:30px;font-weight:800;letter-spacing:8px;color:${COR.texto}">${esc(o.codigo)}</p>`
     : '';
   const rodape = o.rodape ?? 'Este é um e-mail automático do EasyAudit. Se você não esperava esta mensagem, pode ignorá-la.';
   return `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(o.titulo)}</title></head>
-<body style="margin:0;padding:0;background:${COR.fundo};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${COR.fundo};padding:28px 12px"><tr><td align="center">
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(o.titulo)}</title></head>
+<body style="margin:0;padding:0;background:${COR.fundo};font-family:${FONTE}">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${COR.fundo};padding:32px 12px"><tr><td align="center">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px">
-      <tr><td style="padding:0 4px 14px;font-size:18px;font-weight:800;color:${COR.destaque}">EasyAudit</td></tr>
-      <tr><td style="background:${COR.cartao};border:1px solid ${COR.borda};border-radius:16px;padding:28px 26px">
-        <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:${COR.texto}">${esc(o.titulo)}</h1>
-        ${o.paragrafos.map(p).join('\n        ')}
-        ${codigo}${botao}
+      <tr><td style="background:${COR.marinho};border-radius:18px 18px 0 0;padding:22px 28px">
+        <a href="${APP_URL}" style="text-decoration:none;font-size:21px;letter-spacing:-0.3px;color:#ffffff"><span style="font-weight:800">e</span><span style="color:${COR.menta};font-weight:800">&#10003;</span>&nbsp;<span style="font-weight:400">easy</span><span style="font-weight:800">audit</span></a>
       </td></tr>
-      <tr><td style="padding:14px 6px 0;font-size:12px;line-height:1.5;color:${COR.suave}">${esc(rodape)}</td></tr>
+      <tr><td style="height:4px;background:${COR.menta};font-size:0;line-height:0">&nbsp;</td></tr>
+      <tr><td style="background:${COR.cartao};border:1px solid ${COR.borda};border-top:0;border-radius:0 0 18px 18px;padding:30px 28px 28px">
+        ${etiqueta}<h1 style="margin:0 0 16px;font-size:23px;line-height:1.3;letter-spacing:-0.4px;color:${COR.texto}">${esc(o.titulo)}</h1>
+        ${o.paragrafos.map(p).join('\n        ')}
+        ${destaques}${passos}${codigo}${botao}
+      </td></tr>
+      <tr><td style="padding:18px 8px 0;font-size:12px;line-height:1.6;color:${COR.fraco};text-align:center">
+        ${esc(rodape)}<br><a href="${APP_URL}" style="color:${COR.suave};font-weight:700;text-decoration:none">${esc(SITE)}</a> &nbsp;·&nbsp; Auditorias, contagens e medições sem papel
+      </td></tr>
     </table>
   </td></tr></table>
 </body></html>`;
