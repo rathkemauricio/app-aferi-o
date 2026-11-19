@@ -29,8 +29,11 @@ import { Alvo } from '../../tutoriais';
 import { LeitorCamera, LeitorDaFilial, SeletorModo } from './SemLeitor';
 
 // Cores do design da Contagem de Estoque (cabeçalho azul-marinho, ação principal âmbar).
-/** A coleta (leitura dos códigos) é feita só no app do celular; no painel web as contagens ficam para consulta. */
-const COLETA_AQUI = Platform.OS !== 'web';
+/**
+ * Coleta (leitura dos códigos e quantidades) no app e na web. Na web: leitor USB/Bluetooth (funciona como teclado),
+ * digitação, lista e câmera (onde o navegador lê código de barras, ex.: Chrome no Android).
+ */
+const COLETA_AQUI = true;
 // Marca EasyAudit: azul-marinho e verde-menta (destaques e botão Salvar); VERDE = topo da coleta no layout simples.
 const NAVY = '#0f1f3d', AMBER = '#5fd39a', AMBER_TXT = '#0f1f3d', VERDE = '#17865a';
 
@@ -822,7 +825,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   // Percentual das categorias desta contagem (o mesmo do cartão da contagem), não do inventário inteiro.
   const prog = produtos ? percentualContagem(ct, itens, q).pct : 0;
   const ativa = ct.rodadas[r - 1] === 'andamento' && inv.status !== 'encerrado' && !ct.pausada;
-  /** Coletar, corrigir e zerar itens: só no app do celular. */
+  /** Coletar, corrigir e zerar itens (app e web). */
   const coletavel = ativa && COLETA_AQUI;
   const [sel, setSel] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
@@ -904,7 +907,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
                 <FiltroSituacao valor={filtro} onChange={setFiltro} n={nSit} />
                 {busca.trim() || filtro !== 'todos' ? <Text style={[k.cap, { color: c.textMuted }]}>{filtrada.length.toLocaleString('pt-BR')} de {lista.length.toLocaleString('pt-BR')} itens desta contagem</Text>
                   : coletavel ? <Text style={[k.cap, { color: c.textMuted }]}>Arraste um item já coletado: para a direita corrige, para a esquerda zera.</Text>
-                  : ativa ? <Text style={[k.cap, { color: c.textMuted }]}>A coleta é feita no app do celular. Aqui no painel a contagem fica para acompanhar.</Text> : null}
+                  : null}
                 {r > 1 ? <Cartao><Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Recontagem: {lista.length.toLocaleString('pt-BR')} itens vindos da contagem {r - 1}</Text><Text style={[k.cTxt, { color: c.textMuted }]}>{r === 2 ? 'Divergentes, saldo negativo e não coletados. Os corretos já estão fechados.' : 'Não coletados e divergências não confirmadas na 2ª. Esta contagem confirma o resultado.'}</Text></Cartao> : null}
                 {ct.rodadas[r - 1] === 'aguardando' ? <Text style={[k.cap, { color: c.textMuted }]}>Esta contagem começa quando a anterior for finalizada.</Text> : null}
               </View>}

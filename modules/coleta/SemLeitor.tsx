@@ -1,6 +1,6 @@
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { useContext, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../lib/auth';
 import { filiaisCol, useFiliais } from '../../lib/data';
 import { type Preferencias, setPreferencia, usePreferencias } from '../../lib/preferencias';
@@ -62,6 +62,14 @@ export function LeitorCamera({ onLer }: { onLer: (codigo: string) => void }) {
     onLer(cod);
   };
 
+  // Navegador sem leitura de código pela câmera (ex.: Chrome no Windows, Firefox, Safari): avisa e sugere outro modo.
+  if (Platform.OS === 'web' && typeof (globalThis as { BarcodeDetector?: unknown }).BarcodeDetector === 'undefined') return (
+    <View style={[s.caixa, s.semPermissao, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <CameraIcon size={28} color={c.textMuted} />
+      <Text style={[s.txt, { color: c.text }]}>Este navegador não lê código de barras pela câmera.</Text>
+      <Text style={[s.txt, { color: c.textMuted }]}>Use a Lista ou Digitar, um leitor USB ou o Chrome no celular Android (ou o app EasyAudit).</Text>
+    </View>
+  );
   if (!permissao) return <View style={[s.caixa, { backgroundColor: '#0b1220' }]} />;
   if (!permissao.granted) return (
     <View style={[s.caixa, s.semPermissao, { backgroundColor: c.surface, borderColor: c.border }]}>
