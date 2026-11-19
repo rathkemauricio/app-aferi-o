@@ -9,12 +9,14 @@
 //   { acao: 'atualizar', id, status?, plano_id?, limite_contas?, modulos?, nome? }  → { ok }
 //        ao liberar uma empresa (status 'ativa'), os administradores dela recebem um e-mail.
 //   { acao: 'salvar_plano', id, nome?, descricao?, preco_mensal?, limite_contas?, modulos?, ativo? } → { ok }
+//   { acao: 'criar_para', nome, plano_id, modulos?, limite_contas?, documento?, telefone?, admin_nome, admin_email }
+//        cria a empresa já liberada e convida o administrador dela por e-mail (ele cria a senha). → { ok, empresa_id }
 //
 // Publicar: npx supabase functions deploy empresas --no-verify-jwt
 // Secrets opcionais: APP_URL (endereço do EasyAudit na web, para os links dos e-mails) e DONO_EMAIL.
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 import { contaDe, DONO_EMAIL, ehDono } from '../_shared/conta.ts';
-import { APP_URL, enviar, esc, layout } from '../_shared/mailer.ts';
+import { APP_URL, EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -69,6 +71,69 @@ async function criar(body: Pedido, conta: NonNullable<Awaited<ReturnType<typeof 
       botao: base ? { texto: 'Abrir Empresas e planos', url: `${base}/plataforma` } : undefined,
     }),
   }).catch(e => console.error('empresas: aviso ao dono', e));
+  return json(200, { ok: true, empresa_id: emp.id });
+}
+
+/** Dono da plataforma: cria uma empresa já liberada para outra pessoa, que vira a administradora dela. */
+async function criarPara(body: Record<string, unknown>, conta: NonNullable<Awaited<ReturnType<typeof contaDe>>>) {
+  const nome = texto(body.nome, 120);
+  const adminNome = texto(body.admin_nome, 80);
+  const email = texto(body.admin_email, 200).toLowerCase();
+  if (nome.length < 2) return json(400, { erro: 'Informe o nome da empresa.' });
+  if (!adminNome) return json(400, { erro: 'Informe o nome do administrador da empresa.' });
+  if (!EMAIL_RE.test(email)) return json(400, { erro: 'Informe um e-mail válido para o administrador.' });
+  const { data: plano } = await admin.from('planos').select('id,nome,limite_contas,modulos').eq('id', texto(body.plano_id, 40)).maybeSingle();
+  if (!plano) return json(400, { erro: 'Escolha um plano.' });
+  const modulos = soModulos(body.modulos) ?? (plano.modulos as string[]);
+  if (!modulos.length) return json(400, { erro: 'Deixe ao menos um módulo para a empresa.' });
+  const limite = body.limite_contas === undefined || body.limite_contas === '' ? plano.limite_contas : Math.floor(Number(body.limite_contas));
+  if (!(limite >= 1 && limite <= 100000)) return json(400, { erro: 'Limite de contas inválido.' });
+
+  const { data: existente } = await admin.from('profiles').select('user_id,empresa_id,nome').eq('email', email).maybeSingle();
+  if (existente?.empresa_id) return json(409, { erro: `${email} já pertence a uma empresa no EasyAudit. Use outro e-mail para o administrador.` });
+
+  const { data: emp, error } = await admin.from('empresas').insert({
+    nome, documento: texto(body.documento, 30), telefone: texto(body.telefone, 30), plano_id: plano.id,
+    limite_contas: limite, modulos, status: 'ativa', criado_por: conta.user.id,
+  }).select('id').single();
+  if (error || !emp) throw new Error(`Não foi possível criar a empresa: ${error?.message ?? ''}`);
+  const desfazer = async () => { await admin.from('empresas').delete().eq('id', emp.id); };
+  const voltar = `${APP_URL}/redefinir-senha?convite=1`;
+  const perfil = { empresa_id: emp.id, email, nome: existente?.nome || adminNome, papel: 'admin', modulos: [], ativo: true };
+
+  let link: string | undefined;
+  if (existente) {
+    const { error: e1 } = await admin.from('profiles').update(perfil).eq('user_id', existente.user_id);
+    if (e1) { await desfazer(); return json(500, { erro: `Não foi possível ligar a conta à empresa: ${e1.message}` }); }
+    await admin.auth.admin.updateUserById(existente.user_id, { ban_duration: 'none' });
+    const { data: l } = await admin.auth.admin.generateLink({ type: 'recovery', email, options: { redirectTo: voltar } });
+    link = l?.properties?.action_link;
+  } else {
+    const { data, error: e2 } = await admin.auth.admin.generateLink({ type: 'invite', email, options: { data: { nome: adminNome }, redirectTo: voltar } });
+    if (e2 || !data.user || !data.properties?.action_link) { await desfazer(); throw new Error(e2?.message || 'Falha ao gerar o convite.'); }
+    const { error: e3 } = await admin.from('profiles').update(perfil).eq('user_id', data.user.id);
+    if (e3) { await admin.auth.admin.deleteUser(data.user.id).catch(() => undefined); await desfazer(); return json(500, { erro: `Não foi possível preparar a conta: ${e3.message}` }); }
+    link = data.properties.action_link;
+  }
+  if (link) {
+    await enviar({
+      para: email,
+      assunto: `${nome} já está no EasyAudit`,
+      html: layout({
+        etiqueta: 'Nova empresa',
+        titulo: 'A sua empresa já está no EasyAudit',
+        paragrafos: [`Olá, ${esc(adminNome.split(' ')[0])}! A <b style="color:#0f1f3d">${esc(nome)}</b> foi cadastrada no EasyAudit e você é o administrador dela.`],
+        destaques: [{ rotulo: 'Empresa', valor: nome }, { rotulo: 'Plano', valor: String(plano.nome) }, { rotulo: 'Contas', valor: `até ${limite}` }, { rotulo: 'Seu login', valor: email }],
+        passos: [
+          'Toque no botão abaixo e crie a sua senha.',
+          `Entre no app do celular ou em <a href="${APP_URL}/login" style="color:#0f1f3d;font-weight:700">${esc(APP_URL.replace(/^https?:\/\//, ''))}</a>.`,
+          'Em Usuários e permissões, crie as contas da sua equipe e das filiais.',
+        ],
+        botao: { texto: 'Criar minha senha', url: link },
+        rodape: 'O link vale por pouco tempo. Se expirar, use "Esqueci a senha" na tela de entrada.',
+      }),
+    });
+  }
   return json(200, { ok: true, empresa_id: emp.id });
 }
 
@@ -173,6 +238,7 @@ Deno.serve(async req => {
       case 'listar': return await listar();
       case 'atualizar': return await atualizar(body, origem);
       case 'salvar_plano': return await salvarPlano(body);
+      case 'criar_para': return await criarPara(body, conta);
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {
