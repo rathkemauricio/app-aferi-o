@@ -28,7 +28,7 @@ export type Realizado = {
 
 const TIPOS: Record<Realizado['tipo'], { rotulo: string; icone: Icon; tint: Tint }> = {
   inventario: { rotulo: 'Inventário encerrado', icone: BarcodeIcon, tint: 'amber' },
-  medicao: { rotulo: 'Medição de tanques', icone: RulerIcon, tint: 'sky' },
+  medicao: { rotulo: 'Conferência de estoque', icone: RulerIcon, tint: 'sky' },
   afericao: { rotulo: 'Aferição', icone: GasPumpIcon, tint: 'indigo' },
   auditoria: { rotulo: 'Auditoria', icone: ClipboardTextIcon, tint: 'emerald' },
 };
@@ -63,8 +63,8 @@ export function useRealizados(filiais: Filial[], filialId: string) {
       const g = resumoMedicao(m).geral;
       out.push({
         id: `med:${m.id}`, dia: m.data, filialId: m.filial_id, tipo: 'medicao',
-        titulo: 'Medição de tanques', detalhe: `${m.tanques.length} tanque(s) · resultado ${fmtSinal(g.resultado)} L · ${m.responsavel_nome || '—'}`,
-        pdf: () => imprimirHtml(relatorioMedicao(m, nome(m.filial_id), nomeComb), `Medição de tanques ${nome(m.filial_id)}`, true),
+        titulo: 'Conferência de estoque de combustíveis', detalhe: `${m.tanques.length} tanque(s) · resultado ${fmtSinal(g.resultado)} L · ${m.responsavel_nome || '—'}`,
+        pdf: () => imprimirHtml(relatorioMedicao(m, nome(m.filial_id), nomeComb), `Conferência de estoque ${nome(m.filial_id)}`, true),
       });
     });
     if (podeAcessar('afericoes')) afe.list.forEach(r => {

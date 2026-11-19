@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { isStrongPassword, PASSWORD_RULES, traduzirErro } from '../components/AuthScreen';
-import { BotaoSite, CTA_EMPRESA, Faixa, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
+import { BotaoSite, CTA_COMECAR, Faixa, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
 import { emailValido } from '../lib/email';
 import { supabase } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
@@ -22,7 +22,7 @@ const nomeModulo = (id: string) => MODULES.find(m => m.id === id)?.name ?? id;
  * Cria a conta (com confirmação por e-mail) e guarda os dados da empresa na própria conta; no primeiro acesso,
  * a empresa é criada aguardando a liberação do dono do EasyAudit (função "empresas", ação "criar").
  */
-export default function CriarEmpresa() {
+export default function Comecar() {
   return <SiteTema><Formulario /></SiteTema>;
 }
 
@@ -105,8 +105,8 @@ function Formulario() {
       <ScrollView keyboardShouldPersistTaps="handled">
         <Faixa style={s.pagina}>
           <Animated.View entering={reduz ? undefined : FadeInDown.duration(380).easing(EASE)} style={s.form}>
-            <Text style={s.h1} accessibilityRole="header">{CTA_EMPRESA}</Text>
-            <Text style={s.corpo}>Você vira o administrador da empresa e convida a sua equipe depois da liberação.</Text>
+            <Text style={s.h1} accessibilityRole="header">Comece agora</Text>
+            <Text style={s.corpo}>Cadastre a sua empresa no EasyAudit. Você vira o administrador e convida a sua equipe depois da liberação.</Text>
 
             <Text style={s.grupo}>Empresa</Text>
             <Field label="Nome da empresa" value={f.empresa} onChangeText={campo('empresa')} placeholder="Ex.: Rede de Postos Horizonte" maxLength={120} />
@@ -147,7 +147,7 @@ function Formulario() {
                 <Text style={[s.corpo, { flex: 1, color: colors.danger }]}>{erro}</Text>
               </View>
             ) : null}
-            <BotaoSite titulo={enviando ? 'Criando…' : CTA_EMPRESA} grande disabled={enviando} onPress={() => void enviar()} style={{ marginTop: 6 }} />
+            <BotaoSite titulo={enviando ? 'Enviando…' : 'Cadastrar e continuar'} grande disabled={enviando} onPress={() => void enviar()} style={{ marginTop: 6 }} />
             <Pressable accessibilityRole="link" onPress={() => router.push('/login')}>
               <Text style={[s.corpo, { fontSize: 14 }]}>Já tem conta? <Text style={{ color: colors.accentText, fontWeight: '700' }}>Entrar</Text></Text>
             </Pressable>

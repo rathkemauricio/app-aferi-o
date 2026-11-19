@@ -56,7 +56,7 @@ export default function ColetaModule() {
     if (!dados.loaded) return;
     void limparCopiasAntigas(new Set(dados.inventarios.filter(i => i.status !== 'encerrado').map(i => i.id)));
   }, [dados.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!pronto || !dados.loaded) return <View style={{ flex: 1, backgroundColor: colors.bg }}><Topo titulo="Contagem de Estoque" onVoltar={voltar} /></View>;
+  if (!pronto || !dados.loaded) return <View style={{ flex: 1, backgroundColor: colors.bg }}><Topo titulo="Contagens" onVoltar={voltar} /></View>;
   const inv = (id: string) => dados.inventarios.find(i => i.id === id);
   const cont = (id: string) => dados.contagens.find(c => c.id === id);
 
@@ -189,7 +189,7 @@ function Segmentos<T extends string>({ opcoes, valor, onChange, multi }: { opcoe
 
 function Rotulo({ children }: { children: string }) { const c = useCores(); return <Text style={[k.rotulo, { color: c.textMuted }]}>{children}</Text>; }
 function Sumiu({ nav }: { nav: Nav }) {
-  return <View style={{ flex: 1 }}><Topo titulo="Contagem de Estoque" onVoltar={nav.inicio} /><EmptyState icon={PackageIcon} title="Registro não encontrado" text="Ele pode ter sido removido em outro aparelho." action={{ label: 'Voltar ao início', onPress: nav.inicio }} /></View>;
+  return <View style={{ flex: 1 }}><Topo titulo="Contagens" onVoltar={nav.inicio} /><EmptyState icon={PackageIcon} title="Registro não encontrado" text="Ele pode ter sido removido em outro aparelho." action={{ label: 'Voltar ao início', onPress: nav.inicio }} /></View>;
 }
 
 /* =====================================================================

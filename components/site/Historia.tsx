@@ -9,7 +9,7 @@ import { Faixa, SITE_CORES } from './SiteChrome';
 // conversam, ação que não sai do lugar e a virada (tudo nasce digital).
 const C = SITE_CORES;
 const W = 560, H = 440;
-const MENTA = '#5fd39a', AMBAR = '#f1bd65', VERMELHO = '#ff8278';
+const MENTA = '#3cbf83', AMBAR = '#b26a00', VERMELHO = '#d93b30';
 
 const ATOS = [
   { titulo: 'Papel demais.', texto: 'Formulários impressos a cada visita. Viram pilha no arquivo e, um dia, vão para o lixo.' },
@@ -39,7 +39,7 @@ function Ato1({ p }: { p: SharedValue<number> }) {
   const grupo = useAnimatedStyle(() => ({ opacity: 1 - fase(p.value, 0.245, 0.27) }));
   return (
     <Animated.View style={[StyleSheet.absoluteFill, grupo]}>
-      <Animated.View style={[st.abs, { left: 380, top: 280 }, lixo]}><TrashIcon size={104} color="#5d6a84" weight="duotone" /></Animated.View>
+      <Animated.View style={[st.abs, { left: 380, top: 280 }, lixo]}><TrashIcon size={104} color="#76829a" weight="duotone" /></Animated.View>
       {Array.from({ length: 10 }, (_, j) => <FolhaPilha key={j} j={j} p={p} />)}
     </Animated.View>
   );
@@ -63,7 +63,7 @@ function PlanilhaSolta({ i, p }: { i: number; p: SharedValue<number> }) {
   });
   return (
     <Animated.View style={[st.abs, anim]}>
-      <Planilha w={150} cor={d.cor} destaque={i === 0 ? [[1, 2, '#fde2a6'], [3, 1, '#ffd0cb']] : i === 1 ? [[2, 0, '#ffd0cb'], [0, 3, '#fde2a6']] : [[4, 2, '#ffd0cb'], [1, 1, '#fde2a6']]} />
+      <Planilha w={150} cor={d.cor} destaque={i === 0 ? [[1, 2, '#fde9bf'], [3, 1, '#fcd9d5']] : i === 1 ? [[2, 0, '#fcd9d5'], [0, 3, '#fde9bf']] : [[4, 2, '#fcd9d5'], [1, 1, '#fde9bf']]} />
     </Animated.View>
   );
 }
@@ -99,7 +99,7 @@ function Ato3({ p }: { p: SharedValue<number> }) {
   const espera = useAnimatedStyle(() => ({ opacity: fase(p.value, 0.66, 0.7) }));
   return (
     <Animated.View style={[StyleSheet.absoluteFill, grupo]}>
-      <View style={[st.abs, { left: NOS[0].x, top: Y_FLUXO - 1.5, width: NOS[3].x - NOS[0].x, height: 3, borderRadius: 2, backgroundColor: '#22345a' }]} />
+      <View style={[st.abs, { left: NOS[0].x, top: Y_FLUXO - 1.5, width: NOS[3].x - NOS[0].x, height: 3, borderRadius: 2, backgroundColor: '#dde3ec' }]} />
       <Animated.View style={[st.abs, { left: NOS[0].x, top: Y_FLUXO - 1.5, height: 3, borderRadius: 2, backgroundColor: MENTA }, trilho]} />
       {NOS.map((n, i) => (
         <View key={n.rotulo} style={[st.abs, { left: n.x - 32, top: Y_FLUXO - 32, alignItems: 'center', width: 64, opacity: i === 3 ? 0.35 : 1 }]}>
@@ -123,9 +123,9 @@ function LinhaCelular({ j, p }: { j: number; p: SharedValue<number> }) {
   const larg = [0.72, 0.55, 0.8, 0.62, 0.7, 0.5][j];
   return (
     <Animated.View style={[st.linhaCel, anim]}>
-      <View style={st.checkCel}><CheckIcon size={11} color="#0a1428" weight="bold" /></View>
+      <View style={st.checkCel}><CheckIcon size={11} color="#0f1f3d" weight="bold" /></View>
       <View style={{ flex: 1, gap: 4 }}>
-        <View style={{ height: 6, width: `${larg * 100}%`, borderRadius: 3, backgroundColor: '#22345a' }} />
+        <View style={{ height: 6, width: `${larg * 100}%`, borderRadius: 3, backgroundColor: '#0f1f3d' }} />
         <View style={{ height: 5, width: `${larg * 70}%`, borderRadius: 3, backgroundColor: '#cfd4da' }} />
       </View>
     </Animated.View>
@@ -165,7 +165,7 @@ function TextoAto({ i, p, desktop }: { i: number; p: SharedValue<number>; deskto
   const a = ATOS[i];
   return (
     <Animated.View style={[StyleSheet.absoluteFill, { justifyContent: 'center' }, anim]} accessibilityElementsHidden={false}>
-      <Text style={[st.titulo, !desktop && { fontSize: 28, lineHeight: 33, marginBottom: 8 }, i === 3 && { color: MENTA }]}>{a.titulo}</Text>
+      <Text style={[st.titulo, !desktop && { fontSize: 28, lineHeight: 33, marginBottom: 8 }]}>{a.titulo}</Text>
       <Text style={[st.texto, !desktop && { fontSize: 16, lineHeight: 24 }]}>{a.texto}</Text>
     </Animated.View>
   );
@@ -187,7 +187,7 @@ function Progresso({ p, desktop }: { p: SharedValue<number>; desktop: boolean })
 export function Historia({ scrollY, vh, desktop }: { scrollY: SharedValue<number>; vh: number; desktop: boolean }) {
   const reduz = useReducedMotion();
   const topo = useSharedValue(0);
-  const altura = Math.round(vh * (reduz ? 1 : 4.5));
+  const altura = Math.round(vh * (reduz ? 1 : 3.6));
   const p = useDerivedValue(() => (reduz ? 1 : c01((scrollY.value - topo.value) / Math.max(1, altura - vh))));
   const palco = useAnimatedStyle(() => ({ transform: [{ translateY: Math.min(Math.max(scrollY.value - topo.value, 0), Math.max(0, altura - vh)) }] }));
 
@@ -234,16 +234,16 @@ const st = StyleSheet.create({
   abs: { position: 'absolute', left: 0, top: 0 },
   titulo: { color: C.text, fontSize: 40, lineHeight: 46, fontWeight: '800', letterSpacing: -1.2, marginBottom: 14 },
   texto: { color: C.textMuted, fontSize: 18, lineHeight: 28, maxWidth: 460 },
-  alerta: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3b2224', alignItems: 'center', justifyContent: 'center' },
+  alerta: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fde8e6', alignItems: 'center', justifyContent: 'center' },
   no: { width: 64, height: 64, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
   rotulo: { color: C.textMuted, fontSize: 13, fontWeight: '700', marginTop: 10 },
   espera: { color: AMBAR, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   ponto: { width: 18, height: 18, borderRadius: 9, backgroundColor: MENTA, borderWidth: 3, borderColor: C.bg },
-  linhaCel: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 8 },
-  checkCel: { width: 18, height: 18, borderRadius: 9, backgroundColor: MENTA, alignItems: 'center', justifyContent: 'center' },
-  halo: { position: 'absolute', left: 130, top: 80, width: 300, height: 300, borderRadius: 999, backgroundColor: '#5fd39a2e' },
-  trilhoV: { width: 3, height: 220, borderRadius: 2, backgroundColor: '#22345a', overflow: 'hidden' },
+  linhaCel: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 8, borderWidth: 1, borderColor: '#e6eaf0' },
+  checkCel: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#5fd39a', alignItems: 'center', justifyContent: 'center' },
+  halo: { position: 'absolute', left: 130, top: 80, width: 300, height: 300, borderRadius: 999, backgroundColor: '#e8eef7' },
+  trilhoV: { width: 3, height: 220, borderRadius: 2, backgroundColor: '#dde3ec', overflow: 'hidden' },
   fillV: { width: 3, borderRadius: 2, backgroundColor: MENTA },
-  trilhoH: { height: 3, width: '100%', borderRadius: 2, backgroundColor: '#22345a', overflow: 'hidden' },
+  trilhoH: { height: 3, width: '100%', borderRadius: 2, backgroundColor: '#dde3ec', overflow: 'hidden' },
   fillH: { height: 3, borderRadius: 2, backgroundColor: MENTA },
 });

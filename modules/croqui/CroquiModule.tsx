@@ -247,7 +247,7 @@ export default function CroquiModule() {
                         );
                       })}
                     </View>
-                    <Text style={t.caption}>Os tanques do croqui (número e combustível) entram prontos na Medição de Tanques desta filial.</Text>
+                    <Text style={t.caption}>Os tanques do croqui (número e combustível) entram prontos na Conferência de Estoque de Combustíveis desta filial.</Text>
                   </View>
                 )}
                 {T[item.type]?.k === 'b' && !espelhada(item) && <>

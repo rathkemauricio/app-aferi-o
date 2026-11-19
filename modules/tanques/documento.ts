@@ -55,6 +55,6 @@ table.dados th{text-align:center}.nota{color:#5b6475;font-size:9px;margin-top:8p
 <div class="sub">${esc(filialNome)} · ${tanques.length} tanque(s) · ${usadas.length} tabela(s) de medição</div>
 <table><thead><tr><th>Tanque</th><th>Combustível</th><th>Capacidade</th><th>Modelo</th><th>Tabela</th><th>Esquema das Ligações (Bombas / Bicos)</th></tr></thead><tbody>${linhasCadastro || '<tr><td colspan="6">Nenhum tanque cadastrado.</td></tr>'}</tbody></table>
 ${blocos}
-<p class="nota">Gerado pelo EasyAudit. Este PDF pode ser importado de volta (Medição de Tanques → filial → Importar PDF da filial).</p>
+<p class="nota">Gerado pelo EasyAudit. Este PDF pode ser importado de volta (Conferência de Estoque de Combustíveis → filial → Importar PDF da filial).</p>
 </body></html>`;
 }

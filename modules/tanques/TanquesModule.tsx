@@ -55,7 +55,7 @@ export default function TanquesModule() {
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label={pilha.length > 1 ? 'Voltar' : 'Voltar aos módulos'} onPress={voltar} />
         <View style={s.brandMark}><RulerIcon size={18} color="#5fd39a" weight="bold" /></View>
-        <View style={s.flex}><Text style={s.brandName}>Medição de Tanques</Text><Text style={t.caption}>Conferência do estoque de combustível</Text></View>
+        <View style={s.flex}><Text style={s.brandName} numberOfLines={1}>Conferência de Estoque</Text><Text style={t.caption}>Combustíveis: medição dos tanques</Text></View>
         {dados.status === 'error' ? <StatusPill icon={CloudSlashIcon} label="Sem sincronizar" tone="warning" /> : <StatusPill icon={CloudCheckIcon} label="Sincronizado" tone="success" />}
       </View>
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
@@ -347,7 +347,7 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
     <Field label="Observações" value={m.obs} editable={!fin} multiline onChangeText={v => salvar({ obs: v })} placeholder="Ex.: régua conferida, descarga em andamento…" />
 
     {fin ? <>
-      <Button title="Imprimir / PDF" icon={PrinterIcon} onPress={() => void imprimirHtml(relatorioHtml(m, filialNome, nomeComb), `Medição de tanques ${filialNome}`, true)} />
+      <Button title="Imprimir / PDF" icon={PrinterIcon} onPress={() => void imprimirHtml(relatorioHtml(m, filialNome, nomeComb), `Conferência de estoque ${filialNome}`, true)} />
       <Button title="Reabrir medição" icon={ResetIcon} variant="secondary" onPress={() => confirmAction('Reabrir medição?', 'A medição volta a aceitar alterações.', 'Reabrir', () => salvar({ status: 'rascunho' }))} />
     </> : <Button title="Finalizar medição" icon={CheckIcon} onPress={finalizar} />}
     <Button title="Excluir medição" icon={TrashIcon} variant="danger" size="sm" style={{ alignSelf: 'flex-start' }} onPress={excluir} />
@@ -414,13 +414,13 @@ export function relatorioHtml(m: Medicao, filialNome: string, nomeComb: (id: str
   const pc = (v: number | null) => (v === null ? '—' : `${fmtSinal(Math.round(v * 100) / 100)}%`);
   const tanques = m.tanques.map(l => `<tr><td>${esc(l.tanque)}</td><td>${esc(nomeComb(l.combustivel))}</td><td class="n">${n(l.metragem)}</td><td class="n">${n(l.litros)}${l.litros === null ? '' : `<br><span class="peq">${l.litrosTabela ? `tabela ${esc(l.litrosTabela)}` : 'digitado'}</span>`}</td><td class="n">${n(l.informada)}${l.informadaDe ? `<br><span class="peq">medição de ${dataBR(l.informadaDe)}</span>` : ''}</td></tr>`).join('');
   const conferencia = [...r.porCombustivel, r.geral].map(x => `<tr${x.combustivel === 'Total' ? ' class="tot"' : ''}><td>${x.combustivel === 'Total' ? 'Total geral' : esc(nomeComb(x.combustivel))}</td><td>${esc(x.tanques.join(', '))}</td><td class="n">${n(x.litros)}</td><td class="n">${n(x.venda)}</td><td class="n"><b>${n(x.total)}</b></td><td class="n">${n(x.informada)}</td><td class="n">${n(x.recebimento)}</td><td class="n ${cor(x.resultado)}"><b>${fmtSinal(x.resultado)}</b></td><td class="n">${pc(x.pct)}</td></tr>`).join('');
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Medição de tanques · ${esc(filialNome)}</title><style>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Conferência de estoque de combustíveis · ${esc(filialNome)}</title><style>
 @page{size:A4 landscape;margin:10mm}body{font:11px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:17px;margin:0 0 2px;color:${AZUL}}.sub{color:#5b6475;margin-bottom:8px}
 h2{font-size:12.5px;margin:12px 0 4px;color:${AZUL}}table{width:100%;border-collapse:collapse}th{background:${AZUL};color:#fff;text-align:left;padding:4px 5px;font-size:10px}td{border-bottom:1px solid #e3e6ec;padding:3px 5px}
 .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.neg{color:#c0262d}.pos{color:#a86400}.tot td{font-weight:700;background:#eef4f6;border-top:2px solid ${AZUL}}
 .obs{white-space:pre-wrap;border:1px solid #e3e6ec;border-radius:6px;padding:6px;min-height:24px}.ass{display:flex;gap:40px;margin-top:34px}.ass div{flex:1;border-top:1px solid #1b2230;padding-top:4px;text-align:center}
 .nota{color:#5b6475;font-size:10px;margin-top:6px}.peq{color:#5b6475;font-size:9px}</style></head><body>
-<h1>Medição de tanques · ${esc(filialNome)}</h1>
+<h1>Conferência de estoque de combustíveis · ${esc(filialNome)}</h1>
 <div class="sub">Data ${dataBR(m.data)}${m.medido_em ? ` · finalizada em ${new Date(m.medido_em).toLocaleString('pt-BR')}` : ''} · Responsável: ${esc(m.responsavel_nome || '—')} · Emitido em ${new Date().toLocaleString('pt-BR')}</div>
 <h2>Conferência por combustível</h2>
 <table><tr><th>Combustível</th><th>Tanques</th><th class="n">Litros medidos</th><th class="n">Venda</th><th class="n">Total</th><th class="n">Informada</th><th class="n">Recebimento</th><th class="n">Resultado final</th><th class="n">% da venda</th></tr>${conferencia}</table>

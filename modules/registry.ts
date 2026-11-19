@@ -9,6 +9,8 @@ import type { Tint } from '../ui/theme';
 export type AppModule = {
   id: string;
   name: string;
+  /** Nome curto para o menu lateral (quando o nome não cabe numa linha). */
+  curto?: string;
   description: string;
   icon: Icon;
   tint: Tint;
@@ -79,7 +81,7 @@ export const MODULES: AppModule[] = [
   },
   {
     id: 'coleta',
-    name: 'Coleta',
+    name: 'Contagens',
     description: 'Contagem de estoque por filial com coletor: saldos do ERP, até 3 contagens e relatório de divergências.',
     icon: BarcodeIcon,
     tint: 'amber',
@@ -88,7 +90,8 @@ export const MODULES: AppModule[] = [
   },
   {
     id: 'tanques',
-    name: 'Medição de Tanques',
+    name: 'Conferência de Estoque de Combustíveis',
+    curto: 'Conferência de Estoque',
     description: 'Medição dos tanques de combustível por filial: estoque medido, venda, recebimento e resultado (sobra ou falta).',
     icon: RulerIcon,
     tint: 'sky',

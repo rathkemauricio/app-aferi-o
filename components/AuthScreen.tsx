@@ -268,7 +268,7 @@ function PainelMarca({ p, lado, onTrocar }: { p: SharedValue<number>; lado: 0 | 
         <Animated.View style={[pm.bloco, blocoCriar]} pointerEvents={lado === 0 ? 'auto' : 'none'} {...oculto(lado !== 0)}>
           <Text style={pm.titulo}>Novo por aqui?</Text>
           <Text style={pm.texto}>Se a sua empresa já usa o EasyAudit, peça um convite ao administrador. Para usar na sua empresa, cadastre-a.</Text>
-          <BotaoContorno label="Criar minha empresa" onPress={() => router.push('/criar-empresa')} />
+          <BotaoContorno label="Começar agora" onPress={() => router.push('/comecar')} />
         </Animated.View>
         <Animated.View style={[pm.bloco, pm.sobreposto, blocoEntrar]} pointerEvents={lado === 1 ? 'auto' : 'none'} {...oculto(lado !== 1)}>
           <Text style={pm.titulo}>Já tem conta?</Text>

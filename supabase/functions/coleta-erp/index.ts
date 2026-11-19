@@ -265,7 +265,7 @@ Deno.serve(async req => {
     const body = await req.json().catch(() => ({}));
     // A leitura de PDF também serve às tabelas de arqueação da Medição de Tanques (pasta arqueacao/).
     const tabelaTanque = body.acao === 'extrair_pdf' && String(body.caminho ?? '').startsWith('arqueacao/');
-    if (tabelaTanque ? !libera('tanques') : !libera('coleta')) return json(403, { erro: tabelaTanque ? 'O módulo Medição de Tanques não está liberado para esta conta.' : 'O módulo Coleta não está liberado para esta conta.' });
+    if (tabelaTanque ? !libera('tanques') : !libera('coleta')) return json(403, { erro: tabelaTanque ? 'O módulo Conferência de Estoque de Combustíveis não está liberado para esta conta.' : 'O módulo Contagens não está liberado para esta conta.' });
     switch (body.acao) {
       case 'status': return json(200, { ok: true, petros: emp === REDE_NEVOEIRO && petrosConfigurado() });
       case 'carregar': return await carregar(body, emp);

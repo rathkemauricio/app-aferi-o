@@ -118,7 +118,7 @@ export default function ConfiguracoesScreen() {
             </View>)}
         </Card>
 
-        <SectionHeader title="Coleta" />
+        <SectionHeader title="Contagens" />
         <Card>
           {linha('Layout da tela de coleta', pref.layoutColeta === 'simples' ? 'Simples: quadro amarelo do item e botões grandes com nome.' : 'Completo: cartão do item, quantidade com Salvar ao lado e total embaixo.', null)}
           {escolha(LAYOUTS, pref.layoutColeta, v => setPreferencia('layoutColeta', v))}

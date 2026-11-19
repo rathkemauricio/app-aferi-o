@@ -67,14 +67,16 @@ export function Palco({ largura, altura, children, maxAltura, style }: { largura
 
 /* ---------- Formas das cenas (geométricas, na paleta da marca) ---------- */
 
-const PAPEL = '#f4f3ef';
-const LINHA = '#cfd4da';
+const PAPEL = '#ffffff';
+const LINHA = '#d5dbe4';
+/** Sombra leve das peças (fundo claro): borda fina e sombra difusa, sem brilho. */
+const PECA = { borderWidth: 1, borderColor: '#e1e6ee', shadowColor: '#0f1f3d', shadowOpacity: 0.09, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } };
 
 /** Folha de formulário impresso: cabeçalho, linhas e um campo de assinatura. */
 export function Folha({ w = 64, cor = PAPEL }: { w?: number; cor?: string }) {
   const h = w * 1.32;
   return (
-    <View style={{ width: w, height: h, borderRadius: w * 0.07, backgroundColor: cor, padding: w * 0.12, gap: w * 0.07, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } }}>
+    <View style={[PECA, { width: w, height: h, borderRadius: w * 0.07, backgroundColor: cor, padding: w * 0.12, gap: w * 0.07 }]}>
       <View style={{ height: w * 0.09, width: '55%', borderRadius: 2, backgroundColor: '#22345a' }} />
       {[0.92, 0.78, 0.86, 0.6, 0.82, 0.7].map((f, i) => <View key={i} style={{ height: w * 0.05, width: `${f * 100}%`, borderRadius: 2, backgroundColor: LINHA }} />)}
       <View style={{ marginTop: 'auto', height: w * 0.14, width: '45%', alignSelf: 'flex-end', borderBottomWidth: 1.5, borderBottomColor: '#9aa3b0' }} />
@@ -86,7 +88,7 @@ export function Folha({ w = 64, cor = PAPEL }: { w?: number; cor?: string }) {
 export function Planilha({ w = 120, cor = '#1f8a5b', destaque }: { w?: number; cor?: string; destaque?: [number, number, string][] }) {
   const cols = 4, linhas = 5, cw = (w - 12) / cols, ch = cw * 0.42;
   return (
-    <View style={{ width: w, borderRadius: 6, backgroundColor: PAPEL, padding: 6, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } }}>
+    <View style={[PECA, { width: w, borderRadius: 6, backgroundColor: PAPEL, padding: 6 }]}>
       <View style={{ height: ch, borderRadius: 2, backgroundColor: cor, marginBottom: 2 }} />
       {Array.from({ length: linhas }, (_, r) => (
         <View key={r} style={{ flexDirection: 'row' }}>
@@ -104,9 +106,9 @@ export function Planilha({ w = 120, cor = '#1f8a5b', destaque }: { w?: number; c
 export function Celular({ w = 170, children }: { w?: number; children?: ReactNode }) {
   const h = w * 2;
   return (
-    <View style={{ width: w, height: h, borderRadius: w * 0.17, backgroundColor: '#050c1c', padding: w * 0.045, shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 30, shadowOffset: { width: 0, height: 18 } }}>
-      <View style={{ flex: 1, borderRadius: w * 0.13, backgroundColor: PAPEL, overflow: 'hidden', paddingTop: w * 0.16, paddingHorizontal: w * 0.08, gap: w * 0.055 }}>
-        <View style={{ position: 'absolute', top: w * 0.05, alignSelf: 'center', width: w * 0.3, height: w * 0.06, borderRadius: 99, backgroundColor: '#050c1c' }} />
+    <View style={{ width: w, height: h, borderRadius: w * 0.17, backgroundColor: '#0f1f3d', padding: w * 0.045, shadowColor: '#0f1f3d', shadowOpacity: 0.18, shadowRadius: 26, shadowOffset: { width: 0, height: 14 } }}>
+      <View style={{ flex: 1, borderRadius: w * 0.13, backgroundColor: '#f4f6f9', overflow: 'hidden', paddingTop: w * 0.16, paddingHorizontal: w * 0.08, gap: w * 0.055 }}>
+        <View style={{ position: 'absolute', top: w * 0.05, alignSelf: 'center', width: w * 0.3, height: w * 0.06, borderRadius: 99, backgroundColor: '#0f1f3d' }} />
         {children}
       </View>
     </View>

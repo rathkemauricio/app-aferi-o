@@ -1,33 +1,37 @@
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { type ReactNode, useContext, useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Logo } from '../Logo';
-import { darkColor, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { color, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { useTela } from '../../ui/zoom';
 import { EASE } from './motion';
 
 /** Largura máxima do conteúdo do site. */
-export const SITE_MAX = 1200;
-export const CTA_EMPRESA = 'Criar minha empresa';
+export const SITE_MAX = 1180;
+/** As duas ações do site: começar (cadastro) e entender (página de como funciona). */
+export const CTA_COMECAR = 'Começar agora';
+export const CTA_ENTENDER = 'Entender se isso é para mim';
+export const ROTA_COMECAR = '/comecar' as Href;
+export const ROTA_ENTENDER = '/como-funciona' as Href;
 
 /**
- * Paleta do site, travada no escuro da marca (azul-marinho, verde-menta e papel) em qualquer tema do aparelho:
- * no claro, a identidade se perderia. Os componentes do sistema (campos, botões) herdam esta paleta só dentro do site.
+ * Paleta do site: clara e sóbria, com a tinta azul-marinho da marca e o verde-menta só nos detalhes (checks).
+ * Travada em qualquer tema do aparelho; os campos e botões do sistema herdam esta paleta só dentro do site.
  */
 export const SITE_CORES: ThemeColors = {
-  ...darkColor,
-  bg: '#0a1428', surface: '#101d37', surfaceMuted: '#162644', border: '#22345a', borderStrong: '#34486f',
-  text: '#f2f4f8', textMuted: '#aab6cb', textFaint: '#7c89a3',
-  accent: '#5fd39a', accentPressed: '#4cc189', accentSoft: '#13362f', accentText: '#7fe0b0', primaryText: '#0a1428',
-  campo: '#0d1a33', folha: '#0a1428', onBg: '#f2f4f8', onBgMuted: '#aab6cb', neutralSoft: '#1c2c4c',
+  ...color,
+  bg: '#f7f8fa', surface: '#ffffff', surfaceMuted: '#f0f3f7', border: '#e2e7ef', borderStrong: '#cbd3df',
+  text: '#0f1f3d', textMuted: '#4a5873', textFaint: '#76829a',
+  accent: '#0f1f3d', accentPressed: '#0a1630', accentSoft: '#e9eef7', accentText: '#14305e', primaryText: '#ffffff',
+  campo: '#ffffff', folha: '#f7f8fa', onBg: '#0f1f3d', onBgMuted: '#4a5873', neutralSoft: '#eef1f6',
 };
-/** Papel das cenas (folhas, planilhas, telas). */
-export const PAPEL = '#f4f3ef';
+/** Verde-menta da marca (só preenchimentos: checks, níveis, linhas de progresso). */
+export const MENTA = '#5fd39a';
 
 export function SiteTema({ children }: { children: ReactNode }) {
   const ctx = useContext(ThemeContext);
-  const valor = useMemo(() => ({ ...ctx, mode: 'dark' as const, colors: SITE_CORES }), [ctx]);
+  const valor = useMemo(() => ({ ...ctx, mode: 'light' as const, colors: SITE_CORES }), [ctx]);
   return <ThemeContext.Provider value={valor}>{children}</ThemeContext.Provider>;
 }
 
@@ -44,24 +48,24 @@ export function Faixa({ children, style }: { children: ReactNode; style?: ViewSt
 }
 
 /**
- * Botão do site. Toque: encolhe 3% (160 ms) para confirmar o toque. Mouse: sobe 2 px (só no computador).
- * Primário em verde-menta com texto marinho; secundário com contorno.
+ * Botão do site (pílula). Toque: encolhe 3% para confirmar. Mouse: sobe 1 px (só no computador).
+ * primario: azul-marinho; destaque: verde-menta com texto marinho; secundario: contorno; claro: branco sobre fundo escuro.
  */
-export function BotaoSite({ titulo, onPress, tipo = 'primario', grande = false, disabled = false, style }: {
-  titulo: string; onPress: () => void; tipo?: 'primario' | 'secundario'; grande?: boolean; disabled?: boolean; style?: ViewStyle;
+export function BotaoSite({ titulo, onPress, tipo = 'primario', grande = false, pequeno = false, disabled = false, style }: {
+  titulo: string; onPress: () => void; tipo?: 'primario' | 'destaque' | 'secundario' | 'claro'; grande?: boolean; pequeno?: boolean; disabled?: boolean; style?: ViewStyle;
 }) {
   const reduz = useReducedMotion();
   const toque = useSharedValue(0);
   const hover = useSharedValue(0);
-  const anim = useAnimatedStyle(() => ({ transform: [{ translateY: hover.value * -2 }, { scale: 1 - toque.value * 0.03 }] }));
+  const anim = useAnimatedStyle(() => ({ transform: [{ translateY: hover.value * -1 }, { scale: 1 - toque.value * 0.03 }] }));
   const t = (v: { value: number }, alvo: number, ms: number) => { v.value = reduz ? alvo : withTiming(alvo, { duration: ms, easing: EASE }); };
-  const prim = tipo === 'primario';
+  const cor = tipo === 'primario' ? SITE_CORES.primaryText : SITE_CORES.text; // destaque: menta com texto marinho
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
       onPressIn={() => t(toque, 1, 100)} onPressOut={() => t(toque, 0, 160)}
-      onHoverIn={() => Platform.OS === 'web' && t(hover, 1, 180)} onHoverOut={() => t(hover, 0, 220)} style={style}>
-      <Animated.View style={[st.botao, grande && st.botaoGrande, prim ? st.botaoPrim : st.botaoSec, disabled && { opacity: 0.55 }, anim]}>
-        <Text numberOfLines={1} style={[st.botaoTxt, grande && { fontSize: 16 }, { color: prim ? SITE_CORES.primaryText : SITE_CORES.text }]}>{titulo}</Text>
+      onHoverIn={() => Platform.OS === 'web' && t(hover, 1, 160)} onHoverOut={() => t(hover, 0, 200)} style={style}>
+      <Animated.View style={[st.botao, grande && st.botaoGrande, pequeno && st.botaoPequeno, st[tipo], disabled && { opacity: 0.55 }, anim]}>
+        <Text numberOfLines={1} style={[st.botaoTxt, grande && { fontSize: 15.5 }, pequeno && st.botaoTxtPequeno, { color: cor }]}>{titulo}</Text>
       </Animated.View>
     </Pressable>
   );
@@ -71,13 +75,13 @@ function Marca() {
   const router = useRouter();
   return (
     <Pressable accessibilityRole="link" accessibilityLabel="EasyAudit, página inicial" onPress={() => router.push('/inicio')} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
-      <Logo altura={22} claro />
+      <Logo altura={22} />
     </Pressable>
   );
 }
 
-/** Topo do site (uma linha em qualquer largura). */
-export function SiteNav({ onComoFunciona, onPlanos }: { onComoFunciona?: () => void; onPlanos?: () => void }) {
+/** Topo do site: marca, menu central em maiúsculas pequenas e, à direita, Entrar e Começar agora (uma linha). */
+export function SiteNav({ onPlanos, onSetores }: { onPlanos?: () => void; onSetores?: () => void }) {
   const { desktop } = useSite();
   const router = useRouter();
   const link = (rotulo: string, onPress: () => void) => (
@@ -88,12 +92,18 @@ export function SiteNav({ onComoFunciona, onPlanos }: { onComoFunciona?: () => v
   return (
     <View style={st.navFundo}>
       <Faixa style={st.nav}>
-        <Marca />
-        <View style={{ flex: 1 }} />
-        {desktop && onComoFunciona ? link('Como funciona', onComoFunciona) : null}
-        {desktop && onPlanos ? link('Planos', onPlanos) : null}
-        {link('Entrar', () => router.push('/login'))}
-        {desktop ? <BotaoSite titulo={CTA_EMPRESA} onPress={() => router.push('/criar-empresa')} style={{ marginLeft: 6 }} /> : null}
+        <View style={{ flex: 1, alignItems: 'flex-start' }}><Marca /></View>
+        {desktop ? (
+          <View style={st.navCentro}>
+            {link('COMO FUNCIONA', () => router.push(ROTA_ENTENDER))}
+            {link('SETORES', onSetores ?? (() => router.push('/inicio')))}
+            {link('PLANOS', onPlanos ?? (() => router.push('/inicio')))}
+          </View>
+        ) : null}
+        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+          <BotaoSite titulo="ENTRAR" tipo="secundario" pequeno onPress={() => router.push('/login')} />
+          {desktop ? <BotaoSite titulo={CTA_COMECAR.toUpperCase()} pequeno onPress={() => router.push(ROTA_COMECAR)} /> : null}
+        </View>
       </Faixa>
     </View>
   );
@@ -106,6 +116,7 @@ export function SiteFooter() {
       <Faixa style={st.rodapeLinha}>
         <Marca />
         <View style={{ flex: 1 }} />
+        <Pressable accessibilityRole="link" onPress={() => router.push(ROTA_ENTENDER)}><Text style={st.navLinkTxt}>Como funciona</Text></Pressable>
         <Pressable accessibilityRole="link" onPress={() => router.push('/login')}><Text style={st.navLinkTxt}>Entrar</Text></Pressable>
         <Text style={st.rodapeTxt}>© {new Date().getFullYear()} EasyAudit</Text>
       </Faixa>
@@ -114,16 +125,21 @@ export function SiteFooter() {
 }
 
 const st = StyleSheet.create({
-  navFundo: { backgroundColor: SITE_CORES.bg, borderBottomWidth: 1, borderBottomColor: '#ffffff14' },
-  nav: { height: 68, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  navLink: { paddingHorizontal: 12, height: 40, justifyContent: 'center', borderRadius: 10 },
-  navLinkTxt: { fontSize: 14, fontWeight: '600', color: SITE_CORES.textMuted },
-  botao: { height: 44, paddingHorizontal: 20, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  navFundo: { backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: SITE_CORES.border },
+  nav: { height: 68, flexDirection: 'row', alignItems: 'center' },
+  navCentro: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  navLink: { paddingHorizontal: 12, height: 40, justifyContent: 'center', borderRadius: 8 },
+  navLinkTxt: { fontSize: 12, fontWeight: '700', letterSpacing: 1.1, color: SITE_CORES.textMuted },
+  botao: { height: 46, paddingHorizontal: 22, borderRadius: 999, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   botaoGrande: { height: 52, paddingHorizontal: 26 },
-  botaoPrim: { backgroundColor: SITE_CORES.accent },
-  botaoSec: { borderWidth: 1, borderColor: '#ffffff33', backgroundColor: '#ffffff08' },
-  botaoTxt: { fontSize: 14.5, fontWeight: '800', letterSpacing: 0.1 },
-  rodape: { borderTopWidth: 1, borderTopColor: '#ffffff14', paddingVertical: 32, backgroundColor: SITE_CORES.bg },
-  rodapeLinha: { flexDirection: 'row', alignItems: 'center', gap: 18, flexWrap: 'wrap' },
+  botaoPequeno: { height: 38, paddingHorizontal: 16 },
+  botaoTxtPequeno: { fontSize: 12, letterSpacing: 1, fontWeight: '800' },
+  primario: { backgroundColor: SITE_CORES.accent, borderColor: SITE_CORES.accent },
+  destaque: { backgroundColor: MENTA, borderColor: MENTA },
+  secundario: { backgroundColor: '#ffffff', borderColor: SITE_CORES.borderStrong },
+  claro: { backgroundColor: '#ffffff', borderColor: '#ffffff' },
+  botaoTxt: { fontSize: 14.5, fontWeight: '700', letterSpacing: 0.1 },
+  rodape: { borderTopWidth: 1, borderTopColor: SITE_CORES.border, paddingVertical: 30, backgroundColor: '#ffffff' },
+  rodapeLinha: { flexDirection: 'row', alignItems: 'center', gap: 20, flexWrap: 'wrap' },
   rodapeTxt: { fontSize: 13, color: SITE_CORES.textFaint },
 });

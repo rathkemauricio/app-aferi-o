@@ -141,7 +141,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   const isActive = (route: string) => route === '/' ? pathname === '/' || pathname === '/index' : pathname === route || pathname.startsWith(`${route}/`);
   const grupos: { titulo: string; itens: LinkItem[] }[] = [
     { titulo: 'INÍCIO', itens: [{ label: 'Visão geral', route: '/', icon: HouseIcon }] },
-    { titulo: 'OPERAÇÃO', itens: MODULES.filter(m => podeAcessar(m.id)).map(m => ({ label: m.name, route: m.route, icon: m.icon })) },
+    { titulo: 'OPERAÇÃO', itens: MODULES.filter(m => podeAcessar(m.id)).map(m => ({ label: m.curto ?? m.name, route: m.route, icon: m.icon })) },
     { titulo: 'CADASTROS', itens: [
       { label: 'Filiais', route: '/filiais', icon: StorefrontIcon },
       { label: 'Combustíveis', route: '/combustiveis', icon: DropIcon },
