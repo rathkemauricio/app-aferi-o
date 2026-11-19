@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { isStrongPassword, PASSWORD_RULES, traduzirErro } from '../components/AuthScreen';
-import { CTA_EMPRESA, Faixa, SiteFooter, SiteNav, useSite } from '../components/site/SiteChrome';
+import { BotaoSite, CTA_EMPRESA, Faixa, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
 import { emailValido } from '../lib/email';
 import { supabase } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
 import { CheckCircleIcon, CheckIcon, EnvelopeIcon, WarningCircleIcon } from '../ui/icons';
-import { Button, Field } from '../ui/kit';
+import { Field } from '../ui/kit';
 import type { ThemeColors } from '../ui/theme';
 
 type Plano = { id: string; nome: string; preco_mensal: number | null; limite_contas: number; modulos: string[]; ordem: number };
@@ -23,9 +23,13 @@ const nomeModulo = (id: string) => MODULES.find(m => m.id === id)?.name ?? id;
  * a empresa é criada aguardando a liberação do dono do EasyAudit (função "empresas", ação "criar").
  */
 export default function CriarEmpresa() {
+  return <SiteTema><Formulario /></SiteTema>;
+}
+
+function Formulario() {
   const router = useRouter();
   const params = useLocalSearchParams<{ plano?: string }>();
-  const { colors, desktop } = useSite();
+  const { c: colors, desktop } = useSite();
   const s = useMemo(() => estilos(colors, desktop), [colors, desktop]);
   const reduz = useReducedMotion();
 
@@ -86,7 +90,7 @@ export default function CriarEmpresa() {
               <Text style={[s.corpo, { textAlign: 'center' }]}>
                 Enviamos um link para {enviadoPara}. Depois de confirmar, entre com esse e-mail e a sua senha: a {f.empresa.trim()} é cadastrada e fica aguardando a liberação do EasyAudit.
               </Text>
-              <Button title="Ir para o login" onPress={() => router.replace('/login')} />
+              <BotaoSite titulo="Ir para o login" grande onPress={() => router.replace('/login')} />
             </Animated.View>
           </Faixa>
           <SiteFooter />
@@ -143,7 +147,7 @@ export default function CriarEmpresa() {
                 <Text style={[s.corpo, { flex: 1, color: colors.danger }]}>{erro}</Text>
               </View>
             ) : null}
-            <Button title={enviando ? 'Criando…' : CTA_EMPRESA} disabled={enviando} onPress={() => void enviar()} />
+            <BotaoSite titulo={enviando ? 'Criando…' : CTA_EMPRESA} grande disabled={enviando} onPress={() => void enviar()} style={{ marginTop: 6 }} />
             <Pressable accessibilityRole="link" onPress={() => router.push('/login')}>
               <Text style={[s.corpo, { fontSize: 14 }]}>Já tem conta? <Text style={{ color: colors.accentText, fontWeight: '700' }}>Entrar</Text></Text>
             </Pressable>
