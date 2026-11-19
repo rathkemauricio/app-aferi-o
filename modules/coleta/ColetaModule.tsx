@@ -25,6 +25,7 @@ import {
 import { lerPdfBarras } from './barras';
 import { htmlDivergencias, htmlDoInventario, type LinhaDivergente } from './impressao';
 import { Deslizavel } from '../tempos/Deslizavel';
+import { Alvo } from '../../tutoriais';
 import { LeitorCamera, LeitorDaFilial, SeletorModo } from './SemLeitor';
 
 // Cores do design da Contagem de Estoque (cabeçalho azul-marinho, ação principal âmbar).
@@ -217,14 +218,14 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={filialConta ? 'Contagens da filial' : 'Inventários'} sub={sub} onVoltar={nav.voltar} />
-      <Corpo rodape={<Botao titulo="Abrir inventário" onPress={() => nav.ir({ n: 'abrir' })} desabilitado={!isSupabaseConfigured} />}>
-        <Segmentos opcoes={[
+      <Corpo rodape={<Alvo id="contagens-abrir"><Botao titulo="Abrir inventário" onPress={() => nav.ir({ n: 'abrir' })} desabilitado={!isSupabaseConfigured} /></Alvo>}>
+        <Alvo id="contagens-abas"><Segmentos opcoes={[
           { id: 'abertos', titulo: 'Em aberto', sub: `${abertos.length} filia${abertos.length === 1 ? 'l' : 'is'}` },
           { id: 'encerrados', titulo: 'Encerrados', sub: `${encerrados.length} inventário${encerrados.length === 1 ? '' : 's'}` },
-        ]} valor={aba} onChange={setAba} />
-        {aba === 'abertos' && filialConta ? <LeitorDaFilial /> : null}
+        ]} valor={aba} onChange={setAba} /></Alvo>
+        {aba === 'abertos' && filialConta ? <Alvo id="contagens-leitor"><LeitorDaFilial /></Alvo> : null}
         {aba === 'abertos' && !filialConta ? (
-          <Cartao onPress={() => nav.ir({ n: 'bases' })}>
+          <Alvo id="contagens-bases"><Cartao onPress={() => nav.ir({ n: 'bases' })}>
             <View style={k.linha}>
               <BarcodeIcon size={22} color={c.text} />
               <View style={{ flex: 1 }}>
@@ -233,7 +234,7 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
               </View>
               <CaretRightIcon size={18} color={c.textMuted} />
             </View>
-          </Cartao>
+          </Cartao></Alvo>
         ) : null}
         {!lista.length
           ? (aba === 'abertos'

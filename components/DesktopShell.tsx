@@ -8,7 +8,8 @@ import { Avatar } from './Avatar';
 import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
-import { CaretLeftIcon, DropIcon, GearIcon, HouseIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
+import { Alvo } from '../tutoriais';
+import { CaretLeftIcon, DropIcon, GearIcon, GraduationCapIcon, HouseIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
 import { confirmAction } from '../ui/kit';
 import { ThemeContext, type ThemeColors } from '../ui/theme';
 
@@ -149,7 +150,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
     ] }]),
     ...(isAdmin ? [{ titulo: 'ADMINISTRAÇÃO', itens: [{ label: 'Usuários e permissões', route: '/usuarios' as Href, icon: UserCircleIcon }] }] : []),
     ...(dono ? [{ titulo: 'PLATAFORMA', itens: [{ label: 'Empresas e planos', route: '/plataforma' as Href, icon: SquaresFourIcon }] }] : []),
-    { titulo: 'PREFERÊNCIAS', itens: [{ label: 'Configurações', route: '/configuracoes', icon: GearIcon }] },
+    { titulo: 'PREFERÊNCIAS', itens: [{ label: 'Configurações', route: '/configuracoes', icon: GearIcon }, { label: 'Tutoriais', route: '/tutoriais' as Href, icon: GraduationCapIcon }] },
   ];
   const chaveAtiva = grupos.flatMap(g => g.itens).find(i => isActive(String(i.route)))?.route;
   const ativaKey = chaveAtiva === undefined ? null : String(chaveAtiva);
@@ -175,6 +176,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
           <Animated.View style={[styles.brandCopy, sMarca]}><Text style={styles.brandName}>EasyAudit</Text><Text numberOfLines={1} style={styles.brandSub}>{empresa?.nome ?? 'EasyAudit'}</Text></Animated.View>
         </View>
 
+        <Alvo id="menu-lateral" style={styles.navScroll}>
         <ScrollView style={styles.navScroll} contentContainerStyle={styles.navContent} showsVerticalScrollIndicator={false}>
           {/* Aba da página atual: arredondada à esquerda e com curvas invertidas em cima e embaixo, abraçando o conteúdo. */}
           <Animated.View pointerEvents="none" style={[styles.aba, sAba]}>
@@ -192,6 +194,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
             </Fragment>
           ) : null))}
         </ScrollView>
+        </Alvo>
 
         <View style={styles.sidebarFooter}>
           <View style={[styles.footerActions, compact && styles.footerActionsCompact]}>
@@ -199,6 +202,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
             {isSupabaseConfigured && userEmail ? <BotaoLateral icon={SignOutIcon} label="Sair da conta" p={p}
               onPress={() => confirmAction('Sair da conta?', 'Você volta para a tela de login. Registros ainda não enviados continuam salvos neste aparelho.', 'Sair', () => void signOut())} /> : null}
           </View>
+          <Alvo id="menu-conta">
           <Pressable onPress={() => router.push('/conta')} accessibilityRole="button" accessibilityLabel="Minha conta" style={({ pressed }) => [styles.profile, pressed && { opacity: 0.8 }]}>
             <Avatar uri={avatar} nome={nome || userEmail} size={36} />
             <Animated.View style={[styles.profileCopy, sPerfil]}>
@@ -206,6 +210,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
               <Text numberOfLines={1} style={styles.profileRole}>{isAdmin ? 'Administrador' : 'Minha conta'} · v{VERSAO}</Text>
             </Animated.View>
           </Pressable>
+          </Alvo>
         </View>
       </Animated.View>
 

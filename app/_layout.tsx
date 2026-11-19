@@ -1,11 +1,14 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useContext } from 'react';
+import { type ReactNode, useContext, useMemo } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { AvisosHost } from '../ui/avisos';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TUTORIAIS } from '../lib/tutoriais';
+import { armazenamentoAsync, TutorialProvider } from '../tutoriais';
 import { SheetHost } from '../ui/kit';
 import { ThemeContext, ThemeProvider } from '../ui/theme';
 import { Zoom } from '../ui/zoom';
@@ -64,6 +67,15 @@ function Shell() {
   </>;
 }
 
+const ARMAZENAMENTO_TUTORIAIS = armazenamentoAsync(AsyncStorage);
+
+/** Tutoriais interativos (pasta tutoriais/) com as cores do tema do app. Fica por fora do Zoom: o destaque mede a tela real. */
+function Tutoriais({ children }: { children: ReactNode }) {
+  const { colors } = useContext(ThemeContext);
+  const tema = useMemo(() => ({ cartao: colors.surface, borda: colors.border, texto: colors.text, textoSuave: colors.textMuted, destaque: colors.accent, sobreDestaque: colors.primaryText }), [colors]);
+  return <TutorialProvider tutoriais={TUTORIAIS} armazenamento={ARMAZENAMENTO_TUTORIAIS} chave="easyaudit.tutoriais.vistos.v1" tema={tema}>{children}</TutorialProvider>;
+}
+
 export default function RootLayout() {
   // GestureHandlerRootView: necessário para os gestos (ex.: deslizar atividade em Tempos e Movimentos).
   // KeyboardAvoidingView global: no Android (edge-to-edge, obrigatório no RN atual) a janela não encolhe sozinha
@@ -76,6 +88,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+            <Tutoriais>
             <Zoom>
               <SheetHost>
                 <Shell />
@@ -84,6 +97,7 @@ export default function RootLayout() {
               {/* Toasts e confirmações do app (no lugar do alert/confirm do navegador e do Alert do Android). */}
               <AvisosHost />
             </Zoom>
+            </Tutoriais>
           </KeyboardAvoidingView>
         </AuthProvider>
       </ThemeProvider>

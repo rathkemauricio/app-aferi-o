@@ -104,6 +104,12 @@ export default function ConfiguracoesScreen() {
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }}>
         <Text style={t.caption}>Valem só para {celular ? 'este celular' : 'este navegador'}. Cada aparelho pode ter as suas.</Text>
 
+        <SectionHeader title="Ajuda" />
+        <Card>
+          {linha('Tutoriais', 'Passeios guiados pelas telas: primeiros passos, contagens e usuários.',
+            <Button title="Abrir" size="sm" variant="secondary" onPress={() => router.push('/tutoriais')} />)}
+        </Card>
+
         <SectionHeader title="Aparência" />
         <Card>
           {linha('Tema', preferenciaTema === 'auto' ? 'Automático: EasyAudit claro ou escuro, conforme o aparelho' : 'Toque numa aparência para usar. O sol/lua do topo troca entre a versão clara e a escura.', null)}

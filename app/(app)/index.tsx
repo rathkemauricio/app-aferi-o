@@ -11,6 +11,7 @@ import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useFiliais } from '../../lib/data';
 import { MODULES, type AppModule } from '../../modules/registry';
+import { Alvo, useTutorialAutomatico } from '../../tutoriais';
 import { ArrowRightIcon, DropIcon, HourglassIcon, GasPumpIcon, LockSimpleIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon } from '../../ui/icons';
 import { Card, confirmAction, EmptyState, IconButton, IconTile, ListRow, SectionHeader, StatusPill } from '../../ui/kit';
 import { createTypography, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
@@ -31,6 +32,8 @@ export default function ModuleLauncher() {
   }, [isAdmin]);
   // No app, o módulo aberto por último fica em cima (na web, a ordem do catálogo).
   const modulos = useOrdemRecentes(MODULES.filter(m => podeAcessar(m.id)));
+  // Primeira vez neste aparelho: abre o tutorial de primeiros passos.
+  useTutorialAutomatico('primeiros-passos');
   const abrirModulo = (m: AppModule) => { marcarUsoModulo(m.id); router.push(m.route); };
   const { mode, colors, toggleTheme } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
@@ -74,21 +77,21 @@ export default function ModuleLauncher() {
             <Text style={s.countLabel}>{modulos.length} disponíveis</Text>
           </View>
           {!modulos.length ? <EmptyState icon={LockSimpleIcon} title="Nenhum módulo liberado" text="O administrador ainda não liberou módulos para a sua conta." /> : null}
-          <View style={s.grid}>
+          <Alvo id="inicio-modulos"><View style={s.grid}>
             {modulos.map(m => <ModuleCard key={m.id} module={m} desktop onOpen={() => router.push(m.route)} />)}
-          </View>
+          </View></Alvo>
 
           {/* Conta de filial: só Contagens (sem cadastros da rede). */}
           {filialConta ? null : <>
           <View style={s.webSectionHead}>
             <View><Text style={s.webSectionTitle}>Cadastros da rede</Text><Text style={s.webSectionSub}>Informações compartilhadas entre os módulos.</Text></View>
           </View>
-          <Card style={s.listCard}>
+          <Alvo id="inicio-cadastros"><Card style={s.listCard}>
             <ListRow icon={StorefrontIcon} tint="sky" title="Filiais" subtitle="Dados, bandeira, croqui e equipamentos" onPress={() => router.push('/filiais')} />
             <ListRow style={s.divided} icon={DropIcon} tint="amber" title="Combustíveis" subtitle="Tipos utilizados nas bombas e croquis" onPress={() => router.push('/combustiveis')} />
             <ListRow style={s.divided} icon={StorefrontIcon} tint="indigo" title="Bandeiras" subtitle="Identidade de cada posto" onPress={() => router.push('/bandeiras')} />
             {isAdmin && isSupabaseConfigured ? <ListRow style={s.divided} icon={UserCircleIcon} tint="slate" title="Usuários e permissões" subtitle="Acessos e módulos de cada conta" onPress={() => router.push('/usuarios')} /> : null}
-          </Card>
+          </Card></Alvo>
           </>}
         </ScrollView>
       </SafeAreaView>
@@ -135,23 +138,23 @@ export default function ModuleLauncher() {
         {!modulos.length ? (
           <EmptyState icon={LockSimpleIcon} title="Nenhum módulo liberado" text="O administrador ainda não liberou módulos para a sua conta." />
         ) : null}
-        <View style={s.grid}>
+        <Alvo id="inicio-modulos"><View style={s.grid}>
           {modulos.map(m => <ModuleCard key={m.id} module={m} onOpen={() => abrirModulo(m)} />)}
           <View style={[s.tile, s.placeholder]}>
             <IconTile icon={SquaresFourIcon} tint="slate" size={44} />
             <Text style={[t.bodyStrong, { color: colors.onBg }]}>Novos módulos</Text>
             <Text style={t.captionBg}>Aparecem aqui assim que forem integrados à plataforma.</Text>
           </View>
-        </View>
+        </View></Alvo>
 
         {filialConta ? null : <>
         <SectionHeader title="Cadastros" />
-        <Card style={s.listCard}>
+        <Alvo id="inicio-cadastros"><Card style={s.listCard}>
           <ListRow icon={StorefrontIcon} tint="sky" title="Filiais" subtitle="Cadastro único: dados, bandeira, croqui e equipamentos de cada filial" onPress={() => router.push('/filiais')} />
           <ListRow style={s.divided} icon={DropIcon} tint="amber" title="Combustíveis" subtitle="Tipos de combustível usados nos bicos e nos croquis" onPress={() => router.push('/combustiveis')} />
           <ListRow style={s.divided} icon={StorefrontIcon} tint="indigo" title="Bandeiras" subtitle="Bandeiras dos postos, com cores para o croqui" onPress={() => router.push('/bandeiras')} />
           {isAdmin && isSupabaseConfigured ? <ListRow style={s.divided} icon={UserCircleIcon} tint="slate" title="Usuários e permissões" subtitle="Liberar contas e escolher os módulos de cada uma" onPress={() => router.push('/usuarios')} /> : null}
-        </Card>
+        </Card></Alvo>
         </>}
         <Text style={[t.captionBg, { textAlign: 'center', marginTop: space.sm }]}>{rotuloVersao}</Text>
       </ScrollView>

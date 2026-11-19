@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
 import { useFiliais } from '../../lib/data';
+import { Alvo } from '../../tutoriais';
 import { emailValido, enviarEmail } from '../../lib/email';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
@@ -265,7 +266,7 @@ export default function UsuariosScreen() {
                 </Card>
               );
             })() : null}
-            <Button title="Criar conta" icon={PlusIcon} onPress={() => setNovo({ ...NOVO_VAZIO })} />
+            <Alvo id="usuarios-criar"><Button title="Criar conta" icon={PlusIcon} onPress={() => setNovo({ ...NOVO_VAZIO })} /></Alvo>
             <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar por nome ou e-mail" />
 
             <SectionHeader title={`Aguardando aprovação (${pendentes.length})`} />
@@ -344,7 +345,7 @@ export default function UsuariosScreen() {
         <Sheet title="Criar conta" onClose={() => !criando && setNovo(null)}
           footer={<Button title={tituloBotao} icon={novo.tipo === 'pessoa' && novo.entrega === 'senha' ? CheckIcon : EnvelopeIcon} disabled={criando} onPress={() => void convidar()} />}>
           <Text style={t.label}>Tipo de conta</Text>
-          <View style={{ flexDirection: 'row', gap: space.sm }}>
+          <Alvo id="usuarios-tipos"><View style={{ flexDirection: 'row', gap: space.sm }}>
             {tipos.map(tp => {
               const on = novo.tipo === tp.id;
               return (
@@ -356,7 +357,7 @@ export default function UsuariosScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </View></Alvo>
 
           {novo.tipo === 'filial' ? <>
             <Text style={t.label}>Filial</Text>

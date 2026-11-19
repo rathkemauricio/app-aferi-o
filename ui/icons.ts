@@ -109,3 +109,6 @@ export const FunnelSimpleIcon: Icon = require('phosphor-react-native/src/icons/F
 export const FlashlightIcon: Icon = require('phosphor-react-native/src/icons/Flashlight').FlashlightIcon;
 export const BuildingsIcon: Icon = require('phosphor-react-native/src/icons/Buildings').BuildingsIcon;
 export const QuestionIcon: Icon = require('phosphor-react-native/src/icons/Question').QuestionIcon;
+export const GraduationCapIcon: Icon = require('phosphor-react-native/src/icons/GraduationCap').GraduationCapIcon;
+export const PlayCircleIcon: Icon = require('phosphor-react-native/src/icons/PlayCircle').PlayCircleIcon;
+export const CheckSquareOffsetIcon: Icon = require('phosphor-react-native/src/icons/CheckSquareOffset').CheckSquareOffsetIcon;
