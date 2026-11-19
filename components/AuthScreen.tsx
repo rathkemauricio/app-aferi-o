@@ -32,7 +32,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTela } from '../ui/zoom';
-import * as Linking from 'expo-linking';
+import { pedirAcesso } from '../lib/acesso';
 import { supabase } from '../lib/supabase';
 import { Logo } from './Logo';
 import {
@@ -244,7 +244,7 @@ function BotaoContorno({ label, onPress }: { label: string; onPress: () => void 
   );
 }
 
-const DESTAQUES = ['Aferições, coleta de estoque e medição de tanques', 'Relatórios em PDF no app e no painel', 'Cada atividade registrada com quem fez'];
+const DESTAQUES = ['Aferições, contagens e conferência de estoque', 'Relatórios em PDF no app e no painel', 'Cada atividade registrada com quem fez'];
 
 /**
  * Painel azul-marinho. Na tela larga ele cobre metade do cartão e atravessa para o outro lado na troca;
@@ -294,7 +294,7 @@ function TopoMarca() {
     <View style={pm.topo}>
       <ArteMarca compacto />
       <Logo claro altura={26} />
-      <Text style={pm.topoTxt}>Auditorias, aferições e inventários da rede em um só lugar.</Text>
+      <Text style={pm.topoTxt}>Auditorias, contagens e aferições da rede em um só lugar.</Text>
     </View>
   );
 }
@@ -427,6 +427,24 @@ export default function AuthScreen() {
   const [errorNonce, setErrorNonce] = useState(0);
   const [info, setInfo] = useState('');
   const [podeReenviar, setPodeReenviar] = useState(false);
+  /** Recuperar acesso: e-mail para onde o link foi enviado (mostra a confirmação no lugar do formulário). */
+  const [enviadoPara, setEnviadoPara] = useState<string | null>(null);
+  /** Segundos até poder pedir outro link. */
+  const [espera, setEspera] = useState(0);
+  useEffect(() => {
+    if (espera <= 0) return;
+    const t = setTimeout(() => setEspera(v => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [espera]);
+  // Volta do link de confirmação do cadastro (web): avisa e limpa o endereço.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (/[?&]recuperar=1/.test(window.location.search)) { setMode('forgot'); window.history.replaceState(null, '', window.location.pathname); }
+    if (/[?&]confirmado=1/.test(window.location.search)) {
+      setInfo('E-mail confirmado. Agora é só entrar com o seu e-mail e a senha.');
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   // Lado à mostra: 0 = entrar (ou recuperar a senha), 1 = criar conta.
   const lado: 0 | 1 = mode === 'signup' ? 1 : 0;
@@ -469,6 +487,7 @@ export default function AuthScreen() {
     setError('');
     setInfo('');
     setPodeReenviar(false);
+    setEnviadoPara(null);
   };
 
   const submit = async () => {
@@ -483,18 +502,19 @@ export default function AuthScreen() {
         else void AsyncStorage.setItem(ULTIMO_EMAIL, mail).catch(() => undefined);
         // Com sucesso, a casca do app detecta a sessão e abre a central de módulos.
       } else if (mode === 'signup') {
-        const { data, error: err } = await supabase.auth.signUp({ email: mail, password, options: { emailRedirectTo: Linking.createURL('/login') } });
-        if (err) setError(traduzirErro(err));
-        else if (!data.session) {
+        // Pelo servidor: o e-mail de confirmação sai no layout do EasyAudit, com o link na web.
+        const err = await pedirAcesso({ acao: 'cadastrar', senha: password }, mail);
+        if (err) setError(err);
+        else {
           void AsyncStorage.setItem(ULTIMO_EMAIL, mail).catch(() => undefined);
           switchMode('login');
           setInfo(`Conta criada. Abra o link de confirmação enviado para ${mail} e depois entre. Para ver os dados, a conta precisa do convite do administrador da sua empresa (ou cadastre a sua empresa ao entrar).`);
           setPodeReenviar(true);
         }
       } else {
-        const { error: err } = await supabase.auth.resetPasswordForEmail(mail, { redirectTo: Linking.createURL('/redefinir-senha') });
-        if (err) setError(traduzirErro(err));
-        else setInfo(`Se existir uma conta com ${mail}, enviamos um link para criar uma nova senha. Abra o link neste aparelho.`);
+        const err = await pedirAcesso({ acao: 'recuperar' }, mail);
+        if (err) setError(err);
+        else { setEnviadoPara(mail); setEspera(60); void AsyncStorage.setItem(ULTIMO_EMAIL, mail).catch(() => undefined); }
       }
     } catch {
       setError('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
@@ -506,15 +526,37 @@ export default function AuthScreen() {
   const reenviar = async () => {
     if (!supabase || !emailValid) return;
     setBusy(true);
-    const { error: err } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase(), options: { emailRedirectTo: Linking.createURL('/login') } });
+    const err = await pedirAcesso({ acao: 'confirmar' }, email.trim().toLowerCase());
     setBusy(false);
-    if (err) setError(traduzirErro(err)); else { setError(''); setInfo('Enviamos um novo link de confirmação. Verifique também a caixa de spam.'); }
+    if (err) setError(err); else { setError(''); setInfo('Enviamos um novo link de confirmação. Verifique também a caixa de spam.'); }
   };
 
   /** Conteúdo de um formulário (o de entrar/recuperar ou o de criar conta). Só o lado à mostra recebe as mensagens. */
   const corpo = (md: Mode, ativo: boolean) => {
     let step = 0;
     const next = () => enter(step++, baseDelay);
+    // Link de recuperação enviado: confirmação no lugar do formulário.
+    if (md === 'forgot' && enviadoPara) return (
+      <View key="enviado" style={s.formBody}>
+        <Animated.View entering={next()} style={s.seloEnviado}><EnvelopeIcon size={30} color={C.accent} weight="duotone" /></Animated.View>
+        <Animated.Text entering={next()} style={s.title} accessibilityRole="header">Confira o seu e-mail</Animated.Text>
+        <Animated.Text entering={next()} style={s.subtitle}>Se existir uma conta com <Text style={{ color: C.text, fontWeight: '800' }}>{enviadoPara}</Text>, enviamos um link para criar uma nova senha.</Animated.Text>
+        <Animated.View entering={next()} style={s.dicas}>
+          {['Abra o e-mail "Crie uma nova senha · EasyAudit".', 'Toque em Criar nova senha: a página abre no navegador.', 'Não chegou? Veja a caixa de spam ou promoções.'].map((d, i) => (
+            <View key={i} style={s.dica}><View style={s.dicaNum}><Text style={s.dicaNumTxt}>{i + 1}</Text></View><Text style={s.dicaTxt}>{d}</Text></View>
+          ))}
+        </Animated.View>
+        {ativo && error ? <Feedback key={`e${errorNonce}`} kind="error" message={error} nonce={errorNonce} /> : null}
+        <Animated.View entering={next()}>
+          <PrimaryButton label={espera > 0 ? `Reenviar em ${espera}s` : 'Reenviar o link'} onPress={() => void submit()} disabled={!ativo || espera > 0 || busy} busy={ativo && busy} />
+        </Animated.View>
+        <Animated.View entering={next()} style={s.centerLink}>
+          <Pressable onPress={() => switchMode('login')} hitSlop={8} accessibilityRole="link" style={({ pressed }) => pressed && { opacity: 0.6 }}>
+            <Text style={s.link}>Voltar para o login</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    );
     const titulo = md === 'login' ? 'Bem-vindo de volta' : md === 'signup' ? 'Crie sua conta' : 'Recuperar acesso';
     const subtitulo = md === 'login' ? 'Entre com o e-mail e a senha da sua conta.' : md === 'signup' ? 'Crie uma senha forte para proteger sua conta.' : 'Informe o e-mail da conta. Enviaremos um link para criar uma nova senha.';
     const botao = md === 'login' ? 'Entrar' : md === 'signup' ? 'Criar conta' : 'Enviar link';
@@ -662,7 +704,7 @@ export default function AuthScreen() {
       <ScrollView style={s.fundoCompacto} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <TopoMarca />
         <Animated.View entering={cardEnter} style={s.areaCompacta}>
-          <Alternador p={p} lado={lado} onTrocar={switchMode} />
+          {mode === 'forgot' ? null : <Alternador p={p} lado={lado} onTrocar={switchMode} />}
           <View style={s.janela} onLayout={e => setLarguraTrilho(e.nativeEvent.layout.width)}>
             <Animated.View style={[s.trilho, { width: coluna * 2 }, trilho]}>
               <Animated.View style={[s.colunaCompacta, { width: coluna }, opEntrar]} pointerEvents={lado === 0 ? 'auto' : 'none'} {...oculto(lado !== 0)}>
@@ -709,6 +751,12 @@ const s = StyleSheet.create({
   link: { color: C.accent, fontSize: 13, fontWeight: '700' },
   forgot: { alignSelf: 'flex-end', marginTop: 10, paddingVertical: 4 },
   centerLink: { alignSelf: 'center', marginTop: 14, paddingVertical: 4 },
+  seloEnviado: { alignSelf: 'center', width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(95,211,154,0.16)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  dicas: { backgroundColor: C.bg, borderRadius: 14, padding: 14, gap: 10, marginBottom: 6, borderWidth: 1, borderColor: C.border },
+  dica: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  dicaNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: C.navy, alignItems: 'center', justifyContent: 'center' },
+  dicaNumTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  dicaTxt: { flex: 1, color: C.text, fontSize: 13.5, lineHeight: 19 },
 });
 
 const f = StyleSheet.create({

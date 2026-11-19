@@ -1,10 +1,10 @@
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { traduzirErro } from '../../components/AuthScreen';
 import { Avatar, escolherFoto } from '../../components/Avatar';
+import { URL_WEB } from '../../lib/acesso';
 import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
@@ -51,7 +51,7 @@ export default function ContaScreen() {
     if (!/^\S+@\S+\.\S+$/.test(mail)) { notify('E-mail inválido'); return; }
     if (mail === userEmail) { notify('Este já é o e-mail da conta'); return; }
     setSalvando(true);
-    const { error } = await supabase.auth.updateUser({ email: mail }, { emailRedirectTo: Linking.createURL('/conta') });
+    const { error } = await supabase.auth.updateUser({ email: mail }, { emailRedirectTo: `${URL_WEB}/conta` });
     setSalvando(false);
     if (error) { notify('Não foi possível alterar o e-mail', traduzirErro(error)); return; }
     setNovoEmail(null);

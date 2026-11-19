@@ -1,10 +1,10 @@
-import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { isStrongPassword, PASSWORD_RULES, traduzirErro } from '../components/AuthScreen';
 import { BotaoSite, CTA_COMECAR, Faixa, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
+import { pedirAcesso } from '../lib/acesso';
 import { emailValido } from '../lib/email';
 import { supabase } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
@@ -61,16 +61,13 @@ function Formulario() {
     if (!isStrongPassword(f.senha)) { setErro(`A senha precisa ter: ${PASSWORD_RULES.filter(r => !r.test(f.senha)).map(r => r.label.toLowerCase()).join(', ')}.`); return; }
     setEnviando(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email, password: f.senha,
-        options: {
-          emailRedirectTo: Linking.createURL('/login'),
-          data: { nome: f.nome.trim(), empresa_pendente: { nome: f.empresa.trim(), documento: f.documento.trim(), telefone: f.telefone.trim(), plano_id: escolhido.id } },
-        },
-      });
-      if (error) { setErro(traduzirErro(error)); return; }
-      // Com confirmação de e-mail ligada não há sessão: a pessoa confirma e entra. Sem confirmação, a casca já assume.
-      if (!data.session) setEnviadoPara(email);
+      // Pelo servidor: o e-mail de confirmação sai no layout do EasyAudit, com o link na web.
+      const erro = await pedirAcesso({
+        acao: 'cadastrar', senha: f.senha,
+        dados: { nome: f.nome.trim(), empresa_pendente: { nome: f.empresa.trim(), documento: f.documento.trim(), telefone: f.telefone.trim(), plano_id: escolhido.id } },
+      }, email);
+      if (erro) { setErro(erro); return; }
+      setEnviadoPara(email);
     } catch {
       setErro('Sem conexão com o servidor. Verifique a internet e tente de novo.');
     } finally {
