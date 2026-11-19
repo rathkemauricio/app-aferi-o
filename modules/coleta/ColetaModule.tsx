@@ -1128,84 +1128,150 @@ function ContagemLista({ ct, r, lista, q, inicial, limparInicial, rodadas }: {
   // Item tocado na aba Itens: a lista já abre filtrada nele.
   const [busca, setBusca] = useState(inicial ?? '');
   const [filtro, setFiltro] = useState<FiltroSit>('todos');
+  const [corrigir, setCorrigir] = useState<Produto | null>(null);
   useEffect(() => { if (inicial) limparInicial(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const minhas = useMinhasColetas(ct, r);
+  const col = useColetas(ct.inventario_id);
+  // Lançamentos de cada item nesta contagem (todos os aparelhos), do mais antigo para o mais recente.
+  const lancamentos = useMemo(() => {
+    const m = new Map<string, number[]>();
+    col.list.forEach(x => {
+      if (x.contagem_id !== ct.id || x.rodada !== r) return;
+      const l = m.get(x.codigo) ?? [];
+      [...x.hist].reverse().forEach(([, n]) => { if (n) l.push(n); });
+      m.set(x.codigo, l);
+    });
+    return m;
+  }, [col.list, ct.id, r]);
   const buscados = useMemo(() => (busca.trim() ? lista.filter(x => bateBusca(x, busca)) : lista), [lista, busca]);
   const n = useMemo(() => contarSituacoes(buscados, r, q), [buscados, r, q]);
   const itens = useMemo(() => filtrarSituacao(buscados, r, q, filtro), [buscados, r, q, filtro]);
   return (
-    <FlatList
-      data={itens}
-      keyExtractor={p => p.codigo}
-      contentContainerStyle={k.corpo}
-      initialNumToRender={12}
-      windowSize={9}
-      keyboardShouldPersistTaps="handled"
-      ListHeaderComponent={<View style={{ gap: space.sm }}>
-        {rodadas}
-        <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar: nome, código ou código de barras" />
-        <FiltroSituacao valor={filtro} onChange={setFiltro} n={n} />
-        <Text style={[k.cap, { color: c.textMuted }]}>Toque em + para somar 1 ou digite o total contado do item. 0 marca o item como contado sem estoque.</Text>
-      </View>}
-      ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
-      ListEmptyComponent={<Text style={[k.cap, { color: c.textMuted }]}>{buscados.length ? `Nenhum item ${ROTULO_FILTRO[filtro].toLowerCase()} aqui.` : busca.trim() ? `Nenhum item desta contagem com "${busca.trim()}".` : 'Nenhum item nesta contagem.'}</Text>}
-      renderItem={({ item: p }) => <LinhaLista ct={ct} r={r} p={p} qq={q.get(p.codigo) ?? SEM_QTD} meu={minhas(p.codigo).meu} />}
-    />
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={itens}
+        keyExtractor={p => p.codigo}
+        contentContainerStyle={k.corpo}
+        initialNumToRender={10}
+        windowSize={9}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={<View style={{ gap: space.sm }}>
+          {rodadas}
+          <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar: nome, código ou código de barras" />
+          <FiltroSituacao valor={filtro} onChange={setFiltro} n={n} />
+          <View style={[k.dicaLista, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Text style={[k.cap, { color: c.text }]}><Text style={k.b}>Achou o item em mais de um lugar?</Text> Some cada parte: 5 na prateleira, Somar; 3 no depósito, Somar → total 8.</Text>
+            <Text style={[k.cap, { color: c.textMuted }]}>Toque no total para corrigir ou desfazer. 0 marca o item como contado sem estoque.</Text>
+          </View>
+        </View>}
+        ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
+        ListEmptyComponent={<Text style={[k.cap, { color: c.textMuted }]}>{buscados.length ? `Nenhum item ${ROTULO_FILTRO[filtro].toLowerCase()} aqui.` : busca.trim() ? `Nenhum item desta contagem com "${busca.trim()}".` : 'Nenhum item nesta contagem.'}</Text>}
+        renderItem={({ item: p }) => <LinhaLista ct={ct} r={r} p={p} qq={q.get(p.codigo) ?? SEM_QTD} meu={minhas(p.codigo).meu} partes={lancamentos.get(p.codigo)} onCorrigir={() => setCorrigir(p)} />}
+      />
+      {corrigir ? (() => {
+        const m = minhas(corrigir.codigo);
+        return <CorrigirItem ct={ct} r={r} p={corrigir} total={q.get(corrigir.codigo)?.[r - 1] ?? 0} meu={m.meu} ultima={m.ultima} onClose={() => setCorrigir(null)} onFeito={msg => { setCorrigir(null); notify(msg); }} />;
+      })() : null}
+    </View>
   );
 }
 
-function LinhaLista({ ct, r, p, qq, meu }: { ct: Contagem; r: Rodada; p: Produto; qq: Qtd3; meu: number }) {
+/**
+ * Item na contagem pela lista: o que se digita é SOMADO ao que já foi contado (o item pode estar em mais de um
+ * lugar). Mostra os lançamentos e o total; tocar no total abre a correção.
+ */
+function LinhaLista({ ct, r, p, qq, meu, partes, onCorrigir }: { ct: Contagem; r: Rodada; p: Produto; qq: Qtd3; meu: number; partes?: number[]; onCorrigir: () => void }) {
   const c = useCores();
   const total = qq[r - 1];
-  const [txt, setTxt] = useState<string | null>(null); // null = mostrando o total salvo
+  const [txt, setTxt] = useState('');
+  const [salvo, setSalvo] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const s = situacaoNaRodada(p, r, qq);
   const cor = s === 'correto' ? c.success : s === 'divergente' ? c.danger : c.warning;
   const fundo = s === 'correto' ? c.successSoft : s === 'divergente' ? c.dangerSoft : c.surface;
-  /** Leva o total do item para `novo` (0 também conta: item contado sem estoque). */
-  const definir = (novo: number) => {
-    if (total === null && novo === 0) { void registrarLeitura(ct, r, p.codigo, 0); tocar('salvo'); return; }
-    const erro = ajustarTotal(ct, r, p.codigo, total ?? 0, meu, novo);
-    if (erro) { tocar('barrado'); notify('Parte foi contada em outro aparelho', erro); return; }
-    tocar('salvo');
+  const mostrarSalvo = (msg: string) => {
+    setSalvo(msg);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setSalvo(null), 2600);
   };
-  const confirmarGrande = (novo: number, depois: () => void) => {
+  /** Soma `n` ao item (0 em item ainda não contado: contado sem estoque). */
+  const somar = (n: number) => {
+    const antes = total ?? 0;
+    void registrarLeitura(ct, r, p.codigo, n);
+    tocar('salvo');
+    mostrarSalvo(n === 0 ? 'Contado sem estoque (0)' : `${n > 0 ? '+' : ''}${fmtQ(n)} salvo · total ${fmtQ(antes + n)}`);
+  };
+  const confirmarGrande = (n: number, depois: () => void) => {
     const limite = preferencias().confirmarAcima;
-    if (limite > 0 && novo > limite && novo > (total ?? 0)) confirmAction(`Salvar ${fmtQ(novo)}?`, `${p.nome}\n\nQuantidade acima de ${fmtQ(limite)}: confira se está certa.`, 'Salvar', depois);
+    if (limite > 0 && n > limite) confirmAction(`Somar ${fmtQ(n)}?`, `${p.nome}\n\nQuantidade acima de ${fmtQ(limite)}: confira se está certa.`, 'Somar', depois);
     else depois();
   };
-  // Salva uma vez só por edição (enviar e terminar a edição podem chegar juntos).
-  const editando = useRef(false);
-  const salvarTexto = () => {
-    if (txt === null || !editando.current) return;
-    editando.current = false;
+  // Uma vez só por envio (Enter e o botão podem chegar juntos).
+  const enviando = useRef(false);
+  const enviar = () => {
+    if (enviando.current) return;
     const t = txt.trim();
-    setTxt(null);
     if (!t) return;
     const v = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
-    if (!Number.isFinite(v) || v < 0 || v > 99999) { tocar('barrado'); notify('Quantidade inválida', 'Informe o total contado do item (0 a 99.999).'); return; }
-    if (v === total) return;
-    confirmarGrande(v, () => definir(v));
+    if (!Number.isFinite(v) || v < 0 || v > 99999) { tocar('barrado'); notify('Quantidade inválida', 'Digite quanto você encontrou neste lugar (0 a 99.999).'); return; }
+    if (v === 0 && total !== null) { setTxt(''); mostrarSalvo('Nada a somar (0). Para zerar, toque no total.'); return; }
+    enviando.current = true;
+    setTimeout(() => { enviando.current = false; }, 300);
+    setTxt('');
+    confirmarGrande(v, () => somar(v));
   };
+  const mais1 = () => somar(1);
+  const menos1 = () => {
+    if (!total) return;
+    const erro = ajustarTotal(ct, r, p.codigo, total, meu, total - 1);
+    if (erro) { tocar('barrado'); notify('Parte foi contada em outro aparelho', erro); return; }
+    tocar('salvo');
+    mostrarSalvo(`−1 · total ${fmtQ(total - 1)}`);
+  };
+  const ultimas = (partes ?? []).slice(-6);
   return (
     <View style={[k.item, k.linhaLista, { backgroundColor: fundo, borderLeftColor: cor }]}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo} · {p.categoria}</Text>
-        <Text style={[k.cTxt, { color: c.text, fontSize: 15.5 }]} numberOfLines={2}>{p.nome}</Text>
-        <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Saldo <Text style={[k.b, { color: c.text }]}>{fmtQ(p.saldo)}</Text> · <Text style={[k.b, { color: cor }]}>{s === 'correto' ? 'Correto' : s === 'divergente' ? `Incorreto (${(total ?? 0) - p.saldo > 0 ? '+' : ''}${fmtQ((total ?? 0) - p.saldo)})` : 'Pendente'}</Text></Text>
+      <View style={{ flexDirection: 'row', gap: space.sm }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo} · {p.categoria}</Text>
+          <Text style={[k.cTxt, { color: c.text, fontSize: 15.5 }]} numberOfLines={2}>{p.nome}</Text>
+          <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Saldo <Text style={[k.b, { color: c.text }]}>{fmtQ(p.saldo)}</Text> · <Text style={[k.b, { color: cor }]}>{s === 'correto' ? 'Correto' : s === 'divergente' ? `Incorreto (${(total ?? 0) - p.saldo > 0 ? '+' : ''}${fmtQ((total ?? 0) - p.saldo)})` : 'Pendente'}</Text></Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Total contado de ${p.nome}: ${total === null ? 'nada' : fmtQ(total)}. Toque para corrigir.`} disabled={total === null} onPress={onCorrigir}
+          style={({ pressed }) => [k.totalLista, { borderColor: total === null ? c.border : cor, backgroundColor: c.surface }, pressed && { opacity: 0.75 }]}>
+          <Text style={[k.cap, { color: c.textMuted, fontSize: 11 }]}>Contado</Text>
+          <Text style={[k.monoM, k.b, { color: total === null ? c.textFaint : c.text, fontSize: 22 }]}>{total === null ? '—' : fmtQ(total)}</Text>
+          {total !== null ? <Text style={[k.cap, { color: c.accentText, fontSize: 11 }]}>corrigir</Text> : null}
+        </Pressable>
       </View>
-      <View style={k.passos}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Tirar 1 de ${p.nome}`} disabled={!total} hitSlop={4} onPress={() => definir((total ?? 0) - 1)}
+      {ultimas.length > 1 ? (
+        <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Lançamentos: {ultimas.map(v => `${v > 0 ? '+' : '−'}${fmtQ(Math.abs(v))}`).join(' · ')}{(partes?.length ?? 0) > 6 ? ' …' : ''}</Text>
+      ) : null}
+      <View style={k.linhaSomar}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Tirar 1 de ${p.nome}`} disabled={!total} hitSlop={4} onPress={menos1}
           style={({ pressed }) => [k.passo, { borderColor: c.borderStrong, backgroundColor: c.surface }, !total && { opacity: 0.35 }, pressed && { transform: [{ scale: 0.94 }] }]}>
           <MinusIcon size={18} color={c.text} weight="bold" />
         </Pressable>
-        <TextInput value={txt ?? (total === null ? '' : fmtQ(total))} onFocus={() => { editando.current = true; setTxt(total === null ? '' : String(total)); }} onChangeText={setTxt}
-          onEndEditing={salvarTexto} keyboardType="decimal-pad" returnKeyType="done" selectTextOnFocus placeholder="—" placeholderTextColor={c.textFaint}
-          style={[k.qtdLista, { color: c.text, backgroundColor: c.surface, borderColor: txt !== null ? AMBER : c.borderStrong }]} accessibilityLabel={`Quantidade contada de ${p.nome}`} />
-        <Pressable accessibilityRole="button" accessibilityLabel={`Somar 1 em ${p.nome}`} hitSlop={4} onPress={() => confirmarGrande((total ?? 0) + 1, () => definir((total ?? 0) + 1))}
-          style={({ pressed }) => [k.passo, { borderColor: AMBER, backgroundColor: AMBER }, pressed && { transform: [{ scale: 0.94 }] }]}>
-          <PlusIcon size={18} color={AMBER_TXT} weight="bold" />
+        <TextInput value={txt} onChangeText={setTxt} onSubmitEditing={enviar} submitBehavior="submit" keyboardType="decimal-pad" returnKeyType="done"
+          placeholder={total === null ? 'Qtd.' : '+ Qtd.'} placeholderTextColor={c.textFaint}
+          style={[k.qtdLista, { flex: 1, width: undefined, color: c.text, backgroundColor: c.surface, borderColor: txt ? AMBER : c.borderStrong }]} accessibilityLabel={`Quantidade encontrada de ${p.nome}`} />
+        <Pressable accessibilityRole="button" accessibilityLabel={`Somar ${txt || ''} em ${p.nome}`} disabled={!txt.trim()} onPress={enviar}
+          style={({ pressed }) => [k.somar, { backgroundColor: AMBER }, !txt.trim() && { opacity: 0.4 }, pressed && { transform: [{ scale: 0.96 }] }]}>
+          <CheckIcon size={16} color={AMBER_TXT} weight="bold" />
+          <Text style={[k.b, { color: AMBER_TXT, fontSize: 14.5 }]}>Somar</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Somar 1 em ${p.nome}`} hitSlop={4} onPress={mais1}
+          style={({ pressed }) => [k.passo, { borderColor: AMBER, backgroundColor: c.surface }, pressed && { transform: [{ scale: 0.94 }] }]}>
+          <Text style={[k.b, { color: c.text, fontSize: 13 }]}>+1</Text>
         </Pressable>
       </View>
+      {salvo ? (
+        <View style={[k.salvoLista, { backgroundColor: c.successSoft }]}>
+          <CheckIcon size={14} color={c.success} weight="bold" />
+          <Text style={[k.cap, k.b, { color: c.success }]}>{salvo}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1894,7 +1960,12 @@ const k = StyleSheet.create({
   filtro: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1.5 },
   filtroPonto: { width: 8, height: 8, borderRadius: 4 },
   modoSL: { paddingHorizontal: space.lg, paddingVertical: space.sm, borderBottomWidth: 1, width: '100%', maxWidth: pageMaxWidth(720), alignSelf: 'center' },
-  linhaLista: { alignItems: 'center', paddingVertical: 12 },
+  linhaLista: { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingVertical: 12 },
+  linhaSomar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  totalLista: { minWidth: 76, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 4 },
+  somar: { height: 44, borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  salvoLista: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  dicaLista: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
   passos: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   passo: { width: 42, height: 42, borderRadius: 21, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   qtdLista: { width: 68, height: 44, borderRadius: 10, borderWidth: 1.5, textAlign: 'center', fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'], paddingHorizontal: 4 },
