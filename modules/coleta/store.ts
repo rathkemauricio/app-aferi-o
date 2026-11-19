@@ -172,11 +172,49 @@ export async function associarEan(inventarioId: string, codigo: string, ean: str
  * Índice de leitura: EAN ou código interno → produto. EANs também entram sem os zeros à esquerda
  * (ex.: 0708470220156 é lido como UPC-A 708470220156 por muitos coletores). O código interno tem prioridade.
  */
-export function indiceLeitura(produtos: Produto[]) {
-  const m = new Map<string, Produto>();
-  produtos.forEach(p => p.eans.forEach(e => { m.set(e, p); const sem = e.replace(/^0+/, ''); if (!m.has(sem)) m.set(sem, p); }));
-  produtos.forEach(p => m.set(p.codigo, p));
+/**
+ * Índice da leitura: código de barras (com e sem zeros à esquerda) e código interno → itens.
+ * Um mesmo código de barras pode estar em mais de um item (ex.: código interno antigo e novo do mesmo produto
+ * na relação do Petros): guarda todos e a coleta escolhe o que está na contagem (ver escolherItem).
+ */
+export type IndiceLeitura = Map<string, Produto[]>;
+export function indiceLeitura(produtos: Produto[]): IndiceLeitura {
+  const m: IndiceLeitura = new Map();
+  const add = (k: string, p: Produto, primeiro = false) => {
+    const l = m.get(k);
+    if (!l) m.set(k, [p]);
+    else if (!l.includes(p)) { if (primeiro) l.unshift(p); else l.push(p); }
+  };
+  produtos.forEach(p => p.eans.forEach(e => { add(e, p); const sem = e.replace(/^0+/, ''); if (sem && sem !== e) add(sem, p); }));
+  produtos.forEach(p => add(p.codigo, p, true)); // código interno digitado vale antes de um código de barras igual
   return m;
+}
+
+/** Dígito verificador GTIN (EAN-8, UPC-A, EAN-13, DUN-14) para o corpo sem o dígito. */
+export function digitoGtin(corpo: string) {
+  const soma = corpo.split('').reverse().reduce((a, d, i) => a + Number(d) * (i % 2 === 0 ? 3 : 1), 0);
+  return String((10 - (soma % 10)) % 10);
+}
+
+/**
+ * Itens de um código lido, tolerando o jeito de cada leitor:
+ * - zeros à esquerda (UPC-A de 12 dígitos × EAN-13 com 0; GTIN-14 com 0 na frente);
+ * - prefixo/sufixo que alguns leitores mandam (ex.: "]E0", letras): tenta só os dígitos;
+ * - leitor configurado sem o dígito verificador (7 ou 12 dígitos): tenta com o dígito calculado;
+ * - DUN-14 impresso pelo Petros com 13 dígitos (pula o 13º).
+ */
+export function itensDoCodigo(indice: IndiceLeitura, bruto: string): Produto[] {
+  const cod = bruto.trim();
+  const dig = cod.replace(/\D/g, '');
+  const tentativas: string[] = [];
+  for (const c of [cod, dig]) {
+    if (!c) continue;
+    tentativas.push(c, c.replace(/^0+/, ''));
+    if (/^\d{14}$/.test(c)) tentativas.push(c.slice(0, 12) + c.slice(13));
+  }
+  if (/^\d{7}$|^\d{12}$/.test(dig)) { const com = dig + digitoGtin(dig); tentativas.push(com, com.replace(/^0+/, '')); }
+  for (const t of tentativas) { const l = t ? indice.get(t) : undefined; if (l?.length) return l; }
+  return [];
 }
 
 /** Apaga do aparelho a cópia da lista carregada do arquivo (PDF de saldos) deste inventário. Os dados continuam no servidor. */

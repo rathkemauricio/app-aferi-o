@@ -20,7 +20,7 @@ import {
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
 } from './model';
 import {
-  apagarCopiaLocal, associarEan, basesCol, escolherClasse, useClassesEscolhidas, carregarErp, limparCopiasAntigas, salvarNoServidor, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, idDispositivo, indiceLeitura, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
+  apagarCopiaLocal, associarEan, basesCol, escolherClasse, useClassesEscolhidas, carregarErp, limparCopiasAntigas, salvarNoServidor, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, idDispositivo, indiceLeitura, itensDoCodigo, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
 } from './store';
 import { lerPdfBarras } from './barras';
 import { htmlDivergencias, htmlDoInventario, type LinhaDivergente } from './impressao';
@@ -1371,8 +1371,12 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas,
     if (ativa && x && (naRodada.has(x.codigo) || zerado(x))) { tocar('correto'); setPendente(true); setLido(null); focar('qtd'); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // DUN-14 (caixa): a relação de barras do Petros imprime só 13 dígitos (pula o 13º) — tenta também essa forma.
-  const achar = (cod: string) => indice.get(cod) ?? indice.get(cod.replace(/^0+/, '')) ?? (/^\d{14}$/.test(cod) ? indice.get(cod.slice(0, 12) + cod.slice(13)) : undefined);
+  // Código lido → item. Se o código de barras estiver em mais de um item (código interno antigo e novo do mesmo
+  // produto), vale o que está nesta contagem; depois o que pode entrar como sobra; depois o que tem saldo.
+  const achar = (cod: string): Produto | undefined => {
+    const l = itensDoCodigo(indice, cod);
+    return l.find(x => naRodada.has(x.codigo)) ?? l.find(x => zerado(x)) ?? l.find(x => x.saldo !== 0) ?? l[0];
+  };
 
   // 1º passo: lê o código e mostra qual item é (bip). A quantidade só é pedida depois.
   const ler = (bruto: string) => {
