@@ -8,7 +8,7 @@ const PERFIL_KEY = (id: string) => `nevoeiro.perfil.${id}`;
 const EMPRESA_DO_APARELHO = 'easyaudit.empresa-do-aparelho';
 export type EmpresaStatus = 'aguardando' | 'ativa' | 'suspensa';
 export type Empresa = { id: string; nome: string; status: EmpresaStatus; modulos: string[]; limite_contas: number; plano_id: string };
-type PerfilCache = { papel: Papel; ativo: boolean; modulos: string[]; nome?: string; avatar?: string | null; empresa?: Empresa | null };
+type PerfilCache = { papel: Papel; ativo: boolean; modulos: string[]; nome?: string; avatar?: string | null; empresa?: Empresa | null; filial?: string | null };
 
 // Sessão compartilhada por todos os módulos. Nenhum módulo deve ler o Supabase Auth diretamente.
 export type Papel = 'admin' | 'usuario';
@@ -26,6 +26,11 @@ type AuthState = {
   /** Dono da plataforma EasyAudit (vê o painel Empresas e planos). */
   dono: boolean;
   isAdmin: boolean;
+  /**
+   * Conta de filial (id da filial): entra pelo e-mail da filial, só usa Contagens e só vê as contagens que a
+   * própria filial abriu. Nula nas contas da auditoria (administrador e usuários).
+   */
+  filialConta: string | null;
   /** Módulos liberados pelo administrador para esta conta (administrador acessa todos). */
   modulos: string[];
   /** Nome de exibição e foto (data URL) da própria conta. */
@@ -38,7 +43,7 @@ type AuthState = {
 };
 
 const AuthContext = createContext<AuthState>({
-  ready: false, userEmail: null, userId: null, papel: null, ativo: false, empresa: null, dono: false, isAdmin: false, modulos: [], nome: '', avatar: null, podeAcessar: () => false, perfilPronto: false,
+  ready: false, userEmail: null, userId: null, papel: null, ativo: false, empresa: null, dono: false, isAdmin: false, filialConta: null, modulos: [], nome: '', avatar: null, podeAcessar: () => false, perfilPronto: false,
   recarregarPerfil: async () => undefined, signOut: async () => undefined,
 });
 
@@ -54,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [dono, setDono] = useState(false);
+  const [filialConta, setFilialConta] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -69,8 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const recarregarPerfil = useCallback(async () => {
-    if (!supabase || !userId) { setPapel(null); setModulos([]); setNome(''); setAvatar(null); setEmpresa(null); setDono(false); setAtivo(!supabase); setPerfilPronto(!supabase || !userId); return; }
-    const { data, error } = await supabase.from('profiles').select('papel,ativo,modulos,nome,avatar,empresa_id,empresas(id,nome,status,modulos,limite_contas,plano_id)').eq('user_id', userId).maybeSingle();
+    if (!supabase || !userId) { setPapel(null); setFilialConta(null); setModulos([]); setNome(''); setAvatar(null); setEmpresa(null); setDono(false); setAtivo(!supabase); setPerfilPronto(!supabase || !userId); return; }
+    const { data, error } = await supabase.from('profiles').select('papel,ativo,modulos,nome,avatar,empresa_id,filial_id,empresas(id,nome,status,modulos,limite_contas,plano_id)').eq('user_id', userId).maybeSingle();
     let perfil: PerfilCache | null;
     if (error) {
       // Sem conexão: usa o último perfil conhecido neste aparelho (o banco continua aplicando as regras ao sincronizar).
@@ -82,18 +88,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         papel: (data?.papel as Papel) ?? 'usuario', ativo: !!data?.ativo, modulos: Array.isArray(data?.modulos) ? (data.modulos as string[]) : [],
         nome: (data?.nome as string) ?? '', avatar: (data?.avatar as string | null) ?? null,
         empresa: emp ? { ...emp, modulos: Array.isArray(emp.modulos) ? emp.modulos : [] } : null,
+        filial: (data?.filial_id as string | null) ?? null,
       };
       void AsyncStorage.setItem(PERFIL_KEY(userId), JSON.stringify(perfil)).catch(() => undefined);
     }
-    // Outra empresa neste aparelho: limpa o cache local antes de ligar a sincronização (dados de uma empresa
-    // nunca vão para a outra). Na primeira vez (aparelho sem registro), só anota a empresa atual.
-    const empId = perfil?.empresa?.id ?? null;
+    // Outra empresa (ou outra filial / auditoria) neste aparelho: limpa o cache local antes de ligar a sincronização
+    // (dados de uma empresa nunca vão para a outra, e as contagens da auditoria não ficam no aparelho da filial).
+    // Na primeira vez (aparelho sem registro), só anota o escopo atual.
+    const empId = perfil?.empresa?.id ? (perfil.filial ? `${perfil.empresa.id}|${perfil.filial}` : perfil.empresa.id) : null;
     if (empId) {
       const anterior = await AsyncStorage.getItem(EMPRESA_DO_APARELHO).catch(() => null);
       if (anterior && anterior !== empId) await resetAll();
       if (anterior !== empId) await AsyncStorage.setItem(EMPRESA_DO_APARELHO, empId).catch(() => undefined);
     }
     setPapel(perfil?.papel ?? null);
+    setFilialConta(perfil?.filial ?? null);
     // Perfil guardado antes da versão com empresas (sem o campo): vale só a liberação da conta (uso offline continua).
     setAtivo(perfil ? perfil.ativo && (perfil.empresa === undefined || perfil.empresa?.status === 'ativa') : !!error);
     setModulos(perfil?.modulos ?? []); setNome(perfil?.nome ?? ''); setAvatar(perfil?.avatar ?? null); setEmpresa(perfil?.empresa ?? null);
@@ -105,14 +114,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => { await supabase?.auth.signOut(); }, []);
   const value = useMemo(() => {
-    const isAdmin = !supabase || papel === 'admin';
+    const isAdmin = !supabase || (papel === 'admin' && !filialConta);
     // O plano da empresa limita os módulos; dentro dele, o administrador usa todos e o usuário, os liberados.
     const doPlano = (m: string) => !supabase || !empresa || empresa.modulos.includes(m);
     return {
-      ready, userEmail, userId, papel, ativo, empresa, dono, isAdmin, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut,
-      podeAcessar: (m: string) => doPlano(m) && (isAdmin || modulos.includes(m)),
+      ready, userEmail, userId, papel, ativo, empresa, dono, isAdmin, filialConta, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut,
+      // Conta de filial: só Contagens.
+      podeAcessar: (m: string) => doPlano(m) && (filialConta ? m === 'coleta' : isAdmin || modulos.includes(m)),
     };
-  }, [ready, userEmail, userId, papel, ativo, empresa, dono, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut]);
+  }, [ready, userEmail, userId, papel, ativo, empresa, dono, filialConta, modulos, nome, avatar, perfilPronto, recarregarPerfil, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

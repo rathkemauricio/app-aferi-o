@@ -104,3 +104,6 @@ export const FileTextIcon: Icon = require('phosphor-react-native/src/icons/FileT
 export const TableIcon: Icon = require('phosphor-react-native/src/icons/Table').TableIcon;
 export const ChecksIcon: Icon = require('phosphor-react-native/src/icons/Checks').ChecksIcon;
 export const ScanIcon: Icon = require('phosphor-react-native/src/icons/Scan').ScanIcon;
+export const EnvelopeSimpleIcon: Icon = require('phosphor-react-native/src/icons/EnvelopeSimple').EnvelopeSimpleIcon;
+export const FunnelSimpleIcon: Icon = require('phosphor-react-native/src/icons/FunnelSimple').FunnelSimpleIcon;
+export const FlashlightIcon: Icon = require('phosphor-react-native/src/icons/Flashlight').FlashlightIcon;

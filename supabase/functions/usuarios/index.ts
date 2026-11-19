@@ -8,6 +8,9 @@
 //   { acao: 'criar', email, nome, senha, papel, modulos }   (antigo) cria a conta com senha inicial → { ok, user_id }
 //   { acao: 'editar', user_id, nome?, email?, senha? }      altera nome, e-mail e/ou senha de uma conta da empresa → { ok }
 //   { acao: 'status', user_id, ativo }                      inativa ou reativa uma conta da empresa → { ok }
+//   { acao: 'acesso_filial', filial_id, email }  e-mail de acesso da filial: cria (ou troca o e-mail de) a conta da
+//        filial, que só usa Contagens e só vê as contagens da própria filial, e envia o link para criar a senha → { ok }
+//   { acao: 'bloquear_filial', filial_id }       tira o acesso da filial (a conta é inativada; o e-mail fica) → { ok }
 //
 // Regras: só administrador ativo de empresa ativa; só contas da própria empresa; módulos limitados aos do plano;
 // contas ativas limitadas ao plano (o banco também confere, pelo gatilho profiles_limite_contas).
@@ -38,8 +41,9 @@ type Convite = { email?: string; nome?: string; senha?: string; papel?: string; 
 
 const enderecoApp = (ctx: Ctx) => APP_URL || ctx.origem;
 
+/** Contas ativas que ocupam vaga do plano (as contas de filial não ocupam). */
 async function contasAtivas(empresaId: string) {
-  const { count } = await admin.from('profiles').select('user_id', { count: 'exact', head: true }).eq('empresa_id', empresaId).eq('ativo', true);
+  const { count } = await admin.from('profiles').select('user_id', { count: 'exact', head: true }).eq('empresa_id', empresaId).eq('ativo', true).is('filial_id', null);
   return count ?? 0;
 }
 function lerConvite(body: Convite, empresa: Empresa) {
@@ -204,6 +208,102 @@ async function status(body: { user_id?: string; ativo?: boolean }, ctx: Ctx) {
   return json(200, { ok: true });
 }
 
+// ---------- Acesso da filial ----------
+async function filialDaEmpresa(id: string, ctx: Ctx) {
+  const { data } = await admin.from('filiais').select('id,codigo,nome,email').eq('id', id).eq('empresa_id', ctx.empresa.id).is('deleted_at', null).maybeSingle();
+  return data;
+}
+
+async function emailDaFilial(ctx: Ctx, para: string, filial: string, link: string) {
+  await enviar({
+    para,
+    assunto: `Acesso da filial ${filial} ao EasyAudit · ${ctx.empresa.nome}`,
+    html: layout({
+      titulo: 'Acesso da filial ao EasyAudit',
+      paragrafos: [
+        `<b>${esc(ctx.euNome)}</b> liberou o acesso da filial <b>${esc(filial)}</b> ao EasyAudit da empresa <b>${esc(ctx.empresa.nome)}</b>.`,
+        'Com este e-mail a filial usa o módulo <b>Contagens</b>: abre a contagem do estoque, conta pelo celular (câmera, digitando ou pela lista) e vê o relatório.',
+        'Toque no botão para criar a senha. Depois é só entrar no app ou no painel web com este e-mail e essa senha.',
+        'O link vale por pouco tempo. Se expirar, peça ao administrador para enviar de novo.',
+      ],
+      botao: { texto: 'Criar a senha da filial', url: link },
+      rodape: 'Se você não esperava este e-mail, ignore-o.',
+    }),
+  });
+}
+
+async function acessoFilial(body: { filial_id?: string; email?: string }, ctx: Ctx) {
+  const f = await filialDaEmpresa(String(body.filial_id ?? ''), ctx);
+  if (!f) return json(404, { erro: 'Filial não encontrada na sua empresa.' });
+  const email = String(body.email ?? '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return json(400, { erro: 'Informe um e-mail válido para a filial.' });
+  const rotulo = `${f.codigo} · ${f.nome}`;
+  const nome = `Filial ${rotulo}`.slice(0, 80);
+  const voltar = `${enderecoApp(ctx)}/redefinir-senha?convite=1`;
+  const perfilFilial = { empresa_id: ctx.empresa.id, filial_id: f.id, email, nome, papel: 'usuario', modulos: ['coleta'], ativo: true };
+
+  const { data: daFilial } = await admin.from('profiles').select('user_id,email').eq('filial_id', f.id).maybeSingle();
+  const { data: doEmail } = await admin.from('profiles').select('user_id,empresa_id,filial_id').eq('email', email).maybeSingle();
+  if (doEmail && doEmail.user_id !== daFilial?.user_id) {
+    if (doEmail.empresa_id && doEmail.empresa_id !== ctx.empresa.id) return json(409, { erro: `${email} já pertence a outra empresa no EasyAudit.` });
+    if (doEmail.filial_id) return json(409, { erro: `${email} já é o acesso de outra filial.` });
+    if (doEmail.empresa_id) return json(409, { erro: `${email} já é uma conta da auditoria. Use um e-mail próprio da filial.` });
+  }
+
+  let userId: string;
+  let link: string | undefined;
+  if (daFilial) {
+    // A filial já tem conta: troca o e-mail (se mudou), reativa e manda o link de novo.
+    userId = daFilial.user_id;
+    if (daFilial.email !== email) {
+      const { error } = await admin.auth.admin.updateUserById(userId, { email, email_confirm: true });
+      if (error) return emailEmUso(error) ? json(409, { erro: `Já existe outra conta com ${email}.` }) : json(500, { erro: error.message });
+    }
+    await admin.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+    const { error } = await admin.from('profiles').update(perfilFilial).eq('user_id', userId);
+    if (error) return json(500, { erro: `Não foi possível preparar a conta da filial: ${error.message}` });
+    const { data: l } = await admin.auth.admin.generateLink({ type: 'recovery', email, options: { redirectTo: voltar } });
+    link = l?.properties?.action_link;
+  } else if (doEmail) {
+    // Conta criada sozinha com este e-mail, sem empresa: vira a conta da filial.
+    userId = doEmail.user_id;
+    const { error } = await admin.from('profiles').update(perfilFilial).eq('user_id', userId);
+    if (error) return json(500, { erro: `Não foi possível ligar a conta à filial: ${error.message}` });
+    await admin.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+    const { data: l } = await admin.auth.admin.generateLink({ type: 'recovery', email, options: { redirectTo: voltar } });
+    link = l?.properties?.action_link;
+  } else {
+    const { data, error } = await admin.auth.admin.generateLink({ type: 'invite', email, options: { data: { nome }, redirectTo: voltar } });
+    if (error || !data.user || !data.properties?.action_link) {
+      if (emailEmUso(error)) return json(409, { erro: `Já existe uma conta com ${email}.` });
+      throw new Error(error?.message || 'Falha ao gerar o convite.');
+    }
+    userId = data.user.id;
+    link = data.properties.action_link;
+    const { error: e2 } = await admin.from('profiles').update(perfilFilial).eq('user_id', userId);
+    if (e2) {
+      await admin.auth.admin.deleteUser(userId).catch(() => undefined);
+      return json(500, { erro: `Não foi possível preparar a conta da filial: ${e2.message}` });
+    }
+  }
+  const { error: e3 } = await admin.from('filiais').update({ email }).eq('id', f.id).eq('empresa_id', ctx.empresa.id);
+  if (e3) throw new Error(`Conta pronta, mas o e-mail não foi gravado na filial: ${e3.message}`);
+  if (link) await emailDaFilial(ctx, email, rotulo, link);
+  return json(200, { ok: true, user_id: userId });
+}
+
+async function bloquearFilial(body: { filial_id?: string }, ctx: Ctx) {
+  const f = await filialDaEmpresa(String(body.filial_id ?? ''), ctx);
+  if (!f) return json(404, { erro: 'Filial não encontrada na sua empresa.' });
+  const { data: p } = await admin.from('profiles').select('user_id').eq('filial_id', f.id).eq('empresa_id', ctx.empresa.id).maybeSingle();
+  if (!p) return json(200, { ok: true });
+  const { error } = await admin.from('profiles').update({ ativo: false }).eq('user_id', p.user_id);
+  if (error) throw new Error(error.message);
+  const { error: e1 } = await admin.auth.admin.updateUserById(p.user_id, { ban_duration: BANIDO });
+  if (e1) throw new Error(`Acesso marcado como bloqueado, mas o login não: ${e1.message}`);
+  return json(200, { ok: true });
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -216,7 +316,7 @@ Deno.serve(async req => {
       origem: (req.headers.get('Origin') ?? '').replace(/\/$/, ''),
     };
     const body = await req.json().catch(() => ({}));
-    if ((body.acao === 'convidar' || body.acao === 'reenviar') && !enderecoApp(ctx)) {
+    if ((body.acao === 'convidar' || body.acao === 'reenviar' || body.acao === 'acesso_filial') && !enderecoApp(ctx)) {
       return json(400, { erro: 'Envie o convite pelo painel web (ou configure APP_URL no servidor) para o link apontar para o EasyAudit.' });
     }
     switch (body.acao) {
@@ -225,6 +325,8 @@ Deno.serve(async req => {
       case 'criar': return await criar(body, ctx);
       case 'editar': return await editar(body, ctx);
       case 'status': return await status(body, ctx);
+      case 'acesso_filial': return await acessoFilial(body, ctx);
+      case 'bloquear_filial': return await bloquearFilial(body, ctx);
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {

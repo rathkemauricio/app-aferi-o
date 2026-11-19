@@ -5,13 +5,13 @@ import { type ComponentRef, type ReactNode, useContext, useEffect, useMemo, useR
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import { useUsuarioLogado } from '../../lib/auth';
+import { useAuth, useUsuarioLogado } from '../../lib/auth';
 import { preferencias, usePreferencias } from '../../lib/preferencias';
 import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { dataBR, esc, imprimirHtml, rotuloFilial } from '../../lib/util';
-import { ArrowRightIcon, BarcodeIcon, HourglassIcon, CaretDownIcon, FloppyDiskIcon, ClockCounterClockwiseIcon, DotsThreeVerticalIcon, EraserIcon, KeyboardIcon, PauseIcon, PencilSimpleIcon, PlayIcon, ResetIcon, TrashIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
+import { ArrowRightIcon, BarcodeIcon, HourglassIcon, CaretDownIcon, FloppyDiskIcon, ClockCounterClockwiseIcon, DotsThreeVerticalIcon, EraserIcon, KeyboardIcon, PauseIcon, PencilSimpleIcon, PlayIcon, ResetIcon, TrashIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PlusIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import {
@@ -25,6 +25,7 @@ import {
 import { lerPdfBarras } from './barras';
 import { htmlDivergencias, htmlDoInventario, type LinhaDivergente } from './impressao';
 import { Deslizavel } from '../tempos/Deslizavel';
+import { LeitorCamera, SeletorModo } from './SemLeitor';
 
 // Cores do design da Contagem de Estoque (cabeçalho azul-marinho, ação principal âmbar).
 /** A coleta (leitura dos códigos) é feita só no app do celular; no painel web as contagens ficam para consulta. */
@@ -198,29 +199,30 @@ function Sumiu({ nav }: { nav: Nav }) {
 function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
   const c = useCores();
   const usuario = useUsuarioLogado();
+  const { filialConta } = useAuth();
   const [petros, setPetros] = useState<boolean | null>(null);
   const [aba, setAba] = useState<'abertos' | 'encerrados'>('abertos');
   useEffect(() => { if (isSupabaseConfigured) void statusErp().then(r => setPetros(r.petros)).catch(() => setPetros(null)); }, []);
   const ultimaCarga = dados.inventarios.map(i => i.erp_em).filter(Boolean).sort().pop();
-  const sub = `Usuário ${usuario} · ${petros ? 'Petros conectado (API)' : ultimaCarga ? `Petros carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Petros por arquivo'}`;
+  const sub = filialConta ? `Filial ${filialCurta(dados, filialConta)} · ${usuario}` : `Usuário ${usuario} · ${petros ? 'Petros conectado (API)' : ultimaCarga ? `Petros carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Petros por arquivo'}`;
   // Em aberto: uma filial por cartão (cada filial tem no máximo um inventário aberto). Encerrados: os mais recentes primeiro.
   const abertos = useMemo(() => dados.inventarios.filter(i => i.status !== 'encerrado').sort((a, b) => nomeFilial(dados, a.filial_id).localeCompare(nomeFilial(dados, b.filial_id), 'pt-BR', { numeric: true })), [dados]);
   const encerrados = useMemo(() => dados.inventarios.filter(i => i.status === 'encerrado').sort((a, b) => (b.encerrado_em ?? '').localeCompare(a.encerrado_em ?? '')), [dados.inventarios]);
   const lista = aba === 'abertos' ? abertos : encerrados;
   const reabrirSeLivre = (i: Inventario) => {
-    const outro = dados.inventarios.find(x => x.filial_id === i.filial_id && x.id !== i.id && x.status !== 'encerrado');
+    const outro = dados.inventarios.find(x => x.filial_id === i.filial_id && mesmaOrigem(x, i) && x.id !== i.id && x.status !== 'encerrado');
     if (outro) { notify('Filial com inventário aberto', `${nomeFilial(dados, i.filial_id)} já tem o ${outro.codigo} aberto. Encerre-o antes de reabrir o ${i.codigo}.`); return; }
     confirmAction(`Reabrir ${i.codigo}?`, 'O inventário volta para as filiais em aberto e as contagens voltam a aceitar leituras.', 'Reabrir', () => { reabrirInventario(i); setAba('abertos'); });
   };
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo="Inventários" sub={sub} onVoltar={nav.voltar} />
+      <Topo titulo={filialConta ? 'Contagens da filial' : 'Inventários'} sub={sub} onVoltar={nav.voltar} />
       <Corpo rodape={<Botao titulo="Abrir inventário" onPress={() => nav.ir({ n: 'abrir' })} desabilitado={!isSupabaseConfigured} />}>
         <Segmentos opcoes={[
           { id: 'abertos', titulo: 'Em aberto', sub: `${abertos.length} filia${abertos.length === 1 ? 'l' : 'is'}` },
           { id: 'encerrados', titulo: 'Encerrados', sub: `${encerrados.length} inventário${encerrados.length === 1 ? '' : 's'}` },
         ]} valor={aba} onChange={setAba} />
-        {aba === 'abertos' ? (
+        {aba === 'abertos' && !filialConta ? (
           <Cartao onPress={() => nav.ir({ n: 'bases' })}>
             <View style={k.linha}>
               <BarcodeIcon size={22} color={c.text} />
@@ -234,7 +236,7 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
         ) : null}
         {!lista.length
           ? (aba === 'abertos'
-            ? <EmptyState icon={PackageIcon} title="Nenhuma filial com inventário aberto" text="Toque em Abrir inventário: escolha a filial e carregue os saldos do Petros." />
+            ? <EmptyState icon={PackageIcon} title={filialConta ? 'Nenhuma contagem aberta' : 'Nenhuma filial com inventário aberto'} text={filialConta ? 'Toque em Abrir inventário e carregue os saldos do Petros da filial.' : 'Toque em Abrir inventário: escolha a filial e carregue os saldos do Petros.'} />
             : <EmptyState icon={PackageIcon} title="Nenhum inventário encerrado" text="Os inventários finalizados aparecem aqui, com o relatório e a opção de reabrir." />)
           : <>
             <Text style={[k.secao, { color: c.text }]}>{aba === 'abertos' ? 'Filiais com inventário aberto' : 'Inventários encerrados'}</Text>
@@ -282,10 +284,13 @@ function excluirInventario(inv: Inventario, contagens: Contagem[]) {
     inventariosCol.remove(inv.id);
   });
 }
+/** Mesma origem (auditoria × filial): cada origem tem no máximo um inventário aberto por filial. */
+const mesmaOrigem = (a: Inventario, b: Inventario) => (a.origem ?? 'auditoria') === (b.origem ?? 'auditoria');
 const reabrirInventario = (inv: Inventario) => inventariosCol.put({ ...inv, status: 'aberto', encerrado_em: null });
 
 function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dados; onPress: () => void }) {
   const c = useCores();
+  const { filialConta } = useAuth();
   const col = useColetas(inv.id);
   const enc = inv.status === 'encerrado';
   const conts = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id), [dados.contagens, inv.id]);
@@ -301,7 +306,10 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
           : inv.status === 'carregando' ? <Pilula texto="Carregando" tom="neutro" />
           : <Pilula texto={conts.some(x => x.rodadas.includes('andamento') && !x.pausada) ? 'Em andamento' : 'Aberto'} tom="alerta" icone={HourglassIcon} />}
       </View>
-      <Text style={[k.mono, { color: c.textMuted }]}>{inv.codigo}</Text>
+      <View style={k.linha}>
+        <Text style={[k.mono, { color: c.textMuted, flex: 1 }]}>{inv.codigo}</Text>
+        {inv.origem === 'filial' && !filialConta ? <Pilula texto="Aberto pela filial" tom="neutro" icone={StorefrontIcon} /> : null}
+      </View>
       <Text style={[k.cTxt, { color: c.text }]}>{inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · {nCont} contage{nCont === 1 ? 'm' : 'ns'}</Text>
       <Barra pct={enc ? 1 : prog?.pct ?? 0} />
       <Text style={[k.cap, { color: c.textMuted }]}>
@@ -314,8 +322,9 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
 
 function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const c = useCores();
-  // Padrões deste aparelho (Configurações): filial e tipo já escolhidos.
-  const [filialId, setFilialId] = useState(() => { const f = preferencias().filialPadrao; return f && dados.filiais.some(x => x.id === f) ? f : ''; });
+  // Conta de filial: a filial é sempre a dela. Auditoria: padrão deste aparelho (Configurações).
+  const { filialConta } = useAuth();
+  const [filialId, setFilialId] = useState(() => { if (filialConta) return filialConta; const f = preferencias().filialPadrao; return f && dados.filiais.some(x => x.id === f) ? f : ''; });
   const [tipo, setTipo] = useState<'completo' | 'parcial'>(() => preferencias().tipoPadrao);
   const [escolher, setEscolher] = useState(false);
   const [busca, setBusca] = useState('');
@@ -325,7 +334,9 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [arquivoVenda, setArquivoVenda] = useState<ArquivoErp | null>(null);
   const [enviando, setEnviando] = useState(false);
   useEffect(() => { void statusErp().then(r => { setPetros(r.petros); if (r.petros) setFonte('petros'); }).catch(() => undefined); }, []);
-  const aberto = dados.inventarios.find(i => i.filial_id === filialId && i.status !== 'encerrado');
+  // Um inventário aberto por filial e origem: a contagem da filial não trava a da auditoria (e vice-versa).
+  const minhaOrigem = filialConta ? 'filial' : 'auditoria';
+  const aberto = dados.inventarios.find(i => i.filial_id === filialId && (i.origem ?? 'auditoria') === minhaOrigem && i.status !== 'encerrado');
   const base = filialId ? baseDaFilial(dados, filialId) : undefined;
   const daRede = !!base && base.id === BASE_REDE;
   const filtradas = dados.filiais.filter(f => `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(busca.toLowerCase()));
@@ -333,12 +344,12 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const abrir = async () => {
     if (!filialId) { notify('Escolha a filial'); return; }
     if (aberto) { notify('Filial com inventário aberto', `${aberto.codigo} ainda está aberto nesta filial. Encerre-o antes de abrir outro.`); return; }
-    if (!base) { notify('Base de códigos de barra pendente', 'Importe a relação de códigos de barra da rede (ou desta filial) antes de abrir o inventário.'); return; }
+    if (!base) { notify('Base de códigos de barra pendente', filialConta ? 'A base de códigos de barra é cadastrada pela auditoria. Peça ao administrador para importá-la.' : 'Importe a relação de códigos de barra da rede (ou desta filial) antes de abrir o inventário.'); return; }
     if (fonte === 'arquivo' && !arquivo && !arquivoVenda) { notify('Escolha o PDF de saldos', 'Use a Conferência de Estoque da filial com preço de custo, com preço de venda ou as duas.'); return; }
     setEnviando(true);
     const id = uid('inv');
     try {
-      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo)), filial_id: filialId, tipo, status: 'carregando', fonte, arquivo: arquivo?.nome ?? '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
+      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV'), filial_id: filialId, tipo, status: 'carregando', fonte, arquivo: arquivo?.nome ?? '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
       await inventariosCol.flush();
       const r = await carregarErp(id, fonte, arquivo ?? undefined, arquivoVenda ?? undefined);
       await inventariosCol.sync();
@@ -352,26 +363,26 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo="Abrir inventário" sub="Selecione a filial e o tipo" onVoltar={nav.voltar} />
+      <Topo titulo="Abrir inventário" sub={filialConta ? filialCurta(dados, filialConta) : 'Selecione a filial e o tipo'} onVoltar={nav.voltar} />
       <Corpo rodape={<>
         <Botao titulo={enviando ? 'Carregando os saldos…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
         <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={enviando} />
       </>}>
         <Rotulo>Filial</Rotulo>
-        <Pressable accessibilityRole="button" onPress={() => setEscolher(true)} style={[k.select, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
+        <Pressable accessibilityRole="button" disabled={!!filialConta} onPress={() => setEscolher(true)} style={[k.select, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
           <Text style={[k.selectTxt, { color: filialId ? c.text : c.textFaint }]} numberOfLines={1}>{filialId ? nomeFilial(dados, filialId) : 'Escolha a filial'}</Text>
-          <CaretDownIcon size={18} color={c.textMuted} />
+          {filialConta ? null : <CaretDownIcon size={18} color={c.textMuted} />}
         </Pressable>
         {aberto ? <Text style={[k.cap, { color: c.danger }]}>{aberto.codigo} ainda está aberto nesta filial.</Text> : null}
         {filialId ? (
-          <Cartao onPress={() => nav.ir({ n: 'bases', filial: filialId })}>
+          <Cartao onPress={filialConta ? undefined : () => nav.ir({ n: 'bases', filial: filialId })}>
             <View style={k.linha}>
               <BarcodeIcon size={22} color={base ? c.success : c.danger} />
               <View style={{ flex: 1 }}>
                 <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>{!base ? 'Falta a base de códigos de barra' : daRede ? 'Usa a base de códigos de barra da rede' : 'Base de códigos de barra da filial'}</Text>
-                <Text style={[k.cap, { color: c.textMuted }]}>{base ? `${base.itens.toLocaleString('pt-BR')} itens · ${base.eans.toLocaleString('pt-BR')} códigos · ${dataHora(base.importado_em)}${!daRede && dados.bases.has(BASE_REDE) ? ' · somada à base da rede' : ''}` : 'Importe uma vez a relação de códigos de barra da rede: ela vale para todas as filiais.'}</Text>
+                <Text style={[k.cap, { color: c.textMuted }]}>{base ? `${base.itens.toLocaleString('pt-BR')} itens · ${base.eans.toLocaleString('pt-BR')} códigos · ${dataHora(base.importado_em)}${!daRede && dados.bases.has(BASE_REDE) ? ' · somada à base da rede' : ''}` : filialConta ? 'A auditoria ainda não importou a base de códigos de barra.' : 'Importe uma vez a relação de códigos de barra da rede: ela vale para todas as filiais.'}</Text>
               </View>
-              <CaretRightIcon size={18} color={c.textMuted} />
+              {filialConta ? null : <CaretRightIcon size={18} color={c.textMuted} />}
             </View>
           </Cartao>
         ) : null}
@@ -815,13 +826,19 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   const [menu, setMenu] = useState(false);
   const [busca, setBusca] = useState('');
   const [corrigir, setCorrigir] = useState<Produto | null>(null);
+  const [filtro, setFiltro] = useState<FiltroSit>('todos');
   const simples = usePreferencias().layoutColeta === 'simples';
+  // Filial configurada "sem leitor" (cadastro da filial): conta pela lista, pela câmera ou digitando.
+  const semLeitor = COLETA_AQUI && dados.filiais.find(f => f.id === inv.filial_id)?.contagem_leitor === false;
+  const modoSL = usePreferencias().modoSemLeitor;
   const minhas = useMinhasColetas(ct, r);
   const avisoLista = (msg: string) => { setCorrigir(null); notify(msg); };
   const mudar = (p: Partial<Extract<Tela, { n: 'contagem' }>>) => nav.trocar({ ...tela, ...p });
   // Pesquisa: itens desta contagem e, abaixo, qualquer outro item da carga (inclusive os zerados da base de barras).
   const naLista = useMemo(() => new Set(lista.map(x => x.codigo)), [lista]);
-  const filtrada = useMemo(() => (busca.trim() ? lista.filter(x => bateBusca(x, busca)) : lista), [lista, busca]);
+  const buscados = useMemo(() => (busca.trim() ? lista.filter(x => bateBusca(x, busca)) : lista), [lista, busca]);
+  const nSit = useMemo(() => contarSituacoes(buscados, r, q), [buscados, r, q]);
+  const filtrada = useMemo(() => filtrarSituacao(buscados, r, q, filtro), [buscados, r, q, filtro]);
   const outros = useMemo(() => (produtos && busca.trim().length >= 2 ? produtos.filter(x => !naLista.has(x.codigo) && bateBusca(x, busca)).slice(0, 40) : []), [produtos, naLista, busca]);
   const noEscopo = useMemo(() => new Set(itens.map(x => x.codigo)), [itens]);
   const catsArquivo = useMemo(() => (produtos ? categoriasDoArquivo(produtos) : new Set<string>()), [produtos]);
@@ -831,6 +848,19 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
 
   const rodadas = (
     <Segmentos opcoes={ct.rodadas.map((s, i) => ({ id: String(i + 1) as '1' | '2' | '3', titulo: `Contagem ${i + 1}`, sub: ROTULO_RODADA[s] }))} valor={String(r) as '1' | '2' | '3'} onChange={v => mudar({ rodada: Number(v) as Rodada })} />
+  );
+  const chipsRodadas = (
+    <View style={[k.linha, { gap: 6 }]}>
+      {ct.rodadas.map((s, i) => {
+        const on = r === i + 1;
+        return (
+          <Pressable key={i} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => mudar({ rodada: (i + 1) as Rodada })}
+            style={[k.chip, { borderColor: on ? NAVY : c.borderStrong, backgroundColor: on ? NAVY : c.surface }]}>
+            <Text style={[k.cap, k.b, { color: on ? '#fff' : c.text }]} numberOfLines={1}>{i + 1}ª · {ROTULO_RODADA[s]}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 
   return (
@@ -869,14 +899,16 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
               ListHeaderComponent={<View style={{ gap: space.md }}>
                 {rodadas}
                 <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar item: nome, código ou código de barras" />
-                {busca.trim() ? <Text style={[k.cap, { color: c.textMuted }]}>{filtrada.length.toLocaleString('pt-BR')} de {lista.length.toLocaleString('pt-BR')} itens desta contagem</Text>
+                <FiltroSituacao valor={filtro} onChange={setFiltro} n={nSit} />
+                {busca.trim() || filtro !== 'todos' ? <Text style={[k.cap, { color: c.textMuted }]}>{filtrada.length.toLocaleString('pt-BR')} de {lista.length.toLocaleString('pt-BR')} itens desta contagem</Text>
                   : coletavel ? <Text style={[k.cap, { color: c.textMuted }]}>Arraste um item já coletado: para a direita corrige, para a esquerda zera.</Text>
                   : ativa ? <Text style={[k.cap, { color: c.textMuted }]}>A coleta é feita no app do celular. Aqui no painel a contagem fica para acompanhar.</Text> : null}
                 {r > 1 ? <Cartao><Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Recontagem: {lista.length.toLocaleString('pt-BR')} itens vindos da contagem {r - 1}</Text><Text style={[k.cTxt, { color: c.textMuted }]}>{r === 2 ? 'Divergentes, saldo negativo e não coletados. Os corretos já estão fechados.' : 'Não coletados e divergências não confirmadas na 2ª. Esta contagem confirma o resultado.'}</Text></Cartao> : null}
                 {ct.rodadas[r - 1] === 'aguardando' ? <Text style={[k.cap, { color: c.textMuted }]}>Esta contagem começa quando a anterior for finalizada.</Text> : null}
               </View>}
               ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
-              ListEmptyComponent={busca.trim() ? <Text style={[k.cap, { color: c.textMuted }]}>Nenhum item desta contagem com "{busca.trim()}".</Text> : <EmptyState icon={CheckIcon} title="Nenhum item nesta contagem" text={r > 1 ? 'Tudo fechou na contagem anterior.' : 'Sem itens com saldo nas categorias escolhidas.'} />}
+              ListEmptyComponent={filtro !== 'todos' && buscados.length ? <Text style={[k.cap, { color: c.textMuted }]}>Nenhum item {ROTULO_FILTRO[filtro].toLowerCase()}{busca.trim() ? ` com "${busca.trim()}"` : ''} nesta contagem.</Text>
+                : busca.trim() ? <Text style={[k.cap, { color: c.textMuted }]}>Nenhum item desta contagem com "{busca.trim()}".</Text> : <EmptyState icon={CheckIcon} title="Nenhum item nesta contagem" text={r > 1 ? 'Tudo fechou na contagem anterior.' : 'Sem itens com saldo nas categorias escolhidas.'} />}
               ListFooterComponent={outros.length ? <View style={{ gap: space.sm, marginTop: space.lg }}>
                 <Text style={[k.secao, { color: c.text }]}>Outros itens da carga ({outros.length}{outros.length === 40 ? '+' : ''})</Text>
                 <Text style={[k.cap, { color: c.textMuted }]}>Itens fora desta lista. Os zerados no Petros (a categoria veio no arquivo, o item não) podem ser coletados e entram como sobra. Itens de categorias que não vieram no arquivo podem ter saldo no Petros e não entram.</Text>
@@ -914,20 +946,15 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
             />
             {ativa ? <Rodape><Botao titulo={`Finalizar contagem ${r}`} tipo="s" onPress={() => nav.ir({ n: 'finalizar', id: ct.id, rodada: r })} /></Rodape> : null}
           </View>
+        ) : semLeitor && ativa ? (
+          <View style={{ flex: 1 }}>
+            <View style={[k.modoSL, { borderBottomColor: c.border }]}><SeletorModo /></View>
+            {modoSL === 'lista'
+              ? <ContagemLista key={`lista-${r}`} ct={ct} r={r} lista={lista} q={q} inicial={sel} limparInicial={() => setSel(null)} rodadas={chipsRodadas} />
+              : <Coleta key={modoSL} ct={ct} r={r} ativa={ativa} produtos={produtos} itens={itens} lista={lista} q={q} sel={sel} setSel={setSel} rodadas={chipsRodadas} entrada={modoSL} />}
+          </View>
         ) : (
-          <Coleta ct={ct} r={r} ativa={ativa} produtos={produtos} itens={itens} lista={lista} q={q} sel={sel} setSel={setSel} rodadas={
-            <View style={[k.linha, { gap: 6 }]}>
-              {ct.rodadas.map((s, i) => {
-                const on = r === i + 1;
-                return (
-                  <Pressable key={i} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => mudar({ rodada: (i + 1) as Rodada })}
-                    style={[k.chip, { borderColor: on ? NAVY : c.borderStrong, backgroundColor: on ? NAVY : c.surface }]}>
-                    <Text style={[k.cap, k.b, { color: on ? '#fff' : c.text }]} numberOfLines={1}>{i + 1}ª · {ROTULO_RODADA[s]}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          } />
+          <Coleta ct={ct} r={r} ativa={ativa} produtos={produtos} itens={itens} lista={lista} q={q} sel={sel} setSel={setSel} rodadas={chipsRodadas} entrada="leitor" />
         )}
       {corrigir ? (() => {
         const m = minhas(corrigir.codigo);
@@ -1004,7 +1031,7 @@ function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos
     const divergentes: LinhaDivergente[] = [
       ...d.faltas.map(l => ({ ...l, situacao: 'Falta' })), ...d.sobras.map(l => ({ ...l, situacao: 'Sobra' })), ...d.naoColetados.map(l => ({ ...l, situacao: 'Não coletado' })),
     ];
-    const sub = `${filial} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
+    const sub = `${filial}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
     const html = htmlDivergencias({ titulo: `Itens divergentes · ${ct.nome}`, sub, divergentes, nota: 'Vale a última quantidade coletada de cada item; item não coletado entra como falta.' });
     try { await imprimirHtml(html, `Divergências ${ct.nome}`, true); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
@@ -1048,6 +1075,133 @@ function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos
           </View>
         )}
     />
+  );
+}
+
+/* =====================================================================
+   Filtro dos itens da contagem: pendentes, incorretos (divergentes) e corretos
+   ===================================================================== */
+type Qtd3 = [number | null, number | null, number | null];
+type FiltroSit = 'todos' | 'pendente' | 'divergente' | 'correto';
+const SEM_QTD: Qtd3 = [null, null, null];
+const ROTULO_FILTRO: Record<FiltroSit, string> = { todos: 'Todos', pendente: 'Pendentes', divergente: 'Incorretos', correto: 'Corretos' };
+function contarSituacoes(itens: Produto[], r: Rodada, q: Map<string, Qtd3>) {
+  const n: Record<FiltroSit, number> = { todos: itens.length, pendente: 0, divergente: 0, correto: 0 };
+  itens.forEach(p => { n[situacaoNaRodada(p, r, q.get(p.codigo) ?? SEM_QTD)] += 1; });
+  return n;
+}
+const filtrarSituacao = (itens: Produto[], r: Rodada, q: Map<string, Qtd3>, f: FiltroSit) =>
+  (f === 'todos' ? itens : itens.filter(p => situacaoNaRodada(p, r, q.get(p.codigo) ?? SEM_QTD) === f));
+
+function FiltroSituacao({ valor, onChange, n }: { valor: FiltroSit; onChange: (f: FiltroSit) => void; n: Record<FiltroSit, number> }) {
+  const c = useCores();
+  const cor: Record<FiltroSit, string> = { todos: c.textMuted, pendente: c.warning, divergente: c.danger, correto: c.success };
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
+      {(['todos', 'pendente', 'divergente', 'correto'] as const).map(f => {
+        const on = f === valor;
+        return (
+          <Pressable key={f} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${ROTULO_FILTRO[f]}: ${n[f]}`} onPress={() => onChange(f)}
+            style={({ pressed }) => [k.filtro, { borderColor: on ? NAVY : c.borderStrong, backgroundColor: on ? NAVY : c.surface }, pressed && !on && { opacity: 0.75 }]}>
+            {f !== 'todos' ? <View style={[k.filtroPonto, { backgroundColor: cor[f] }]} /> : null}
+            <Text style={[k.b, { color: on ? '#fff' : c.text, fontSize: 14 }]}>{ROTULO_FILTRO[f]}</Text>
+            <Text style={[k.monoM, { color: on ? '#cfe0ff' : c.textMuted, fontSize: 13 }]}>{n[f].toLocaleString('pt-BR')}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/* =====================================================================
+   Contagem pela lista (celular sem leitor): cada item com − / quantidade / +
+   ===================================================================== */
+function ContagemLista({ ct, r, lista, q, inicial, limparInicial, rodadas }: {
+  ct: Contagem; r: Rodada; lista: Produto[]; q: Map<string, Qtd3>; inicial: string | null; limparInicial: () => void; rodadas: ReactNode;
+}) {
+  const c = useCores();
+  // Item tocado na aba Itens: a lista já abre filtrada nele.
+  const [busca, setBusca] = useState(inicial ?? '');
+  const [filtro, setFiltro] = useState<FiltroSit>('todos');
+  useEffect(() => { if (inicial) limparInicial(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const minhas = useMinhasColetas(ct, r);
+  const buscados = useMemo(() => (busca.trim() ? lista.filter(x => bateBusca(x, busca)) : lista), [lista, busca]);
+  const n = useMemo(() => contarSituacoes(buscados, r, q), [buscados, r, q]);
+  const itens = useMemo(() => filtrarSituacao(buscados, r, q, filtro), [buscados, r, q, filtro]);
+  return (
+    <FlatList
+      data={itens}
+      keyExtractor={p => p.codigo}
+      contentContainerStyle={k.corpo}
+      initialNumToRender={12}
+      windowSize={9}
+      keyboardShouldPersistTaps="handled"
+      ListHeaderComponent={<View style={{ gap: space.sm }}>
+        {rodadas}
+        <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar: nome, código ou código de barras" />
+        <FiltroSituacao valor={filtro} onChange={setFiltro} n={n} />
+        <Text style={[k.cap, { color: c.textMuted }]}>Toque em + para somar 1 ou digite o total contado do item. 0 marca o item como contado sem estoque.</Text>
+      </View>}
+      ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
+      ListEmptyComponent={<Text style={[k.cap, { color: c.textMuted }]}>{buscados.length ? `Nenhum item ${ROTULO_FILTRO[filtro].toLowerCase()} aqui.` : busca.trim() ? `Nenhum item desta contagem com "${busca.trim()}".` : 'Nenhum item nesta contagem.'}</Text>}
+      renderItem={({ item: p }) => <LinhaLista ct={ct} r={r} p={p} qq={q.get(p.codigo) ?? SEM_QTD} meu={minhas(p.codigo).meu} />}
+    />
+  );
+}
+
+function LinhaLista({ ct, r, p, qq, meu }: { ct: Contagem; r: Rodada; p: Produto; qq: Qtd3; meu: number }) {
+  const c = useCores();
+  const total = qq[r - 1];
+  const [txt, setTxt] = useState<string | null>(null); // null = mostrando o total salvo
+  const s = situacaoNaRodada(p, r, qq);
+  const cor = s === 'correto' ? c.success : s === 'divergente' ? c.danger : c.warning;
+  const fundo = s === 'correto' ? c.successSoft : s === 'divergente' ? c.dangerSoft : c.surface;
+  /** Leva o total do item para `novo` (0 também conta: item contado sem estoque). */
+  const definir = (novo: number) => {
+    if (total === null && novo === 0) { void registrarLeitura(ct, r, p.codigo, 0); tocar('salvo'); return; }
+    const erro = ajustarTotal(ct, r, p.codigo, total ?? 0, meu, novo);
+    if (erro) { tocar('barrado'); notify('Parte foi contada em outro aparelho', erro); return; }
+    tocar('salvo');
+  };
+  const confirmarGrande = (novo: number, depois: () => void) => {
+    const limite = preferencias().confirmarAcima;
+    if (limite > 0 && novo > limite && novo > (total ?? 0)) confirmAction(`Salvar ${fmtQ(novo)}?`, `${p.nome}\n\nQuantidade acima de ${fmtQ(limite)}: confira se está certa.`, 'Salvar', depois);
+    else depois();
+  };
+  // Salva uma vez só por edição (enviar e terminar a edição podem chegar juntos).
+  const editando = useRef(false);
+  const salvarTexto = () => {
+    if (txt === null || !editando.current) return;
+    editando.current = false;
+    const t = txt.trim();
+    setTxt(null);
+    if (!t) return;
+    const v = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
+    if (!Number.isFinite(v) || v < 0 || v > 99999) { tocar('barrado'); notify('Quantidade inválida', 'Informe o total contado do item (0 a 99.999).'); return; }
+    if (v === total) return;
+    confirmarGrande(v, () => definir(v));
+  };
+  return (
+    <View style={[k.item, k.linhaLista, { backgroundColor: fundo, borderLeftColor: cor }]}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo} · {p.categoria}</Text>
+        <Text style={[k.cTxt, { color: c.text, fontSize: 15.5 }]} numberOfLines={2}>{p.nome}</Text>
+        <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Saldo <Text style={[k.b, { color: c.text }]}>{fmtQ(p.saldo)}</Text> · <Text style={[k.b, { color: cor }]}>{s === 'correto' ? 'Correto' : s === 'divergente' ? `Incorreto (${(total ?? 0) - p.saldo > 0 ? '+' : ''}${fmtQ((total ?? 0) - p.saldo)})` : 'Pendente'}</Text></Text>
+      </View>
+      <View style={k.passos}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Tirar 1 de ${p.nome}`} disabled={!total} hitSlop={4} onPress={() => definir((total ?? 0) - 1)}
+          style={({ pressed }) => [k.passo, { borderColor: c.borderStrong, backgroundColor: c.surface }, !total && { opacity: 0.35 }, pressed && { transform: [{ scale: 0.94 }] }]}>
+          <MinusIcon size={18} color={c.text} weight="bold" />
+        </Pressable>
+        <TextInput value={txt ?? (total === null ? '' : fmtQ(total))} onFocus={() => { editando.current = true; setTxt(total === null ? '' : String(total)); }} onChangeText={setTxt}
+          onEndEditing={salvarTexto} keyboardType="decimal-pad" returnKeyType="done" selectTextOnFocus placeholder="—" placeholderTextColor={c.textFaint}
+          style={[k.qtdLista, { color: c.text, backgroundColor: c.surface, borderColor: txt !== null ? AMBER : c.borderStrong }]} accessibilityLabel={`Quantidade contada de ${p.nome}`} />
+        <Pressable accessibilityRole="button" accessibilityLabel={`Somar 1 em ${p.nome}`} hitSlop={4} onPress={() => confirmarGrande((total ?? 0) + 1, () => definir((total ?? 0) + 1))}
+          style={({ pressed }) => [k.passo, { borderColor: AMBER, backgroundColor: AMBER }, pressed && { transform: [{ scale: 0.94 }] }]}>
+          <PlusIcon size={18} color={AMBER_TXT} weight="bold" />
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -1152,11 +1306,15 @@ function CorrigirItem({ ct, r, p, total, meu, ultima, onClose, onFeito }: {
   );
 }
 
-function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas }: {
+function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas, entrada }: {
   ct: Contagem; r: Rodada; ativa: boolean; produtos: Produto[]; itens: Produto[]; lista: Produto[]; q: Map<string, [number | null, number | null, number | null]>;
   sel: string | null; setSel: (s: string | null) => void; rodadas: ReactNode;
+  /** leitor: coletor com leitor de código; camera: celular lendo pela câmera; digitar: código digitado no teclado. */
+  entrada: 'leitor' | 'camera' | 'digitar';
 }) {
   const c = useCores();
+  // Conta de filial não cadastra código de barras (a base é da auditoria).
+  const { filialConta } = useAuth();
   const insets = useSafeAreaInsets();
   const [codigo, setCodigo] = useState('');
   const [qtd, setQtd] = useState('');
@@ -1164,7 +1322,8 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   /** Item identificado e aguardando a quantidade (2º passo). */
   const [pendente, setPendente] = useState(false);
   const [aviso, setAviso] = useState<{ txt: string; tom: 'ok' | 'erro' } | null>(null);
-  const teclado = usePreferencias().tecladoColeta; // teclado na tela: só em Configurações → Coleta (coletor com leitor não precisa)
+  const tecladoPref = usePreferencias().tecladoColeta;
+  const teclado = tecladoPref || entrada === 'digitar'; // teclado na tela: só em Configurações → Coleta (coletor com leitor não precisa)
   const [verHist, setVerHist] = useState(false);
   const [corrigindo, setCorrigindo] = useState(false);
   /** Código de barras lido que não está cadastrado (pode ser ligado a um item da carga). */
@@ -1224,10 +1383,12 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     setQtd('');
     if (!prod) {
       tocar('barrado'); setSel(null); setPendente(false); setLido(cod);
-      const ean = /^\d{8,14}$/.test(cod);
+      const ean = /^\d{8,14}$/.test(cod) && !filialConta;
       setSemCadastro(ean ? cod : null);
       if (ean) setCadastrando(true); // abre na hora a janela para cadastrar o código ou pesquisar o item
-      setAviso({ txt: ean ? `Código de barras ${cod} não cadastrado. Toque em "Cadastrar este código" para ligá-lo ao item.` : `Código ${cod} não está na carga do Petros nem na base de códigos de barra.`, tom: 'erro' });
+      setAviso({ txt: ean ? `Código de barras ${cod} não cadastrado. Toque em "Cadastrar este código" para ligá-lo ao item.`
+        : filialConta ? `Código ${cod} não está na base. Procure o item pela Lista ou digite o código interno; a auditoria cadastra o código de barras.`
+        : `Código ${cod} não está na carga do Petros nem na base de códigos de barra.`, tom: 'erro' });
       if (!ean) focar('codigo'); // com a janela aberta, o foco fica na pesquisa dela
       return;
     }
@@ -1283,6 +1444,9 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   /** Borracha: limpa a tela inteira e volta para a leitura, sem item. */
   const apagar = () => { setCodigo(''); setQtd(''); setLido(null); setSel(null); setPendente(false); setAviso(null); setSemCadastro(null); focar('codigo'); };
   const { meu, ultima } = p ? minhas(p.codigo) : { meu: 0, ultima: undefined };
+  // Câmera: aparece enquanto espera a leitura; some quando o item é identificado (para digitar a quantidade).
+  const camera = entrada === 'camera' && !pendente && !cadastrando && !corrigindo ? <LeitorCamera onLer={ler} /> : null;
+  const phCodigo = entrada === 'digitar' ? 'Digite o código de barras ou o código do item' : entrada === 'camera' ? 'Ou digite o código' : null;
   const abrirCorrecao = () => { setPendente(false); setCorrigindo(true); };
   const feito = (msg: string) => { setCorrigindo(false); setAviso({ txt: msg, tom: 'ok' }); focar('codigo'); };
 
@@ -1347,10 +1511,11 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={k.coleta} keyboardShouldPersistTaps="always">
         {rodadas}
+        {camera}
         {/* Leitura: código + (buscar) + teclado + borracha, tudo numa linha */}
         <View style={[k.linha, { gap: 6 }]}>
           <TextInput ref={campo} autoFocus={!pendente} value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
-            placeholder={pendente ? 'Ler outro código' : 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado || tecladoCodigo} onPressIn={abrirTecladoCodigo} keyboardType="number-pad" returnKeyType="search"
+            placeholder={pendente ? 'Ler outro código' : phCodigo ?? 'Leia o código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado || tecladoCodigo} onPressIn={abrirTecladoCodigo} keyboardType="number-pad" returnKeyType="search"
             style={[k.cCodigo, { color: c.text, backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : AMBER }]} accessibilityLabel="Código de barras" />
           {codigo.trim() ? icone('Buscar item', MagnifyingGlassIcon, () => ler(codigo), { fundo: AMBER, cor: AMBER_TXT, ativo: true }) : null}
           {icone('Apagar tudo e ler outro item', EraserIcon, apagar, { cor: c.danger, ativo: true })}
@@ -1448,10 +1613,11 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={k.coleta} keyboardShouldPersistTaps="always">
+        {camera}
         {/* Leitura do código */}
         <View style={[k.leitura, { backgroundColor: c.surface, borderColor: pendente ? c.borderStrong : VERDE }]}>
           <TextInput ref={campo} autoFocus={!pendente} value={codigo} onChangeText={setCodigo} onSubmitEditing={e => ler(e.nativeEvent.text)} submitBehavior="submit" blurOnSubmit={false}
-            placeholder="Código de barras" placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado || tecladoCodigo} onPressIn={abrirTecladoCodigo} keyboardType="number-pad" returnKeyType="search"
+            placeholder={phCodigo ?? 'Código de barras'} placeholderTextColor={c.textFaint} autoCapitalize="none" autoCorrect={false} showSoftInputOnFocus={teclado || tecladoCodigo} onPressIn={abrirTecladoCodigo} keyboardType="number-pad" returnKeyType="search"
             style={[k.leituraCampo, { color: c.text }]} accessibilityLabel="Código de barras" />
           <Pressable accessibilityRole="button" accessibilityLabel="Buscar o item deste código" onPress={() => ler(codigo)} style={({ pressed }) => [k.leituraIr, pressed && { opacity: 0.8 }]}>
             <ArrowRightIcon size={26} color="#fff" weight="bold" />
@@ -1570,6 +1736,7 @@ function FinalizarRodada({ c: ct, inv, r, nav }: { c: Contagem; inv: Inventario;
 function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: Inventario; dados: Dados; nav: Nav; divergentes: boolean; contagem?: Contagem }) {
   const c = useCores();
   const usuario = useUsuarioLogado();
+  const { filialConta } = useAuth(); // envio ao ERP: só a auditoria
   const { produtos } = useProdutos(inv);
   const col = useColetas(inv.id);
   const [enviando, setEnviando] = useState(false);
@@ -1704,7 +1871,7 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
               <Pressable accessibilityRole="button" onPress={() => void imprimir()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><PrinterIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>PDF completo</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => void imprimir(true)} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><PrinterIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>PDF só das divergências</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => void exportar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><FileCsvIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>Arquivo para o Petros</Text></Pressable>
-              {petros && enc && !soDela ? <Pressable accessibilityRole="button" disabled={enviando} onPress={() => void enviar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><UploadSimpleIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>{enviando ? 'Enviando…' : 'Enviar ao Petros'}</Text></Pressable> : null}
+              {petros && enc && !soDela && !filialConta ? <Pressable accessibilityRole="button" disabled={enviando} onPress={() => void enviar()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong }]}><UploadSimpleIcon size={16} color={c.text} /><Text style={[k.b, { color: c.text }]}>{enviando ? 'Enviando…' : 'Enviar ao Petros'}</Text></Pressable> : null}
             </View>
           </Cartao>
         </>}
@@ -1715,6 +1882,13 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
 
 /* ---------- Estilos ---------- */
 const k = StyleSheet.create({
+  filtro: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1.5 },
+  filtroPonto: { width: 8, height: 8, borderRadius: 4 },
+  modoSL: { paddingHorizontal: space.lg, paddingVertical: space.sm, borderBottomWidth: 1, width: '100%', maxWidth: pageMaxWidth(720), alignSelf: 'center' },
+  linhaLista: { alignItems: 'center', paddingVertical: 12 },
+  passos: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  passo: { width: 42, height: 42, borderRadius: 21, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  qtdLista: { width: 68, height: 44, borderRadius: 10, borderWidth: 1.5, textAlign: 'center', fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'], paddingHorizontal: 4 },
   topo: { backgroundColor: NAVY, flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingBottom: 14 },
   voltar: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   topoTit: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },

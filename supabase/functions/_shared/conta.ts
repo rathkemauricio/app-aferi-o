@@ -6,12 +6,14 @@ import type { SupabaseClient, User } from 'npm:@supabase/supabase-js@2.57.0';
 export type Empresa = { id: string; nome: string; status: 'aguardando' | 'ativa' | 'suspensa'; modulos: string[]; limite_contas: number; plano_id: string };
 export type Conta = {
   user: User;
-  perfil: { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; empresa_id: string | null } | null;
+  perfil: { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; empresa_id: string | null; filial_id: string | null } | null;
   empresa: Empresa | null;
   /** Conta ativa, empresa ativa e módulo no plano da empresa (administrador: todos do plano; usuário: os liberados). */
   libera: (modulo: string) => boolean;
   /** Administrador ativo de empresa ativa. */
   admin: boolean;
+  /** Conta de filial: id da filial (só usa Contagens, só as contagens da própria filial). null = auditoria. */
+  filial: string | null;
 };
 
 /** Dono da plataforma (mesmo e-mail de private.dono_plataforma() no banco); DONO_EMAIL no servidor substitui. */
@@ -26,15 +28,16 @@ export async function contaDe(admin: SupabaseClient, req: Request): Promise<Cont
   const { data: u, error } = await admin.auth.getUser(token);
   if (error || !u.user) return null;
   const { data: p } = await admin.from('profiles')
-    .select('user_id,email,nome,papel,ativo,modulos,empresa_id,empresas(id,nome,status,modulos,limite_contas,plano_id)')
+    .select('user_id,email,nome,papel,ativo,modulos,empresa_id,filial_id,empresas(id,nome,status,modulos,limite_contas,plano_id)')
     .eq('user_id', u.user.id).maybeSingle();
   // deno-lint-ignore no-explicit-any
   const empresa = ((p as any)?.empresas ?? null) as Empresa | null;
   const perfil = p ? { ...p, modulos: (p.modulos as string[] | null) ?? [] } as Conta['perfil'] : null;
   const ok = !!perfil?.ativo && empresa?.status === 'ativa';
+  const filial = perfil?.filial_id ?? null;
   return {
-    user: u.user, perfil, empresa,
-    admin: ok && perfil!.papel === 'admin',
-    libera: (m: string) => ok && (empresa!.modulos ?? []).includes(m) && (perfil!.papel === 'admin' || perfil!.modulos.includes(m)),
+    user: u.user, perfil, empresa, filial,
+    admin: ok && !filial && perfil!.papel === 'admin',
+    libera: (m: string) => ok && (empresa!.modulos ?? []).includes(m) && (filial ? m === 'coleta' : perfil!.papel === 'admin' || perfil!.modulos.includes(m)),
   };
 }

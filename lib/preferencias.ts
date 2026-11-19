@@ -10,6 +10,8 @@ export type Preferencias = {
   layoutColeta: 'simples' | 'completo';
   /** Teclado na tela já ligado ao abrir a coleta (celular sem leitor de código). */
   tecladoColeta: boolean;
+  /** Celular sem leitor de código: como contar (câmera, digitando o código ou marcando na lista). */
+  modoSemLeitor: 'camera' | 'digitar' | 'lista';
   /** Pedir confirmação ao salvar quantidade acima deste valor (0 = nunca pedir). */
   confirmarAcima: number;
   /** Filial já escolhida ao abrir inventário (id da filial). */
@@ -17,7 +19,7 @@ export type Preferencias = {
   /** Tipo já escolhido ao abrir inventário. */
   tipoPadrao: 'completo' | 'parcial';
 };
-export const PADRAO: Preferencias = { layoutColeta: 'simples', sons: true, tecladoColeta: false, confirmarAcima: 100, filialPadrao: null, tipoPadrao: 'completo' };
+export const PADRAO: Preferencias = { layoutColeta: 'simples', sons: true, tecladoColeta: false, modoSemLeitor: 'lista', confirmarAcima: 100, filialPadrao: null, tipoPadrao: 'completo' };
 
 const CHAVE = 'nevoeiro.preferencias.v1';
 let atual: Preferencias = PADRAO;

@@ -33,7 +33,7 @@ export default function UsuariosScreen() {
 
   const carregar = useCallback(async () => {
     if (!supabase) return;
-    const { data, error } = await supabase.from('profiles').select('user_id,email,nome,avatar,papel,ativo,modulos,created_at').order('created_at');
+    const { data, error } = await supabase.from('profiles').select('user_id,email,nome,avatar,papel,ativo,modulos,created_at').is('filial_id', null).order('created_at'); // contas de filial: na tela da filial
     if (error) { setErro('Não foi possível carregar os usuários. Verifique a conexão.'); return; }
     setErro(''); setPerfis(data as Perfil[]);
   }, []);
@@ -208,7 +208,7 @@ export default function UsuariosScreen() {
                   <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.surfaceMuted, overflow: 'hidden' }}>
                     <View style={{ width: `${Math.min(100, (usadas / empresa.limite_contas) * 100)}%`, height: 8, borderRadius: 4, backgroundColor: cheio ? colors.danger : colors.accent }} />
                   </View>
-                  <Text style={t.caption}>Contas inativas não contam. Para mais contas ou módulos, fale com o EasyAudit para mudar o plano.</Text>
+                  <Text style={t.caption}>Contas inativas e acessos de filial não contam. Para mais contas ou módulos, fale com o EasyAudit para mudar o plano.</Text>
                 </Card>
               );
             })() : null}

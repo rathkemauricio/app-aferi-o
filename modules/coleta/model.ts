@@ -30,6 +30,8 @@ export type Inventario = SyncRow & {
   sem_barras?: number;
   /** Códigos de barra ligados a itens durante a coleta: { "<código de barras>": "<código interno>" }. */
   eans_extra?: Record<string, string>;
+  /** Quem abriu: a auditoria (só a auditoria vê) ou a própria filial pela conta da filial (a filial e a auditoria veem). O banco define. */
+  origem?: 'auditoria' | 'filial';
 };
 /** Base fixa de códigos de barra da filial (id = filial_id). Os itens ficam no servidor (ce_barras). */
 export type BaseBarras = SyncRow & { arquivo: string; itens: number; eans: number; importado_em: string | null };
@@ -376,10 +378,11 @@ export const fmtQ = (v: number | null | undefined) => (v === null || v === undef
 export const horaAgora = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 export const uid = (p: string) => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 /** Próximo código INV-AAAA-NNN do ano. */
-export function proximoCodigo(existentes: string[]) {
+/** Próximo código: INV-2026-001 (auditoria) ou CNT-2026-001 (contagem aberta pela filial). */
+export function proximoCodigo(existentes: string[], prefixo: 'INV' | 'CNT' = 'INV') {
   const ano = new Date().getFullYear();
-  const n = existentes.map(c => c.match(new RegExp(`^INV-${ano}-(\\d+)$`))?.[1]).filter(Boolean).map(Number);
-  return `INV-${ano}-${String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0')}`;
+  const n = existentes.map(c => c.match(new RegExp(`^${prefixo}-${ano}-(\\d+)$`))?.[1]).filter(Boolean).map(Number);
+  return `${prefixo}-${ano}-${String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0')}`;
 }
 /** Resultado em CSV (separador ;) para importar no Petros enquanto a API não está ligada. */
 export function resultadoCsv(inv: Inventario, linhas: LinhaRelatorio[]) {

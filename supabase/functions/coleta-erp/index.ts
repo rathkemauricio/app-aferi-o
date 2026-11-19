@@ -1,4 +1,4 @@
-// Carga do ERP no módulo Coleta (Contagem de Estoque) e envio do resultado.
+// Carga do ERP no módulo Contagens e envio do resultado.
 //
 // Chamadas do app (supabase.functions.invoke('coleta-erp', { body })), com o JWT do usuário:
 //   { acao: 'status' }                                                    → { petros: boolean } API do Petros configurada?
@@ -266,6 +266,17 @@ Deno.serve(async req => {
     // A leitura de PDF também serve às tabelas de arqueação da Medição de Tanques (pasta arqueacao/).
     const tabelaTanque = body.acao === 'extrair_pdf' && String(body.caminho ?? '').startsWith('arqueacao/');
     if (tabelaTanque ? !libera('tanques') : !libera('coleta')) return json(403, { erro: tabelaTanque ? 'O módulo Conferência de Estoque de Combustíveis não está liberado para esta conta.' : 'O módulo Contagens não está liberado para esta conta.' });
+    // Conta de filial: só carrega os saldos das contagens da própria filial. A base de códigos de barra é da
+    // empresa (só a auditoria grava) e o envio ao ERP também fica com a auditoria.
+    if (conta.filial) {
+      if (['gravar_barras', 'associar_ean', 'extrair_pdf', 'enviar_resultado'].includes(body.acao)) {
+        return json(403, { erro: 'A base de códigos de barra e o envio ao ERP são feitos pela auditoria. Peça ao administrador.' });
+      }
+      if (body.acao === 'carregar') {
+        const { data: i } = await admin.from('ce_inventarios').select('filial_id,origem').eq('id', String(body.inventario_id ?? '')).eq('empresa_id', emp).maybeSingle();
+        if (!i || i.filial_id !== conta.filial || i.origem !== 'filial') return json(403, { erro: 'Esta contagem não é da sua filial.' });
+      }
+    }
     switch (body.acao) {
       case 'status': return json(200, { ok: true, petros: emp === REDE_NEVOEIRO && petrosConfigurado() });
       case 'carregar': return await carregar(body, emp);

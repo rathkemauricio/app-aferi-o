@@ -15,6 +15,7 @@ import { createTypography, ESCALAS, pageMaxWidth, radius, space, type Tema, TEMA
 const LIMITES: [number, string][] = [[0, 'Nunca'], [50, 'Acima de 50'], [100, 'Acima de 100'], [500, 'Acima de 500']];
 const TIPOS: ['completo' | 'parcial', string][] = [['completo', 'Completo'], ['parcial', 'Parcial']];
 const LAYOUTS: ['simples' | 'completo', string][] = [['simples', 'Simples'], ['completo', 'Completo']];
+const MODOS_SEM_LEITOR: ['lista' | 'camera' | 'digitar', string][] = [['lista', 'Lista'], ['camera', 'Câmera'], ['digitar', 'Digitar']];
 
 /** Configurações personalizadas deste aparelho (celular ou navegador): aparência, coleta, inventário e atualizações. */
 export default function ConfiguracoesScreen() {
@@ -124,6 +125,8 @@ export default function ConfiguracoesScreen() {
           {escolha(LAYOUTS, pref.layoutColeta, v => setPreferencia('layoutColeta', v))}
           {linha('Sons', 'Correto ao reconhecer o item, salvo ao gravar e barrado quando não pode coletar.',
             <Switch value={pref.sons} onValueChange={v => { setPreferencia('sons', v); if (v) tocar('correto'); }} accessibilityLabel="Sons da coleta" />)}
+          {linha('Celular sem leitor', 'Nas filiais marcadas "sem leitor" (cadastro da filial): como contar neste aparelho. Dá para trocar na tela da contagem.', null)}
+          {escolha(MODOS_SEM_LEITOR, pref.modoSemLeitor, v => setPreferencia('modoSemLeitor', v))}
           {linha('Teclado na tela', 'Já ligado ao abrir a coleta. Desligue em coletores com leitor de código.',
             <Switch value={pref.tecladoColeta} onValueChange={v => setPreferencia('tecladoColeta', v)} accessibilityLabel="Teclado na tela ao abrir a coleta" />)}
           {linha('Confirmar quantidades grandes', 'Pergunta antes de salvar, para evitar erro de digitação.', null)}

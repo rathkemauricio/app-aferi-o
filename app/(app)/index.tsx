@@ -18,7 +18,7 @@ import { createTypography, radius, space, ThemeContext, type ThemeColors } from 
 // Tela inicial após o login: lista os módulos disponíveis. Não conhece detalhes de nenhum módulo.
 export default function ModuleLauncher() {
   const router = useRouter();
-  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa } = useAuth();
+  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa, filialConta } = useAuth();
   const { width } = useTela();
   const desktop = Platform.OS === 'web' && width >= 980;
   const { filiais, loaded: filiaisLoaded } = useFiliais();
@@ -40,7 +40,7 @@ export default function ModuleLauncher() {
     const hora = new Date().getHours();
     const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
     const indicadores = [
-      { label: 'Filiais cadastradas', valor: filiaisLoaded ? String(filiais.length) : '…', nota: 'Cadastro compartilhado' },
+      ...(filialConta ? [] : [{ label: 'Filiais cadastradas', valor: filiaisLoaded ? String(filiais.length) : '…', nota: 'Cadastro compartilhado' }]),
       { label: 'Módulos disponíveis', valor: String(modulos.length), nota: 'Acessos da sua conta' },
       ...(isAdmin && isSupabaseConfigured ? [{ label: 'Contas para aprovar', valor: String(pendentes), nota: 'Usuários aguardando acesso' }] : []),
     ];
@@ -78,6 +78,8 @@ export default function ModuleLauncher() {
             {modulos.map(m => <ModuleCard key={m.id} module={m} desktop onOpen={() => router.push(m.route)} />)}
           </View>
 
+          {/* Conta de filial: só Contagens (sem cadastros da rede). */}
+          {filialConta ? null : <>
           <View style={s.webSectionHead}>
             <View><Text style={s.webSectionTitle}>Cadastros da rede</Text><Text style={s.webSectionSub}>Informações compartilhadas entre os módulos.</Text></View>
           </View>
@@ -87,6 +89,7 @@ export default function ModuleLauncher() {
             <ListRow style={s.divided} icon={StorefrontIcon} tint="indigo" title="Bandeiras" subtitle="Identidade de cada posto" onPress={() => router.push('/bandeiras')} />
             {isAdmin && isSupabaseConfigured ? <ListRow style={s.divided} icon={UserCircleIcon} tint="slate" title="Usuários e permissões" subtitle="Acessos e módulos de cada conta" onPress={() => router.push('/usuarios')} /> : null}
           </Card>
+          </>}
         </ScrollView>
       </SafeAreaView>
     );
@@ -141,6 +144,7 @@ export default function ModuleLauncher() {
           </View>
         </View>
 
+        {filialConta ? null : <>
         <SectionHeader title="Cadastros" />
         <Card style={s.listCard}>
           <ListRow icon={StorefrontIcon} tint="sky" title="Filiais" subtitle="Cadastro único: dados, bandeira, croqui e equipamentos de cada filial" onPress={() => router.push('/filiais')} />
@@ -148,6 +152,7 @@ export default function ModuleLauncher() {
           <ListRow style={s.divided} icon={StorefrontIcon} tint="indigo" title="Bandeiras" subtitle="Bandeiras dos postos, com cores para o croqui" onPress={() => router.push('/bandeiras')} />
           {isAdmin && isSupabaseConfigured ? <ListRow style={s.divided} icon={UserCircleIcon} tint="slate" title="Usuários e permissões" subtitle="Liberar contas e escolher os módulos de cada uma" onPress={() => router.push('/usuarios')} /> : null}
         </Card>
+        </>}
         <Text style={[t.captionBg, { textAlign: 'center', marginTop: space.sm }]}>{rotuloVersao}</Text>
       </ScrollView>
     </SafeAreaView>

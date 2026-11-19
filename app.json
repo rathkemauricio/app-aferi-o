@@ -3,7 +3,7 @@
     "name": "EasyAudit",
     "slug": "postora",
     "scheme": "postora",
-    "version": "1.0.12",
+    "version": "1.0.13",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -19,7 +19,7 @@
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.mobiletestemauricio.postora",
-      "versionCode": 13
+      "versionCode": 14
     },
     "plugins": [
       "expo-router",
@@ -30,6 +30,13 @@
         {
           "photosPermission": "O EasyAudit usa suas fotos para definir a foto de perfil.",
           "cameraPermission": "O EasyAudit usa a câmera para tirar a foto de perfil."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O EasyAudit usa a câmera para ler o código de barras nas contagens e para a foto de perfil.",
+          "recordAudioAndroid": false
         }
       ],
       "./plugins/withCmakeObjectPathMax.js",
@@ -60,7 +67,7 @@
         "projectId": "2d77110f-dee3-4eaf-9221-68edcfd802e8"
       }
     },
-    "runtimeVersion": "1.0.12",
+    "runtimeVersion": "1.0.13",
     "updates": {
       "url": "https://u.expo.dev/2d77110f-dee3-4eaf-9221-68edcfd802e8",
       "enabled": true,

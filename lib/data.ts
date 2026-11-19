@@ -3,7 +3,13 @@ import { Collection, type SyncRow, useCollection } from './sync';
 
 // Dados compartilhados entre módulos. Cada módulo lê daqui; nenhum mantém cadastro próprio de filiais.
 
-export type Filial = SyncRow & { codigo: string; nome: string; cidade: string; uf: string; bandeira: string };
+export type Filial = SyncRow & {
+  codigo: string; nome: string; cidade: string; uf: string; bandeira: string;
+  /** E-mail de acesso da filial (conta que só usa Contagens, só as contagens da própria filial). */
+  email?: string | null;
+  /** Contagens desta filial: com leitor de código (coletor) ou celular sem leitor (câmera, digitação ou lista). Padrão: com leitor. */
+  contagem_leitor?: boolean;
+};
 export type DocTipo = 'equipamentos' | 'croqui' | 'dimensionamento';
 export type FilialDoc<P = unknown> = SyncRow & { filial_id: string; tipo: DocTipo; payload: P };
 export type ConfigRow<V = unknown> = SyncRow & { valor: V };

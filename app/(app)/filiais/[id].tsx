@@ -9,6 +9,7 @@ import { type CroquiDoc, PALETA_CLARA, PALETA_ESCURA, resumo } from '../../../mo
 import { ArrowLeftIcon, CheckIcon, DropIcon, GasPumpIcon, PencilSimpleIcon, StorefrontIcon, TrashIcon } from '../../../ui/icons';
 import { Button, Card, confirmAction, EmptyState, IconButton, notify, SectionHeader, StatusPill } from '../../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../../ui/theme';
+import { AcessoFilial } from '../../../components/AcessoFilial';
 import { FilialFields, type FilialForm, validarFilial } from '../../../components/FilialForm';
 
 type Pump = { id: string; number: string; nozzles: { id: string; number: string; fuel: string }[] };
@@ -91,6 +92,8 @@ export default function FilialScreen() {
           </Card>
 
           </>}
+
+          {isAdmin && podeAcessar('coleta') ? <AcessoFilial filial={filial} /> : null}
 
           {isAdmin && <Button title="Excluir filial" icon={TrashIcon} variant="danger" size="sm" onPress={excluir} />}
         </>}

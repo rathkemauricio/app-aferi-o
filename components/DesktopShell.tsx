@@ -107,7 +107,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { colors, mode, toggleTheme } = useContext(ThemeContext);
-  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa, dono } = useAuth();
+  const { userEmail, isAdmin, podeAcessar, nome, avatar, signOut, empresa, dono, filialConta } = useAuth();
   const reduz = useReducedMotion();
   const p = useMemo(() => paletaDa(colors, mode === 'dark'), [colors, mode]);
   const styles = useMemo(() => makeStyles(colors, p), [colors, p]);
@@ -142,11 +142,11 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   const grupos: { titulo: string; itens: LinkItem[] }[] = [
     { titulo: 'INÍCIO', itens: [{ label: 'Visão geral', route: '/', icon: HouseIcon }] },
     { titulo: 'OPERAÇÃO', itens: MODULES.filter(m => podeAcessar(m.id)).map(m => ({ label: m.curto ?? m.name, route: m.route, icon: m.icon })) },
-    { titulo: 'CADASTROS', itens: [
-      { label: 'Filiais', route: '/filiais', icon: StorefrontIcon },
-      { label: 'Combustíveis', route: '/combustiveis', icon: DropIcon },
-      { label: 'Bandeiras', route: '/bandeiras', icon: StorefrontIcon },
-    ] },
+    ...(filialConta ? [] : [{ titulo: 'CADASTROS', itens: [
+      { label: 'Filiais', route: '/filiais' as Href, icon: StorefrontIcon },
+      { label: 'Combustíveis', route: '/combustiveis' as Href, icon: DropIcon },
+      { label: 'Bandeiras', route: '/bandeiras' as Href, icon: StorefrontIcon },
+    ] }]),
     ...(isAdmin ? [{ titulo: 'ADMINISTRAÇÃO', itens: [{ label: 'Usuários e permissões', route: '/usuarios' as Href, icon: UserCircleIcon }] }] : []),
     ...(dono ? [{ titulo: 'PLATAFORMA', itens: [{ label: 'Empresas e planos', route: '/plataforma' as Href, icon: SquaresFourIcon }] }] : []),
     { titulo: 'PREFERÊNCIAS', itens: [{ label: 'Configurações', route: '/configuracoes', icon: GearIcon }] },
