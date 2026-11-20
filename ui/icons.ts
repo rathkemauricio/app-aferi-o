@@ -113,3 +113,5 @@ export const GraduationCapIcon: Icon = require('phosphor-react-native/src/icons/
 export const PlayCircleIcon: Icon = require('phosphor-react-native/src/icons/PlayCircle').PlayCircleIcon;
 export const CheckSquareOffsetIcon: Icon = require('phosphor-react-native/src/icons/CheckSquareOffset').CheckSquareOffsetIcon;
 export const ListMagnifyingGlassIcon: Icon = require('phosphor-react-native/src/icons/ListMagnifyingGlass').ListMagnifyingGlassIcon;
+export const ImageIcon: Icon = require('phosphor-react-native/src/icons/Image').ImageIcon;
+export const CubeIcon: Icon = require('phosphor-react-native/src/icons/Cube').CubeIcon;

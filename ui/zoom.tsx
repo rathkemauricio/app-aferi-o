@@ -14,7 +14,9 @@ export function Zoom({ children }: { children: ReactNode }) {
   const insets = useSafeAreaInsets();
   const [tam, setTam] = useState<{ w: number; h: number } | null>(null);
   const ajustados = useMemo(() => ({ top: insets.top / s, bottom: insets.bottom / s, left: insets.left / s, right: insets.right / s }), [insets, s]);
-  const interno = tam
+  // Em 100% não há transformação: o navegador desenha a página direto (camada escalada causava riscos e linhas
+  // fantasmas no Chrome com a escala do Windows).
+  const interno = tam && s !== 1
     ? (() => {
       const w = tam.w / s, h = tam.h / s;
       // Escala a partir do centro e desloca para o canto superior esquerdo (não depende de transformOrigin).

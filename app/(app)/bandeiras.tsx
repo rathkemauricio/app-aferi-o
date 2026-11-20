@@ -3,24 +3,16 @@ import { useContext, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
-import { type Bandeira, CORES_BANDEIRA, salvarBandeiras, useBandeiras } from '../../lib/bandeiras';
+import { type Bandeira, CORES_BANDEIRA, escolherLogo, salvarBandeiras, useBandeiras } from '../../lib/bandeiras';
+import { SeloBandeira } from '../../components/SeloBandeira';
 import { novoId, useFiliais } from '../../lib/data';
-import { ArrowLeftIcon, CheckIcon, PencilSimpleIcon, PlusIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, ImageIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from '../../ui/icons';
 import { Button, Card, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import { BotaoVoltar } from '../../ui/voltar';
 
-type Form = { id: string | null; nome: string; cor: string; corTexto: string };
+type Form = { id: string | null; nome: string; cor: string; corTexto: string; logo: string | null };
 
-/** Selo da bandeira, igual ao desenhado no croqui. */
-function Selo({ nome, cor, corTexto, pequeno = false }: { nome: string; cor: string; corTexto: string; pequeno?: boolean }) {
-  return (
-    <View style={{ backgroundColor: cor, borderRadius: 8, paddingHorizontal: pequeno ? 8 : 14, paddingVertical: pequeno ? 4 : 8, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)' }}>
-      {!pequeno ? <Text style={{ color: corTexto, fontSize: 9, opacity: 0.85, letterSpacing: 1 }}>BANDEIRA</Text> : null}
-      <Text style={{ color: corTexto, fontSize: pequeno ? 11 : 15, fontWeight: '800' }} numberOfLines={1}>{(nome || 'Nome').toUpperCase()}</Text>
-    </View>
-  );
-}
 
 /** Cadastro de bandeiras dos postos (usadas na filial e no croqui). */
 export default function BandeirasScreen() {
@@ -40,8 +32,8 @@ export default function BandeirasScreen() {
     if (!nome) { notify('Informe o nome da bandeira'); return; }
     if (lista.some(b => b.nome.trim().toLowerCase() === nome.toLowerCase() && b.id !== form.id)) { notify('Já existe uma bandeira com esse nome'); return; }
     salvarBandeiras(form.id
-      ? lista.map(b => (b.id === form.id ? { ...b, nome, cor: form.cor, corTexto: form.corTexto } : b))
-      : [...lista, { id: novoId('band'), nome, cor: form.cor, corTexto: form.corTexto, ativo: true }]);
+      ? lista.map(b => (b.id === form.id ? { ...b, nome, cor: form.cor, corTexto: form.corTexto, logo: form.logo } : b))
+      : [...lista, { id: novoId('band'), nome, cor: form.cor, corTexto: form.corTexto, logo: form.logo, ativo: true }]);
     setForm(null);
   };
   const alternar = (b: Bandeira) => salvarBandeiras(lista.map(x => (x.id === b.id ? { ...x, ativo: x.ativo === false } : x)));
@@ -63,21 +55,21 @@ export default function BandeirasScreen() {
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Bandeiras</Text>
           <Text style={t.caption}>Usadas no cadastro da filial e no croqui</Text>
         </View>
-        {isAdmin ? <Button title="Nova" icon={PlusIcon} size="sm" onPress={() => setForm({ id: null, nome: '', cor: '#0891b2', corTexto: '#ffffff' })} /> : null}
+        {isAdmin ? <Button title="Nova" icon={PlusIcon} size="sm" onPress={() => setForm({ id: null, nome: '', cor: '#0891b2', corTexto: '#ffffff', logo: null })} /> : null}
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }}>
         <SectionHeader title={`Bandeiras (${lista.length})`} />
         <Card style={{ padding: space.xs, gap: 0 }}>
           {lista.map((b, i) => (
             <View key={b.id} style={[{ flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: 12 }, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
-              <Selo nome={b.nome} cor={b.cor} corTexto={b.corTexto} pequeno />
+              <SeloBandeira b={b} pequeno />
               <View style={{ flex: 1 }}>
                 <Text style={[t.bodyStrong, b.ativo === false && { color: colors.textFaint }]} numberOfLines={1}>{b.nome}</Text>
                 <Text style={t.caption}>{emUso(b.id)} filial(is)</Text>
               </View>
               {b.ativo === false ? <StatusPill label="Desativada" /> : null}
               {isAdmin ? <>
-                <IconButton icon={PencilSimpleIcon} label={`Editar ${b.nome}`} onPress={() => setForm({ id: b.id, nome: b.nome, cor: b.cor, corTexto: b.corTexto })} />
+                <IconButton icon={PencilSimpleIcon} label={`Editar ${b.nome}`} onPress={() => setForm({ id: b.id, nome: b.nome, cor: b.cor, corTexto: b.corTexto, logo: b.logo ?? null })} />
                 <Button title={b.ativo === false ? 'Ativar' : 'Desativar'} variant="ghost" size="sm" onPress={() => alternar(b)} />
               </> : null}
             </View>
@@ -90,12 +82,20 @@ export default function BandeirasScreen() {
         <Sheet title={form.id ? 'Editar bandeira' : 'Nova bandeira'} onClose={() => setForm(null)}
           footer={<View style={{ flexDirection: 'row', gap: space.md }}><Button title="Cancelar" variant="secondary" style={{ flex: 1 }} onPress={() => setForm(null)} /><Button title="Salvar" icon={CheckIcon} style={{ flex: 1 }} onPress={salvar} /></View>}>
           <Field label="Nome" value={form.nome} onChangeText={v => setForm({ ...form, nome: v })} placeholder="Ex.: Rede Própria, Vibra, Raízen" maxLength={30} />
+          <Text style={t.label}>Logotipo da companhia</Text>
+          <Text style={t.caption}>Envie a imagem do logotipo oficial (PNG com fundo transparente fica melhor). Ele aparece no cadastro, nas filiais e no croqui. Sem logotipo, vale a etiqueta colorida abaixo.</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+            <Button title={form.logo ? 'Trocar logotipo' : 'Enviar logotipo'} icon={ImageIcon} variant="secondary" size="sm" onPress={() => {
+              void escolherLogo().then(logo => { if (logo) setForm(f => (f ? { ...f, logo } : f)); }).catch(e => notify('Logotipo', e instanceof Error ? e.message : String(e)));
+            }} />
+            {form.logo ? <Button title="Remover logotipo" icon={TrashIcon} variant="ghost" size="sm" onPress={() => setForm({ ...form, logo: null })} /> : null}
+          </View>
           <Text style={t.label}>Cor de fundo</Text>
           {corPicker(form.cor, cor => setForm({ ...form, cor }))}
           <Text style={t.label}>Cor do texto</Text>
           {corPicker(form.corTexto, corTexto => setForm({ ...form, corTexto }))}
           <Text style={t.label}>Prévia</Text>
-          <View style={{ alignItems: 'flex-start' }}><Selo nome={form.nome} cor={form.cor} corTexto={form.corTexto} /></View>
+          <View style={{ alignItems: 'flex-start' }}><SeloBandeira b={form} /></View>
         </Sheet>
       )}
     </SafeAreaView>

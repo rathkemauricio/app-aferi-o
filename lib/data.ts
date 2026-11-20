@@ -51,7 +51,7 @@ export function useConfig<V>(id: string, padrao: V): V {
 export const saveConfig = <V,>(id: string, valor: V) => configCol.put({ id, valor });
 
 /* ---------- Bandeiras (usadas no cadastro e no croqui) ---------- */
-export const BANDEIRAS: Record<string, { n: string; c: string; tc: string }> = {
+export const BANDEIRAS: Record<string, { n: string; c: string; tc: string; logo?: string }> = {
   branca: { n: 'Bandeira branca', c: '#6b7280', tc: '#fff' },
   petrobras: { n: 'Petrobras', c: '#009b3a', tc: '#ffd500' },
   shell: { n: 'Shell', c: '#ffd500', tc: '#dd1d21' },

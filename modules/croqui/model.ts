@@ -280,7 +280,10 @@ function shape(it: Item, bandeira: string) {
     case 't': { const f = combustivelDoTanque(it); return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${f ? T[f].c : c}" fill-opacity="0.85" stroke="#222" stroke-dasharray="5 4"/>`; }
     case 'm': {
       const f = BANDEIRAS[bandeira] ?? BANDEIRAS.branca;
-      return `<rect x="-4" y="${y + h * 0.45}" width="8" height="${h * 0.55}" fill="#555"/><rect x="${x}" y="${y}" width="${w}" height="${h * 0.5}" rx="5" fill="${f.c}" stroke="#000" stroke-opacity="0.4" stroke-width="1.5"/>` +
+      const poste = `<rect x="-4" y="${y + h * 0.45}" width="8" height="${h * 0.55}" fill="#555"/>`;
+      // Com logotipo cadastrado: placa branca com o logotipo da companhia.
+      if (f.logo) return poste + `<rect x="${x}" y="${y}" width="${w}" height="${h * 0.5}" rx="5" fill="#fff" stroke="#000" stroke-opacity="0.4" stroke-width="1.5"/><image href="${f.logo}" x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h * 0.5 - 6}" preserveAspectRatio="xMidYMid meet"/>`;
+      return poste + `<rect x="${x}" y="${y}" width="${w}" height="${h * 0.5}" rx="5" fill="${f.c}" stroke="#000" stroke-opacity="0.4" stroke-width="1.5"/>` +
         [0, 1, 2].map(n => `<rect x="${x + 6}" y="${y + 8 + n * 11}" width="${w - 12}" height="6" rx="2" fill="${f.tc}" opacity="0.85"/>`).join('');
     }
     case 'a': return `<path d="M${x} ${y} H${w / 2 - 14} L${w / 2} 0 L${w / 2 - 14} ${h / 2} H${x} Z" fill="${c}" ${s}/>`;
@@ -377,7 +380,9 @@ export function croquiSvg(items: Item[], opts: { bandeira: string; mostrarNomes:
       used.map((k, n) => `<rect x="22" y="${40 + n * 18}" width="12" height="12" rx="3" fill="${T[k].c}"/><text x="42" y="${50 + n * 18}" font-size="12" fill="${p.text}">${esc(T[k].n)}</text>`).join('') + `</g>`;
   }
   const f = BANDEIRAS[opts.bandeira] ?? BANDEIRAS.branca, bw = Math.max(130, f.n.length * 10 + 30);
-  h += `<g><rect x="${988 - bw}" y="12" width="${bw}" height="44" rx="8" fill="${f.c}" stroke="#000" stroke-opacity="0.35"/><text x="${988 - bw / 2}" y="28" text-anchor="middle" font-size="10" fill="${f.tc}" opacity="0.85">BANDEIRA</text><text x="${988 - bw / 2}" y="46" text-anchor="middle" font-size="16" font-weight="800" fill="${f.tc}">${esc(f.n.toUpperCase())}</text></g>`;
+  h += f.logo
+    ? `<g><rect x="858" y="12" width="130" height="52" rx="8" fill="#fff" stroke="#000" stroke-opacity="0.25"/><image href="${f.logo}" x="864" y="17" width="118" height="42" preserveAspectRatio="xMidYMid meet"/></g>`
+    : `<g><rect x="${988 - bw}" y="12" width="${bw}" height="44" rx="8" fill="${f.c}" stroke="#000" stroke-opacity="0.35"/><text x="${988 - bw / 2}" y="28" text-anchor="middle" font-size="10" fill="${f.tc}" opacity="0.85">BANDEIRA</text><text x="${988 - bw / 2}" y="46" text-anchor="middle" font-size="16" font-weight="800" fill="${f.tc}">${esc(f.n.toUpperCase())}</text></g>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VW} ${VH}">${h}</svg>`;
 }
 
@@ -393,4 +398,40 @@ export function lerCroquiAntigo(json: string): { nome: string; bandeira: string;
       rot: Number(i.rot) || 0, label: String(i.label ?? ''), ...(i.bicos ? { bicos: Number(i.bicos) } : {}), ...(i.fuels ? { fuels: i.fuels } : {}),
     })),
   }));
+}
+
+/* =====================================================================
+   Espelho dos tanques cadastrados (Conferência de Estoque → Tanques da filial / PDF da filial)
+   ===================================================================== */
+export type TanqueCadastro = { id: string; numero: string; combustivel: string; capacidade?: number | null };
+const numeroDoTanque = (label: string) => String(label ?? '').trim().replace(/^tanque\s*/i, '').trim().toLowerCase();
+
+/**
+ * Faz os tanques do croqui espelharem o cadastro da filial: cada tanque cadastrado tem um item (número e combustível
+ * do cadastro; a posição continua a do croqui). Tanques já desenhados são reconhecidos pelo vínculo (`ref`) ou pelo
+ * número. Os que faltam entram numa fila embaixo do desenho, para arrastar ao lugar certo. Nada é apagado.
+ * (As ligações tanque → bico ficam para depois.)
+ */
+export function espelharTanques(items: Item[], tanques: TanqueCadastro[]): { items: Item[]; mudou: boolean } {
+  const usados = new Set<string>();
+  let mudou = false;
+  const out = items.map(it => {
+    if (T[it.type]?.k !== 't') return it;
+    const livres = tanques.filter(t => !usados.has(t.id));
+    const tq = (it.ref ? livres.find(t => t.id === it.ref) : undefined) ?? livres.find(t => t.numero.trim().toLowerCase() === numeroDoTanque(it.label));
+    if (!tq) return it;
+    usados.add(tq.id);
+    const fuels = tq.combustivel && T[tq.combustivel] ? [tq.combustivel] : it.fuels;
+    const novo: Item = { ...it, ref: tq.id, label: `Tanque ${tq.numero.trim()}`, ...(fuels ? { fuels } : {}) };
+    if (JSON.stringify([novo.ref, novo.label, novo.fuels ?? null]) !== JSON.stringify([it.ref, it.label, it.fuels ?? null])) mudou = true;
+    return novo;
+  });
+  const faltam = tanques.filter(t => !usados.has(t.id)).sort((a, b) => a.numero.localeCompare(b.numero, 'pt-BR', { numeric: true }));
+  faltam.forEach((t, i) => {
+    out.push({
+      id: novoItemId(), type: 'tanque', x: 90 + (i % 7) * 125, y: VH - 40 - Math.floor(i / 7) * 54, w: 110, h: 44, rot: 0,
+      label: `Tanque ${t.numero.trim()}`, ref: t.id, ...(t.combustivel && T[t.combustivel] ? { fuels: [t.combustivel] } : {}),
+    });
+  });
+  return { items: out, mudou: mudou || faltam.length > 0 };
 }

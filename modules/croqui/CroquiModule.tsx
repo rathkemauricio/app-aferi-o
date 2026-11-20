@@ -8,20 +8,23 @@ import { docsCol, filiaisCol, saveFilialDoc, useFiliais, useFilialDoc } from '..
 import { isSyncEnabled, useCollection } from '../../lib/sync';
 import { imprimirHtml } from '../../lib/util';
 import {
-  ArrowClockwiseIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowsInIcon, ArrowsOutIcon, ArrowUpIcon, CheckIcon, CopySimpleIcon, DownloadSimpleIcon, DropIcon, FilePdfIcon,
+  ArrowClockwiseIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowsInIcon, ArrowsOutIcon, ArrowUpIcon, CheckIcon, CopySimpleIcon, CubeIcon, DownloadSimpleIcon, DropIcon, FilePdfIcon, MapTrifoldIcon,
   GasPumpIcon, GridFourIcon, MagnifyingGlassIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, PencilSimpleIcon, ResetIcon, StorefrontIcon, TrashIcon, WarningCircleIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { BotaoVoltar } from '../../ui/voltar';
 import { CroquiCanvas, IconeElemento, type Movimento, useCatalogoCroqui } from './Canvas';
+import { Croqui3D } from './Croqui3D';
+import type { Vista } from './iso';
+import { tanquesCol } from '../tanques/cadastro';
 import {
-  type BombaCadastro, clamp, croquiSvg, type CroquiDoc, elementosDoGrupo, espelharBombas, filhosDaIlha, fuelOf, girarPonto, GRUPOS, iconSvg, type Item, lerCroquiAntigo, modeloBasico,
+  type BombaCadastro, clamp, croquiSvg, type CroquiDoc, elementosDoGrupo, espelharBombas, espelharTanques, filhosDaIlha, fuelOf, girarPonto, GRUPOS, iconSvg, type Item, lerCroquiAntigo, modeloBasico,
   nBicos, novoItem, novoItemId, PALETA_CLARA, PALETA_ESCURA, resumo, T, tipoDoCombustivel, tiposBomba, VH, VW,
 } from './model';
 
-/** Bomba que vem do cadastro (Aferições → Filiais): no croqui só muda de posição. */
-const espelhada = (i: Item) => T[i.type]?.k === 'b' && !!i.ref;
+/** Bomba ou tanque que vem do cadastro (Aferições → Filiais; Conferência de Estoque → Tanques): no croqui só muda de posição. */
+const espelhada = (i: Item) => (T[i.type]?.k === 'b' || T[i.type]?.k === 't') && !!i.ref;
 
 export default function CroquiModule() {
   const router = useRouter();
@@ -43,7 +46,15 @@ export default function CroquiModule() {
   // Só grava o espelho depois de sincronizar: num aparelho novo, o croqui do servidor ainda pode estar chegando.
   const podeGravarEspelho = docsSnap.loaded && (!isSyncEnabled() || docsCol.pulledOnce);
   const tipo = useCallback((nome: string) => tipoDoCombustivel(nome, catalogo), [catalogo]);
-  const espelho = useMemo(() => espelharBombas(doc?.payload?.items ?? [], bombas, tipo), [doc?.payload, bombas, tipo]);
+  // Tanques cadastrados da filial (Conferência de Estoque) também entram no croqui; as ligações aos bicos ficam para depois.
+  const tqSnap = useCollection(tanquesCol);
+  useEffect(() => { void tanquesCol.sync(); }, []);
+  const tanques = useMemo(() => tqSnap.list.filter(x => x.filial_id === filial?.id).map(x => ({ id: x.id, numero: x.numero, combustivel: x.combustivel, capacidade: x.capacidade ?? null })), [tqSnap.list, filial?.id]);
+  const espelho = useMemo(() => {
+    const b = espelharBombas(doc?.payload?.items ?? [], bombas, tipo);
+    const tq = espelharTanques(b.items, tanques);
+    return { items: tq.items, mudou: b.mudou || tq.mudou, semCadastro: b.semCadastro };
+  }, [doc?.payload, bombas, tipo, tanques]);
 
   const [editando, setEditando] = useState(params.editar === '1');
   const [items, setItems] = useState<Item[]>([]);
@@ -51,6 +62,8 @@ export default function CroquiModule() {
   const [nomes, setNomes] = useState(true);
   const [arrastando, setArrastando] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [ver3d, setVer3d] = useState(true); // visualização em 3D (maquete); editar é sempre na planta
+  const [giro, setGiro] = useState<Vista>(0);
   const [grade, setGrade] = useState(true);   // encaixe de 10 em 10; desligado = posição livre
   const [telaCheia, setTelaCheia] = useState(false);
   const [escolherFilial, setEscolherFilial] = useState(!params.filial);
@@ -172,6 +185,8 @@ export default function CroquiModule() {
             <Text style={[t.label, { minWidth: 40, textAlign: 'center' }]}>{Math.round(zoom * 100)}%</Text>
             <IconButton icon={MagnifyingGlassPlusIcon} label="Aumentar zoom" onPress={() => mudarZoom(1)} />
             <IconButton icon={ArrowsOutIcon} label="Tela cheia" onPress={() => setTelaCheia(true)} />
+            {!editando ? <Button title={ver3d ? 'Planta' : '3D'} icon={ver3d ? MapTrifoldIcon : CubeIcon} variant="secondary" size="sm" onPress={() => setVer3d(v => !v)} /> : null}
+            {!editando && ver3d ? <IconButton icon={ArrowClockwiseIcon} label="Girar a vista" onPress={() => setGiro(g => ((g + 1) % 4) as Vista)} /> : null}
             <Button title={nomes ? 'Ocultar nomes' : 'Mostrar nomes'} variant="ghost" size="sm" onPress={() => setNomes(v => !v)} />
             {editando
               ? <Button title="Concluir" icon={CheckIcon} size="sm" onPress={() => { setEditando(false); setSel(null); }} />
@@ -194,8 +209,10 @@ export default function CroquiModule() {
               text="Cadastre as bombas e os bicos da filial em Aferições → Filiais: o croqui é montado com elas automaticamente. Ou entre no modo de edição para desenhar o terreno."
               action={{ label: 'Começar a desenhar', icon: PencilSimpleIcon, onPress: () => setEditando(true) }} />
           ) : (
-            <CroquiCanvas items={items} bandeira={filial.bandeira} mostrarNomes={nomes} paleta={paleta} editavel={editando} selecionado={sel}
-              zoom={zoom} passo={passo} onSelect={setSel} onDragChange={setArrastando} onMove={aplicarMovimentos} />
+            !editando && ver3d
+              ? <Croqui3D items={items} bandeira={filial.bandeira} mostrarNomes={nomes} vista={giro} fundo={paleta.ground} zoom={zoom} />
+              : <CroquiCanvas items={items} bandeira={filial.bandeira} mostrarNomes={nomes} paleta={paleta} editavel={editando} selecionado={sel}
+                zoom={zoom} passo={passo} onSelect={setSel} onDragChange={setArrastando} onMove={aplicarMovimentos} />
           )}
 
           {editando && <>
@@ -211,7 +228,15 @@ export default function CroquiModule() {
 
             {item ? (
               <Card>
-                {espelhada(item) ? <>
+                {espelhada(item) && T[item.type]?.k === 't' ? <>
+                  <View style={s.row}>
+                    <DropIcon size={18} color={colors.accentText} weight="duotone" />
+                    <Text style={[t.section, s.flex]}>{item.label}</Text>
+                    <StatusPill label="Do cadastro" tone="accent" />
+                  </View>
+                  {item.fuels?.[0] && T[item.fuels[0]] ? <View style={s.row}><View style={[s.swatch, { backgroundColor: T[item.fuels[0]].c }]} /><Text style={t.body}>{T[item.fuels[0]].n}</Text></View> : null}
+                  <Text style={t.caption}>Número e combustível vêm do cadastro de tanques da filial (Conferência de Estoque → Tanques da filial, ou o PDF da filial no painel web). Aqui você só posiciona e gira o tanque.</Text>
+                </> : espelhada(item) ? <>
                   <View style={s.row}>
                     <GasPumpIcon size={18} color={colors.accentText} weight="duotone" />
                     <Text style={[t.section, s.flex]}>Bomba {item.label}</Text>
@@ -234,7 +259,7 @@ export default function CroquiModule() {
                     <Field estavel label="Altura" style={s.flex} keyboardType="numeric" value={String(item.h)} onChangeText={v => patch(item.id, { h: Math.max(10, Math.min(640, Number(v) || 10)) })} />
                   </View>
                 </>}
-                {item.type === 'tanque' && (
+                {item.type === 'tanque' && !item.ref && (
                   <View style={s.group}>
                     <Text style={t.label}>Combustível do tanque</Text>
                     <View style={s.fuels}>
@@ -298,7 +323,7 @@ export default function CroquiModule() {
             <View style={s.row}>
               <GasPumpIcon size={16} color={colors.textMuted} />
               <Text style={[t.caption, s.flex]}>
-                As bombas vêm do cadastro da filial (Aferições → Filiais), com número, bicos e combustíveis. {bombas.length ? `${bombas.length} bomba(s) cadastrada(s): arraste cada uma para o lugar certo.` : 'Esta filial ainda não tem bombas cadastradas.'}
+                As bombas e os bicos vêm do cadastro da filial (Aferições → Filiais) e os tanques, do cadastro de tanques (Conferência de Estoque). {bombas.length ? `${bombas.length} bomba(s)` : 'Nenhuma bomba'} e {tanques.length ? `${tanques.length} tanque(s)` : 'nenhum tanque'} cadastrados: arraste cada um para o lugar certo.
               </Text>
             </View>
             {GRUPOS.filter(g => g !== 'Bombas').map(g => (
@@ -353,8 +378,10 @@ export default function CroquiModule() {
               <IconButton icon={MagnifyingGlassPlusIcon} label="Aumentar zoom" onPress={() => mudarZoom(1)} />
             </View>
             <ScrollView contentContainerStyle={{ padding: space.sm }} scrollEnabled={!arrastando}>
-              <CroquiCanvas items={items} bandeira={filial.bandeira} mostrarNomes={nomes} paleta={paleta} editavel={editando} selecionado={sel}
-                zoom={zoom} passo={passo} onSelect={setSel} onDragChange={setArrastando} onMove={aplicarMovimentos} />
+              {!editando && ver3d
+                ? <Croqui3D items={items} bandeira={filial.bandeira} mostrarNomes={nomes} vista={giro} fundo={paleta.ground} zoom={zoom} />
+                : <CroquiCanvas items={items} bandeira={filial.bandeira} mostrarNomes={nomes} paleta={paleta} editavel={editando} selecionado={sel}
+                  zoom={zoom} passo={passo} onSelect={setSel} onDragChange={setArrastando} onMove={aplicarMovimentos} />}
             </ScrollView>
             {editando && item ? (
               <View style={s.barraItem}>
