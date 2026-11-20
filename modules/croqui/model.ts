@@ -50,6 +50,8 @@ export type Item = {
   id: string; type: string; x: number; y: number; w: number; h: number; rot: number; label: string;
   /** Bomba: combustível de cada bico. Tanque: fuels[0] = combustível do tanque (usado pela Medição de Tanques). */
   bicos?: number; fuels?: string[]; ref?: string; bicosNum?: string[];
+  /** Bomba: número do tanque de onde cada bico puxa (do cadastro; '' quando não informado). */
+  bicosTanque?: string[];
 };
 /** Combustível do tanque desenhado no croqui (id do catálogo), ou '' se ainda não foi escolhido. */
 export const combustivelDoTanque = (it: Item) => (it.fuels?.[0] && T[it.fuels[0]] ? it.fuels[0] : '');
@@ -93,7 +95,7 @@ export const modeloBasico = (): Item[] => layoutInicial([], () => 'bomba_gc');
 /* =====================================================================
    Espelho do cadastro de bombas (Aferições → Filiais)
    ===================================================================== */
-export type BombaCadastro = { id: string; number: string; nozzles: { id: string; number: string; fuel: string }[] };
+export type BombaCadastro = { id: string; number: string; nozzles: { id: string; number: string; fuel: string; tanque?: string }[] };
 
 const semAcento = (s: string) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
@@ -126,9 +128,10 @@ function atributosDaBomba(b: BombaCadastro, tipo: (nome: string) => string) {
     bicos: Math.max(1, bicos.length),
     fuels: fuels.length ? fuels : undefined,
     bicosNum: bicos.length ? bicos.map(n => String(n.number).trim()) : undefined,
+    bicosTanque: bicos.some(n => (n.tanque ?? '').trim()) ? bicos.map(n => (n.tanque ?? '').trim()) : undefined,
   };
 }
-const chaveEspelho = (it: Partial<Item>) => JSON.stringify([it.ref, it.label, it.type, it.bicos ?? 1, it.fuels ?? null, it.bicosNum ?? null]);
+const chaveEspelho = (it: Partial<Item>) => JSON.stringify([it.ref, it.label, it.type, it.bicos ?? 1, it.fuels ?? null, it.bicosNum ?? null, it.bicosTanque ?? null]);
 
 // Bombas espelhadas são um pouco maiores que as da paleta, para caber o número de cada bico.
 const BOMBA_W = 36, BOMBA_H = 54;
@@ -404,13 +407,20 @@ export function lerCroquiAntigo(json: string): { nome: string; bandeira: string;
    Espelho dos tanques cadastrados (Conferência de Estoque → Tanques da filial / PDF da filial)
    ===================================================================== */
 export type TanqueCadastro = { id: string; numero: string; combustivel: string; capacidade?: number | null };
-const numeroDoTanque = (label: string) => String(label ?? '').trim().replace(/^tanque\s*/i, '').trim().toLowerCase();
+export const numeroDoTanque = (label: string) => String(label ?? '').trim().replace(/^tanque\s*/i, '').trim().toLowerCase();
+/** O número do tanque do bico ("1", "01", "Tanque 1") é o deste tanque do croqui? */
+export function mesmoTanque(tanqueDoBico: string, it: Item) {
+  const a = numeroDoTanque(tanqueDoBico), b = numeroDoTanque(it.label);
+  if (!a || !b) return false;
+  const na = Number(a), nb = Number(b);
+  return Number.isFinite(na) && Number.isFinite(nb) ? na === nb : a === b;
+}
 
 /**
  * Faz os tanques do croqui espelharem o cadastro da filial: cada tanque cadastrado tem um item (número e combustível
  * do cadastro; a posição continua a do croqui). Tanques já desenhados são reconhecidos pelo vínculo (`ref`) ou pelo
  * número. Os que faltam entram numa fila embaixo do desenho, para arrastar ao lugar certo. Nada é apagado.
- * (As ligações tanque → bico ficam para depois.)
+ * As ligações tanque → bico vêm do cadastro de bicos (`bicosTanque`) e aparecem no 3D (subsolo.ts).
  */
 export function espelharTanques(items: Item[], tanques: TanqueCadastro[]): { items: Item[]; mudou: boolean } {
   const usados = new Set<string>();

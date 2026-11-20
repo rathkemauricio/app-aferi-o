@@ -46,7 +46,7 @@ export default function CroquiModule() {
   // Só grava o espelho depois de sincronizar: num aparelho novo, o croqui do servidor ainda pode estar chegando.
   const podeGravarEspelho = docsSnap.loaded && (!isSyncEnabled() || docsCol.pulledOnce);
   const tipo = useCallback((nome: string) => tipoDoCombustivel(nome, catalogo), [catalogo]);
-  // Tanques cadastrados da filial (Conferência de Estoque) também entram no croqui; as ligações aos bicos ficam para depois.
+  // Tanques cadastrados da filial (Conferência de Estoque) também entram no croqui; as ligações aos bicos vêm do cadastro de bicos (3D).
   const tqSnap = useCollection(tanquesCol);
   useEffect(() => { void tanquesCol.sync(); }, []);
   const tanques = useMemo(() => tqSnap.list.filter(x => x.filial_id === filial?.id).map(x => ({ id: x.id, numero: x.numero, combustivel: x.combustivel, capacidade: x.capacidade ?? null })), [tqSnap.list, filial?.id]);
