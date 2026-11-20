@@ -32,6 +32,9 @@ export type Inventario = SyncRow & {
   eans_extra?: Record<string, string>;
   /** Quem abriu: a auditoria (só a auditoria vê) ou a própria filial pela conta da filial (a filial e a auditoria veem). O banco define. */
   origem?: 'auditoria' | 'filial';
+  /** Quem abriu o inventário e quando (o banco grava; não muda depois). */
+  criado_por_nome?: string | null;
+  criado_em?: string | null;
 };
 /** Base fixa de códigos de barra da filial (id = filial_id). Os itens ficam no servidor (ce_barras). */
 export type BaseBarras = SyncRow & { arquivo: string; itens: number; eans: number; importado_em: string | null };
@@ -39,6 +42,9 @@ export type Contagem = SyncRow & {
   inventario_id: string; nome: string; classe: ClasseContagem; categorias: string[]; rodadas: StatusRodada[];
   /** Pausada: não recebe leituras até ser retomada. */
   pausada?: boolean;
+  /** Quem criou a contagem e quando (o banco grava; não muda depois). */
+  criado_por_nome?: string | null;
+  criado_em?: string | null;
 };
 /** Soma das leituras de um item numa rodada, feitas por um aparelho. `hist`: [hora, quantidade], mais recente primeiro. */
 export type Coleta = SyncRow & {

@@ -139,7 +139,7 @@ export function htmlDoInventario(o: {
   const corT = (v: number) => cor(v).trim();
   const t = cons.total;
   const titulo = `${soDela ? `Relatório da contagem ${soDela.nome}` : 'Relatório do inventário'} · ${inv.codigo}`;
-  const sub = `${o.filialNome}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${o.usuario ? ` · Responsável: ${o.usuario}` : ''}`;
+  const sub = `${o.filialNome}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${o.usuario ? ` · Responsável: ${o.usuario}` : ''}`;
   const divergentes: LinhaDivergente[] = problemas.map(l => ({ ...l, situacao: l.status === 'divergente' ? (l.diferenca < 0 ? 'Falta' : 'Sobra') : 'Não encontrado', contagem: l.contagem }));
   if (o.soDivergencias) return htmlDivergencias({ titulo: `Itens divergentes · ${soDela ? soDela.nome : 'inventário'} · ${inv.codigo}`, sub, divergentes });
   return htmlRelatorioInventario({

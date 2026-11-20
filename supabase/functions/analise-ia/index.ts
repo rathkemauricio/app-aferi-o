@@ -9,7 +9,7 @@
 // gemini-3.8-flash). Só modelos com cota gratuita na reserva (nov/2026: 3.8 Flash, 3.6 Flash, 3.5 Flash-Lite,
 // 2.5 Flash — este é desativado em 1/12/2026). gemini-4-argon/carbon e os "pro" são só pagos.
 // Publicar: npx supabase functions deploy analise-ia --no-verify-jwt
-import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
+import { admin, entrarComoAtor, registrarAcao } from '../_shared/ator.ts';
 import { contaDe } from '../_shared/conta.ts';
 
 const cors = {
@@ -18,7 +18,6 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const CHAVE = Deno.env.get('GEMINI_API_KEY') ?? '';
 // Se o modelo não existir para a chave (404) ou estiver sem cota/créditos (429), tenta o seguinte.
@@ -114,6 +113,7 @@ Deno.serve(async req => {
   try {
     const conta = await contaDe(admin, req);
     if (!conta) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
+    entrarComoAtor(conta.user.id); // rastreabilidade: as gravações ficam em nome de quem pediu
     if (!conta.libera('tempos') || !conta.empresa) return json(403, { erro: 'O módulo Tempos e Movimentos não está liberado para esta conta.' });
     const u = { user: conta.user };
     const p = conta.perfil!;

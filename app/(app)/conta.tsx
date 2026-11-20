@@ -9,7 +9,7 @@ import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
 import { rotuloVersao } from '../../lib/versao';
-import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, GearIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SquaresFourIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, GearIcon, ListMagnifyingGlassIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SquaresFourIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 
@@ -106,6 +106,7 @@ export default function ContaScreen() {
         <Card style={{ padding: space.xs, gap: 0 }}>
           {isAdmin && isSupabaseConfigured ? <ListRow icon={UserCircleIcon} tint="indigo" title="Usuários e permissões" subtitle="Aprovar contas, papel e módulos de cada uma" onPress={() => router.push('/usuarios')} /> : null}
           {dono ? <ListRow icon={SquaresFourIcon} tint="sky" title="Empresas e planos" subtitle="Clientes do EasyAudit, liberação e planos" onPress={() => router.push('/plataforma')} /> : null}
+          {dono ? <ListRow icon={ListMagnifyingGlassIcon} tint="slate" title="Rastreabilidade" subtitle="O que cada conta fez no sistema" onPress={() => router.push('/rastro')} /> : null}
           <ListRow style={isAdmin && isSupabaseConfigured && divisor} icon={GearIcon} tint="slate" title="Configurações" subtitle="Tema, tamanho das letras, sons, teclado, padrões e atualizações" onPress={() => router.push('/configuracoes')} />
           <ListRow style={divisor} icon={mode === 'dark' ? SunIcon : MoonIcon} tint="slate" title={mode === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onPress={toggleTheme} />
         </Card>

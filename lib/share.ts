@@ -1,7 +1,9 @@
+import { registrarEvento } from './rastro';
 import { Platform, Share } from 'react-native';
 
 /** Exporta um texto como arquivo: download no navegador, folha de compartilhamento no celular. */
 export async function shareText(filename: string, content: string, mime: string) {
+  registrarEvento('exportou arquivo', filename); // rastreabilidade
   if (Platform.OS === 'web') {
     const blob = new Blob([mime.includes('csv') ? '﻿' + content : content], { type: mime });
     const url = URL.createObjectURL(blob);

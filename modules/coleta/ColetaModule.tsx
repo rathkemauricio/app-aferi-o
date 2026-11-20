@@ -315,6 +315,7 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
         <Text style={[k.mono, { color: c.textMuted, flex: 1 }]}>{inv.codigo}</Text>
         {inv.origem === 'filial' && !filialConta ? <Pilula texto="Aberto pela filial" tom="neutro" icone={StorefrontIcon} /> : null}
       </View>
+      {inv.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Aberto por <Text style={[k.b, { color: c.text }]}>{inv.criado_por_nome}</Text>{inv.criado_em ? ` · ${dataHora(inv.criado_em)}` : ''}</Text> : null}
       <Text style={[k.cTxt, { color: c.text }]}>{inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · {nCont} contage{nCont === 1 ? 'm' : 'ns'}</Text>
       <Barra pct={enc ? 1 : prog?.pct ?? 0} />
       <Text style={[k.cap, { color: c.textMuted }]}>
@@ -648,6 +649,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
             <Cartao onPress={() => nav.ir({ n: 'contagem', id: ct.id, aba: 'itens' })}>
               <Text style={[k.cTit, { color: c.text }]}>{ct.nome}</Text>
               <Text style={[k.cTxt, { color: c.textMuted }]}>{ROTULO_CLASSE[ct.classe]} · {ct.classe === 'completa' ? 'todas as categorias' : `${ct.categorias.length} categoria${ct.categorias.length === 1 ? '' : 's'}`} · {Math.round(pc * 100)}%</Text>
+              {ct.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Criada por <Text style={[k.b, { color: c.text }]}>{ct.criado_por_nome}</Text>{ct.criado_em ? ` · ${dataHora(ct.criado_em)}` : ''}</Text> : null}
               <View style={[k.linha, { flexWrap: 'wrap' }]}>{ct.pausada ? <Pilula texto="Pausada" tom="alerta" /> : null}{ct.rodadas.map((r, i) => <Pilula key={i} texto={`${i + 1}ª ${ROTULO_RODADA[r]}`} tom={tomRodada(r)} icone={r === 'andamento' && !ct.pausada ? HourglassIcon : undefined} />)}</View>
               {feita && !enc ? (
                 <View style={k.linha}>
@@ -679,6 +681,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
             </View>
           </Cartao>
         ) : null}
+        {inv.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]}>Inventário aberto por <Text style={[k.b, { color: c.text }]}>{inv.criado_por_nome}</Text>{inv.criado_em ? ` em ${dataHora(inv.criado_em)}` : ''}.</Text> : null}
         <Text style={[k.cap, { color: c.textMuted }]}>Saldo do Petros de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
       </Corpo>
     </View>
@@ -1036,7 +1039,7 @@ function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos
     const divergentes: LinhaDivergente[] = [
       ...d.faltas.map(l => ({ ...l, situacao: 'Falta' })), ...d.sobras.map(l => ({ ...l, situacao: 'Sobra' })), ...d.naoColetados.map(l => ({ ...l, situacao: 'Não coletado' })),
     ];
-    const sub = `${filial}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
+    const sub = `${filial}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
     const html = htmlDivergencias({ titulo: `Itens divergentes · ${ct.nome}`, sub, divergentes, nota: 'Vale a última quantidade coletada de cada item; item não coletado entra como falta.' });
     try { await imprimirHtml(html, `Divergências ${ct.nome}`, true); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };

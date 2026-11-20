@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import type { Filial } from './data';
+import { registrarEvento } from './rastro';
 
 /* ---------- Ligação de nomes antigos ao cadastro único de filiais ----------
    Os sistemas antigos identificam a unidade pelo número: "NEVOEIRO 01", "2 Pista (Santa Cruz)", "Filial 10".
@@ -115,6 +116,7 @@ async function imprimirNaWeb(html: string, titulo: string, paisagem: boolean) {
 
 /** Imprime / gera o PDF de um HTML: diálogo de impressão no navegador, PDF A4 compartilhado no celular. */
 export async function imprimirHtml(bruto: string, titulo: string, paisagem = false) {
+  registrarEvento('exportou PDF', titulo); // rastreabilidade: quem gerou qual relatório
   const html = normalizarImpressao(bruto, paisagem);
   if (Platform.OS === 'web') { await imprimirNaWeb(html, titulo, paisagem); return; }
   const file = await Print.printToFileAsync({ html, margins: { left: 0, right: 0, top: 0, bottom: 0 }, ...(paisagem ? A4.paisagem : A4.retrato) });

@@ -18,7 +18,7 @@
 // Publicar: npx supabase functions deploy usuarios --no-verify-jwt
 // Secret opcional: APP_URL (endereço do EasyAudit na web) para o link do convite; sem ele, usa o endereço de onde
 // o administrador chamou (painel web).
-import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
+import { admin, entrarComoAtor, registrarAcao } from '../_shared/ator.ts';
 import { contaDe, type Empresa } from '../_shared/conta.ts';
 import { APP_URL, EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
 
@@ -28,7 +28,6 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const emailEmUso = (error: unknown) => /already|registered|exists/i.test(String((error as { message?: string })?.message ?? '')) || (error as { code?: string } | null)?.code === 'email_exists';
 const limiteAtingido = (error: unknown) => /limite de contas/i.test(String((error as { message?: string })?.message ?? ''));
@@ -317,6 +316,7 @@ Deno.serve(async req => {
   try {
     const conta = await contaDe(admin, req);
     if (!conta) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
+    entrarComoAtor(conta.user.id); // rastreabilidade: as gravações ficam em nome de quem pediu
     if (!conta.admin || !conta.empresa) return json(403, { erro: 'Somente o administrador da empresa cadastra usuários.' });
     const ctx: Ctx = {
       empresa: conta.empresa, eu: conta.user.id,
@@ -329,7 +329,14 @@ Deno.serve(async req => {
     }
     switch (body.acao) {
       case 'convidar': return await convidar(body, ctx);
-      case 'reenviar': return await reenviar(body, ctx);
+      case 'reenviar': {
+        const r = await reenviar(body, ctx);
+        if (r.ok) {
+          const { data: a } = await admin.from('profiles').select('email').eq('user_id', String(body.user_id ?? '')).maybeSingle();
+          await registrarAcao({ userId: ctx.eu, empresaId: ctx.empresa.id, acao: 'reenviou o link de acesso', tabela: 'funcao:usuarios', alvo: (a?.email as string) ?? String(body.user_id ?? '') });
+        }
+        return r;
+      }
       case 'criar': return await criar(body, ctx);
       case 'editar': return await editar(body, ctx);
       case 'status': return await status(body, ctx);

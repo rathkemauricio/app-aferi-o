@@ -17,7 +17,7 @@
 //        textos de um lote de páginas do PDF enviado ao bucket coleta-arquivos (importação pelo celular).
 //
 // Publicar: npx supabase functions deploy coleta-erp --no-verify-jwt
-import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
+import { admin, entrarComoAtor, registrarAcao } from '../_shared/ator.ts';
 import { lerArquivo, textosDasPaginas } from './arquivo.ts';
 import { enviarPetros, type LinhaResultado, petrosConfigurado, type ProdutoErp, saldosPetros } from './petros.ts';
 import { contaDe, REDE_NEVOEIRO } from '../_shared/conta.ts';
@@ -31,7 +31,6 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 
 /** Classificação Pista × Conveniência quando o ERP não informa o setor (pela categoria). */
 const PISTA = /combust|lubrif|[óo]leo|aditiv|acess[óo]r|arla|filtro|graxa|fluido|gasolina|diesel|etanol|gnv|palheta|automotiv|pista/i;
@@ -260,6 +259,7 @@ Deno.serve(async req => {
   try {
     const conta = await contaDe(admin, req);
     if (!conta) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
+    entrarComoAtor(conta.user.id); // rastreabilidade: as gravações ficam em nome de quem pediu
     const libera = conta.libera;
     const emp = conta.empresa?.id ?? '';
     const body = await req.json().catch(() => ({}));
@@ -277,13 +277,25 @@ Deno.serve(async req => {
         if (!i || i.filial_id !== conta.filial || i.origem !== 'filial') return json(403, { erro: 'Esta contagem não é da sua filial.' });
       }
     }
+    // Rastreabilidade: ações que não são a alteração de uma linha (carga em massa, importação, envio ao ERP).
+    const rotulos: Record<string, string> = { carregar: 'carregou os saldos do ERP', gravar_barras: 'importou a base de códigos de barra', associar_ean: 'ligou um código de barras a um item', enviar_resultado: 'enviou o resultado ao ERP' };
+    const registrar = async (r: Response) => {
+      if (r.ok && rotulos[body.acao]) {
+        await registrarAcao({
+          userId: conta.user.id, empresaId: emp, acao: rotulos[body.acao], tabela: 'funcao:coleta-erp',
+          alvo: String(body.inventario_id ?? (body.filial_id === REDE ? 'base da rede' : body.filial_id ?? '')),
+          detalhes: { arquivo: body.arquivo?.nome ?? (typeof body.arquivo === 'string' ? body.arquivo : undefined), codigo: body.codigo, ean: body.ean, itens: Array.isArray(body.itens) ? body.itens.length : undefined },
+        });
+      }
+      return r;
+    };
     switch (body.acao) {
       case 'status': return json(200, { ok: true, petros: emp === REDE_NEVOEIRO && petrosConfigurado() });
-      case 'carregar': return await carregar(body, emp);
-      case 'gravar_barras': return await gravarBarras(body, emp);
-      case 'associar_ean': return await associarEan(body, emp);
+      case 'carregar': return await registrar(await carregar(body, emp));
+      case 'gravar_barras': return await registrar(await gravarBarras(body, emp));
+      case 'associar_ean': return await registrar(await associarEan(body, emp));
       case 'extrair_pdf': return await extrairPdf(body);
-      case 'enviar_resultado': return await enviarResultado(body, emp);
+      case 'enviar_resultado': return await registrar(await enviarResultado(body, emp));
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {

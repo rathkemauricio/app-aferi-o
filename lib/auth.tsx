@@ -1,8 +1,12 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { registrarEvento } from './rastro';
 import { supabase } from './supabase';
 import { resetAll } from './sync';
 
+/** Contas que já registraram a entrada nesta abertura do app. */
+const JA_ENTROU = new Set<string>();
 const PERFIL_KEY = (id: string) => `nevoeiro.perfil.${id}`;
 /** Empresa cujos dados estão guardados neste aparelho (se entrar conta de outra empresa, o cache local é limpo). */
 const EMPRESA_DO_APARELHO = 'easyaudit.empresa-do-aparelho';
@@ -108,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setModulos(perfil?.modulos ?? []); setNome(perfil?.nome ?? ''); setAvatar(perfil?.avatar ?? null); setEmpresa(perfil?.empresa ?? null);
     setPerfilPronto(true);
     if (!error) void supabase.rpc('sou_dono').then(r => setDono(r.data === true), () => undefined);
+    // Rastreabilidade: uma entrada por abertura do app/navegador (não a cada recarga do perfil).
+    if (!error && perfil?.ativo && !JA_ENTROU.has(userId)) { JA_ENTROU.add(userId); registrarEvento('entrou', Platform.OS === 'web' ? 'navegador' : 'app'); }
   }, [userId]);
 
   useEffect(() => { setPerfilPronto(false); void recarregarPerfil(); }, [recarregarPerfil]);

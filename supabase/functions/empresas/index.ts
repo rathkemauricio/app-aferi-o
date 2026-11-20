@@ -14,7 +14,7 @@
 //
 // Publicar: npx supabase functions deploy empresas --no-verify-jwt
 // Secrets opcionais: APP_URL (endereço do EasyAudit na web, para os links dos e-mails) e DONO_EMAIL.
-import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
+import { admin, entrarComoAtor, registrarAcao } from '../_shared/ator.ts';
 import { contaDe, DONO_EMAIL, ehDono } from '../_shared/conta.ts';
 import { APP_URL, EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
 
@@ -24,7 +24,6 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 
 // Mesmos ids de modules/registry.ts.
 const MODULOS = ['afericoes', 'tempos', 'croqui', 'auditoria', 'riscos', 'inventarios', 'agenda', 'coleta', 'tanques'];
@@ -230,6 +229,7 @@ Deno.serve(async req => {
   try {
     const conta = await contaDe(admin, req);
     if (!conta) return json(401, { erro: 'Sessão expirada. Entre de novo no EasyAudit.' });
+    entrarComoAtor(conta.user.id); // rastreabilidade: as gravações ficam em nome de quem pediu
     const body = await req.json().catch(() => ({}));
     const origem = (req.headers.get('Origin') ?? '').replace(/\/$/, '');
     if (body.acao === 'criar') return await criar(body, conta, origem);
