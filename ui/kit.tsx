@@ -3,7 +3,7 @@ import { Alert, Animated, BackHandler, Modal, Platform, Pressable, ScrollView, S
 import { RolagemTutorial } from '../tutoriais';
 import { avisosProntos, mostrarToast, perguntar, type TomAviso } from './avisos';
 import { CaretRightIcon, XIcon, type Icon } from './icons';
-import { color, radius, shadow, space, ThemeContext, tint as tints, type Tint, type as t } from './theme';
+import { color, radius, shadow, space, ThemeContext, type ThemeColors, tint as tints, type Tint, type as t } from './theme';
 
 const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null;
 const ICON_WEIGHT = 'regular' as const;
@@ -33,7 +33,7 @@ export function Button({ title, onPress, variant = 'primary', icon: IconCmp, dis
   title: string; onPress: () => void; variant?: ButtonVariant; icon?: Icon; disabled?: boolean; size?: 'md' | 'sm'; style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useContext(ThemeContext);
-  const fg = variant === 'primary' ? colors.primaryText : variant === 'danger' ? colors.danger : variant === 'ghost' ? colors.accentText : colors.text;
+  const fg = variant === 'primary' ? colors.primaryText : variant === 'danger' ? colors.danger : variant === 'ghost' ? corLinkNoFundo(colors) : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
@@ -134,17 +134,18 @@ export function ListRow({ icon, tint, title, subtitle, right, onPress, chevron =
 
 /* ---------- Status ---------- */
 export type Tone = 'success' | 'warning' | 'danger' | 'neutral' | 'accent';
-const toneColors: Record<Tone, { bg: string; fg: string }> = {
-  success: { bg: color.successSoft, fg: color.success },
-  warning: { bg: color.warningSoft, fg: color.warning },
-  danger: { bg: color.dangerSoft, fg: color.danger },
-  neutral: { bg: color.neutralSoft, fg: color.textMuted },
-  accent: { bg: color.accentSoft, fg: color.accentText },
-};
+/** Cores de cada tom (sucesso, alerta, erro...) no tema atual: claras no tema claro e escuras no escuro. */
+const tonsDoTema = (c: ThemeColors): Record<Tone, { bg: string; fg: string }> => ({
+  success: { bg: c.successSoft, fg: c.success },
+  warning: { bg: c.warningSoft, fg: c.warning },
+  danger: { bg: c.dangerSoft, fg: c.danger },
+  neutral: { bg: c.neutralSoft, fg: c.textMuted },
+  accent: { bg: c.accentSoft, fg: c.accentText },
+});
 
 export function StatusPill({ label, tone = 'neutral', icon: IconCmp }: { label: string; tone?: Tone; icon?: Icon }) {
   const { colors } = useContext(ThemeContext);
-  const c = tone === 'neutral' ? { bg: colors.neutralSoft, fg: colors.textMuted } : tone === 'accent' ? { bg: colors.accentSoft, fg: colors.accentText } : toneColors[tone];
+  const c = tonsDoTema(colors)[tone];
   return (
     <View style={[k.pill, { backgroundColor: c.bg }]}>
       {IconCmp ? <IconCmp size={13} color={c.fg} weight="bold" /> : null}
@@ -160,7 +161,7 @@ export function ChoiceChips({ value, options, onChange, toneFor }: { value: stri
       {options.map(option => {
         const active = value === option;
         const tone = toneFor?.(option) ?? 'accent';
-        const c = tone === 'accent' ? { bg: colors.accentSoft, fg: colors.accentText } : toneColors[tone];
+        const c = tonsDoTema(colors)[tone];
         return (
           <Pressable key={option} onPress={() => onChange(option)} accessibilityRole="button" accessibilityState={{ selected: active }}
             style={({ pressed }) => [k.chip, { backgroundColor: colors.surface, borderColor: colors.borderStrong }, active && { backgroundColor: c.bg, borderColor: c.fg }, pressed && k.pressed]}>
@@ -173,12 +174,25 @@ export function ChoiceChips({ value, options, onChange, toneFor }: { value: stri
 }
 
 /* ---------- Estrutura ---------- */
+/** Cor de um link escrito direto sobre o fundo da página (nos temas de fundo escuro com cartões claros, a cor de destaque). */
+export const corLinkNoFundo = (c: ThemeColors) => (c.onBg === c.text ? c.accentText : c.mint);
+
+/** Quadradinho do módulo no topo de cada tela (cor de destaque do tema, ícone em contraste). */
+export function MarcaModulo({ icon: IconCmp }: { icon: Icon }) {
+  const { colors } = useContext(ThemeContext);
+  return (
+    <View style={{ width: 34, height: 34, borderRadius: radius.tile, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}>
+      <IconCmp size={18} color={colors.mint === colors.accent ? colors.primaryText : colors.mint} weight="bold" />
+    </View>
+  );
+}
+
 export function SectionHeader({ title, action, onPress }: { title: string; action?: string; onPress?: () => void }) {
   const { colors } = useContext(ThemeContext);
   return (
     <View style={k.sectionHead}>
       <Text style={[t.section, { color: colors.onBg }]}>{title}</Text>
-      {action && onPress ? <Pressable onPress={onPress} hitSlop={8}><Text style={k.link}>{action}</Text></Pressable> : null}
+      {action && onPress ? <Pressable onPress={onPress} hitSlop={8}><Text style={[k.link, { color: corLinkNoFundo(colors) }]}>{action}</Text></Pressable> : null}
     </View>
   );
 }
@@ -215,7 +229,7 @@ export function Steps({ steps, current }: { steps: string[]; current: number }) 
         return (
           <View key={label} style={k.step}>
             <View style={[k.stepBar, (done || active) && { backgroundColor: colors.accent }, active && { opacity: 0.55 }]} />
-            <Text style={[k.stepText, (done || active) && { color: colors.accentText }, active && { fontWeight: '700' }]} numberOfLines={1}>{label}</Text>
+            <Text style={[k.stepText, { color: colors.onBgMuted }, (done || active) && { color: corLinkNoFundo(colors) }, active && { fontWeight: '700' }]} numberOfLines={1}>{label}</Text>
           </View>
         );
       })}

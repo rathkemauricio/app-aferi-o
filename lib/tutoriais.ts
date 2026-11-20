@@ -47,7 +47,7 @@ export const TUTORIAIS: TutorialApp[] = [
       { alvo: 'contagens-leitor', opcional: true, titulo: 'Como a filial conta', texto: 'Com leitor de código (coletor) ou pelo celular: lista dos itens, câmera ou digitando o código.' },
       { alvo: 'contagens-bases', opcional: true, titulo: 'Base de códigos de barra', texto: 'Importe uma vez a relação de códigos da rede: ela vale para todas as filiais e liga cada código ao item.' },
       { alvo: 'contagens-abrir', titulo: 'Abrir inventário', texto: 'Escolha a filial e carregue os saldos (PDF ou API do ERP). Depois crie as contagens por categoria.' },
-      { titulo: 'Dentro da contagem', texto: 'Na lista de itens, filtre Pendentes, Incorretos e Corretos. Sem leitor, conte pela Lista (− / quantidade / +), pela Câmera ou digitando. Ao finalizar, os divergentes vão para a próxima contagem.' },
+      { titulo: 'Dentro da contagem', texto: 'Na lista de itens, filtre Pendentes, Incorretos e Corretos. No painel web, a própria lista é a coleta: digite a quantidade e toque em Somar (as partes se somam) e toque no cartão para ver as informações e o histórico. Com coletor ou câmera, use a aba Coleta. Ao finalizar, os divergentes vão para a próxima contagem.' },
     ],
   },
   {

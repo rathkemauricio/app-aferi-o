@@ -94,7 +94,7 @@ export function CadastroTanques({ filialId, cadastro, tabelas, sugestao, origemS
 
   return <>
     <SectionHeader title={`Tanques da filial (${cadastro.length})`} />
-    <Text style={t.caption}>Cada tanque (no bi/tripartido, cada compartimento, com número próprio) fica ligado à sua tabela de medição. Toda nova medição já vem com eles. No painel web, o PDF da filial cadastra tudo de uma vez.</Text>
+    <Text style={t.captionBg}>Cada tanque (no bi/tripartido, cada compartimento, com número próprio) fica ligado à sua tabela de medição. Toda nova medição já vem com eles. No painel web, o PDF da filial cadastra tudo de uma vez.</Text>
     {cadastro.length ? (
       <Card style={{ padding: space.xs, gap: 0 }}>
         {ordenarTanques(cadastro).map((x, i) => {
@@ -126,7 +126,7 @@ export function CadastroTanques({ filialId, cadastro, tabelas, sugestao, origemS
     {!cadastro.length && sugestao.length ? (
       <Button title={`Trazer ${sugestao.length} tanque(s) ${origemSugestao}`} icon={CopySimpleIcon} variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onPress={trazer} />
     ) : null}
-    {cadastro.length ? <Text style={t.caption}>O botão de cópia ao lado de cada tanque cria outro igual (combustível, capacidade, tipo, marca e tabela) com o próximo número.</Text> : null}
+    {cadastro.length ? <Text style={t.captionBg}>O botão de cópia ao lado de cada tanque cria outro igual (combustível, capacidade, tipo, marca e tabela) com o próximo número.</Text> : null}
 
     {ed ? (
       <Sheet title={ed.numeroAntigo ? `Tanque ${ed.numeroAntigo}` : 'Novo tanque'} onClose={() => setEd(null)}

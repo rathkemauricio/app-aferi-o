@@ -9,8 +9,9 @@ import { esc, imprimirHtml, rotuloFilial } from '../../lib/util';
 import {
   ArrowLeftIcon, CaretDownIcon, CheckIcon, CloudCheckIcon, CloudSlashIcon, HourglassIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, PrinterIcon, ResetIcon, RulerIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
-import { Button, Card, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
+import { Button, Card, confirmAction, EmptyState, Field, IconButton, ListRow, MarcaModulo, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { Carregando } from '../../ui/carregando';
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
 import { Deslizavel } from '../tempos/Deslizavel';
 import { MedicaoInterativa } from './MedicaoInterativa';
@@ -57,12 +58,12 @@ export default function TanquesModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label={pilha.length > 1 ? 'Voltar' : 'Voltar aos módulos'} onPress={voltar} />
-        <View style={s.brandMark}><RulerIcon size={18} color="#5fd39a" weight="bold" /></View>
+        <MarcaModulo icon={RulerIcon} />
         <View style={s.flex}><Text style={s.brandName} numberOfLines={1}>Conferência de Estoque</Text><Text style={t.caption}>Combustíveis: medição dos tanques</Text></View>
         {dados.status === 'error' ? <StatusPill icon={CloudSlashIcon} label="Sem sincronizar" tone="warning" /> : <StatusPill icon={CloudCheckIcon} label="Sincronizado" tone="success" />}
       </View>
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-        {dados.loaded ? corpo() : <Text style={t.caption}>Carregando…</Text>}
+        {dados.loaded ? corpo() : <Carregando texto="Carregando a Conferência de Estoque…" />}
       </ScrollView>
     </SafeAreaView>
   );
@@ -131,7 +132,7 @@ function FilialTela({ filialId, dados, abrir }: { filialId: string; dados: Dados
     <Text style={t.title}>{filial.codigo} · {filial.nome}</Text>
     <Text style={t.captionBg}>{[filial.cidade, filial.uf].filter(Boolean).join(' / ')}</Text>
     <Button title={aberta ? 'Continuar medição em andamento' : 'Nova medição'} icon={aberta ? RulerIcon : PlusIcon} onPress={nova} />
-    <Text style={t.caption}>{cadastro.length
+    <Text style={t.captionBg}>{cadastro.length
       ? `A nova medição já vem com os tanques cadastrados (${base.map(x => x.tanque).join(', ')}), com combustível, tabela de medição e a informada da última medição.`
       : croqui.length
         ? `Sem tanques cadastrados: a nova medição vem com os tanques do croqui (${croqui.map(x => x.tanque).join(', ')}). Cadastre os tanques abaixo para tê-los sempre prontos.`
@@ -440,7 +441,6 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: AZUL, alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text },
   content: { padding: space.lg, paddingBottom: space.xxl * 2, gap: space.md, width: '100%', maxWidth: pageMaxWidth(860), alignSelf: 'center' },
 });

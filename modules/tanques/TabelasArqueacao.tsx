@@ -79,7 +79,7 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
 
   return <>
     <SectionHeader title={`Tabelas de arqueação (${tabelas.length})`} />
-    <Text style={t.caption}>Cada tabela é desta filial e serve aos tanques marcados nela. Com a tabela, os litros saem sozinhos da altura medida na régua (a digitação continua possível).</Text>
+    <Text style={t.captionBg}>Cada tabela é desta filial e serve aos tanques marcados nela. Com a tabela, os litros saem sozinhos da altura medida na régua (a digitação continua possível).</Text>
     {tabelas.map(x => {
       const conferir = pontosParaConferir(x.pontos).length;
       return (
@@ -94,7 +94,7 @@ export function TabelasArqueacao({ filialId, filialCodigo, filialNome, tanquesCo
     {/* A tabela é importada pelo PDF no painel web; no app ela só é consultada e usada na medição. */}
     {Platform.OS === 'web' ? <>
       <Button title={lendo ?? 'Importar PDF da filial (tanques, bicos e tabelas)'} icon={FileArrowUpIcon} variant="secondary" disabled={!!lendo} onPress={() => void importar()} />
-      <Text style={t.caption}>O PDF da filial cadastra os tanques (número, combustível, capacidade, tipo e marca), as tabelas de cada um e as bombas e bicos ligados a eles (Aferições e Croqui). Um PDF só com a tabela de um tanque também serve.</Text>
+      <Text style={t.captionBg}>O PDF da filial cadastra os tanques (número, combustível, capacidade, tipo e marca), as tabelas de cada um e as bombas e bicos ligados a eles (Aferições e Croqui). Um PDF só com a tabela de um tanque também serve.</Text>
     </>
       : <Text style={t.caption}>{tabelas.length ? 'Para importar outra tabela, use o painel web (PDF).' : 'Nenhuma tabela ainda: importe o PDF da tabela de arqueação pelo painel web.'}</Text>}
     {documento ? (

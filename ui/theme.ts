@@ -136,7 +136,7 @@ export const TEMAS: Tema[] = [
   }),
   misto('grafite-vermelho', 'Grafite, Branco e Vermelho', 'azul-vermelho', {
     bg: '#222224', surface: '#f1f1f2', surfaceMuted: '#e2e2e5', border: '#d2d2d6', borderStrong: '#b4b4bb',
-    text: '#1d1d1f', textMuted: '#5f5f67', textFaint: '#8b8b92', onBg: '#f4f4f4', onBgMuted: '#c4c4c8',
+    text: '#1d1d1f', textMuted: '#55555d', textFaint: '#707078', onBg: '#f4f4f4', onBgMuted: '#c4c4c8',
     accent: '#ef3b2d', accentPressed: '#d42f22', accentSoft: '#fbd5d1', accentText: '#c9261a', primaryText: '#ffffff', neutralSoft: '#e7e7ea', mint: '#ef3b2d', onMint: '#ffffff',
   }),
   escuro('petroleo', 'Petróleo (Teal)', 'claro', {
@@ -146,7 +146,7 @@ export const TEMAS: Tema[] = [
   }),
   misto('roxo-ambar', 'Roxo, Bege e Amarelo', 'cinza-roxo', {
     bg: '#1b1530', surface: '#f3e1c8', surfaceMuted: '#e8d2b2', border: '#dcc29e', borderStrong: '#c9aa7f',
-    text: '#2a2040', textMuted: '#625568', textFaint: '#8e8299', onBg: '#f5eedf', onBgMuted: '#c9bfd9',
+    text: '#2a2040', textMuted: '#584b5f', textFaint: '#76697f', onBg: '#f5eedf', onBgMuted: '#c9bfd9',
     accent: '#8b4ee8', accentPressed: '#7a3fd4', accentSoft: '#e6d8fb', accentText: '#6a2fc9', primaryText: '#ffffff', neutralSoft: '#eedcc0', mint: '#8b4ee8', onMint: '#ffffff',
   }),
   escuro('grafite-laranja', 'Escura, Cinza e Laranja', 'creme-laranja', {
@@ -156,12 +156,12 @@ export const TEMAS: Tema[] = [
   }),
   misto('roxo-lima', 'Escuro, Creme e Verde-Lima', 'areia-oliva', {
     bg: '#2a1637', surface: '#f3eedd', surfaceMuted: '#e8e1c9', border: '#dcd3b5', borderStrong: '#c6bb98',
-    text: '#2a1637', textMuted: '#62546c', textFaint: '#91859a', onBg: '#f6f0dc', onBgMuted: '#cdbfd8',
+    text: '#2a1637', textMuted: '#58495f', textFaint: '#75697e', onBg: '#f6f0dc', onBgMuted: '#cdbfd8',
     accent: '#a8e23c', accentPressed: '#95cf2a', accentSoft: '#e3f3c0', accentText: '#4f7a0a', primaryText: '#2a1637', neutralSoft: '#ede6d0', mint: '#a8e23c', onMint: '#2a1637',
   }),
   misto('azul-laranja', 'Azul, Off-White e Laranja', 'creme-laranja', {
     bg: '#1b44a0', surface: '#f5f1e8', surfaceMuted: '#ebe4d4', border: '#ddd4c0', borderStrong: '#c7bca4',
-    text: '#16213d', textMuted: '#585e78', textFaint: '#858aa2', onBg: '#ffffff', onBgMuted: '#d5e1fa',
+    text: '#16213d', textMuted: '#4e546e', textFaint: '#6c718a', onBg: '#ffffff', onBgMuted: '#d5e1fa',
     accent: '#ff6a13', accentPressed: '#e85c08', accentSoft: '#fde0cc', accentText: '#c24f05', primaryText: '#ffffff', neutralSoft: '#efe9dc', mint: '#ff6a13', onMint: '#ffffff',
   }),
 ];
@@ -209,6 +209,8 @@ export function createTypography(colors: ThemeColors) {
     /** Legenda escrita direto sobre o fundo da página (fora de cartões). */
     captionBg: { fontSize: 12.5, color: colors.onBgMuted, lineHeight: 18 },
     section: { fontSize: 17, fontWeight: '700' as const, letterSpacing: -0.2, color: colors.text },
+    /** Título de seção escrito direto sobre o fundo da página (fora de cartões). */
+    sectionBg: { fontSize: 17, fontWeight: '700' as const, letterSpacing: -0.2, color: colors.onBg },
     body: { fontSize: 14, color: colors.text },
     bodyStrong: { fontSize: 14, fontWeight: '600' as const, color: colors.text },
     caption: { fontSize: 12.5, color: colors.textMuted, lineHeight: 18 },

@@ -58,6 +58,7 @@ export class Collection<T extends SyncRow> {
     this.version++;
     this.snapshot = { list: [...this.items.values()], version: this.version, loaded: this.loaded, status: this.status, pending: this.outbox.size };
     this.listeners.forEach(fn => fn());
+    recalcularAtividade();
   }
   private setStatus(s: SyncStatus) { if (this.status !== s) { this.status = s; this.emit(); } }
 
@@ -181,6 +182,24 @@ export class Collection<T extends SyncRow> {
 export function setSyncEnabled(on: boolean) {
   syncEnabled = on && !!supabase;
   registry.forEach(c => { c.status = syncEnabled ? 'idle' : 'local'; });
+  recalcularAtividade();
+}
+
+/* ---------- Atividade geral (para a barra de sincronização do app) ---------- */
+type Atividade = { sincronizando: number; erro: boolean };
+let atividade: Atividade = { sincronizando: 0, erro: false };
+const ouvintesAtividade = new Set<() => void>();
+function recalcularAtividade() {
+  const sincronizando = registry.filter(c => c.status === 'syncing').length;
+  const erro = registry.some(c => c.status === 'error');
+  if (sincronizando === atividade.sincronizando && erro === atividade.erro) return;
+  atividade = { sincronizando, erro };
+  ouvintesAtividade.forEach(fn => fn());
+}
+const assinarAtividade = (fn: () => void) => { ouvintesAtividade.add(fn); return () => { ouvintesAtividade.delete(fn); }; };
+/** Quantas coleções estão sincronizando agora e se alguma falhou (para o aviso no alto da tela). */
+export function useAtividadeSync() {
+  return useSyncExternalStore(assinarAtividade, () => atividade, () => atividade);
 }
 export const isSyncEnabled = () => syncEnabled;
 export async function syncAll() { await Promise.all(registry.map(c => c.sync())); }

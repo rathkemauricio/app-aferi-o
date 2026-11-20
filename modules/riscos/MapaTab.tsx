@@ -68,7 +68,7 @@ export default function MapaTab({ d }: { d: DadosRiscos }) {
         </View>
       ) : null}
       <View style={s.pageHead}>
-        <Text style={[t.section, s.flex]}>Unidades</Text>
+        <Text style={[t.sectionBg, s.flex]}>Unidades</Text>
         <Button title="Adicionar" icon={PlusIcon} size="sm" onPress={() => setEditar('nova')} />
       </View>
       <ChoiceChips value={filtro} options={FILTROS} onChange={setFiltro} toneFor={o => (o === 'Baixo' ? 'success' : o === 'Médio' ? 'warning' : o === 'Alto' ? 'danger' : 'accent')} />

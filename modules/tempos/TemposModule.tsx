@@ -4,7 +4,7 @@ import { BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { ArrowLeftIcon, ChartBarIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, GearIcon, HourglassIcon, type Icon, TimerIcon } from '../../ui/icons';
-import { Button, ChoiceChips, IconButton, Skeleton, StatusPill } from '../../ui/kit';
+import { Button, ChoiceChips, IconButton, MarcaModulo, Skeleton, StatusPill } from '../../ui/kit';
 import { CadastrosTab } from './CadastrosTab';
 import { AtendimentoScreen, ColetaScreen, ColetasHome, FilialScreen } from './ColetasTab';
 import { DimensionamentoTab } from './DimensionamentoTab';
@@ -84,7 +84,7 @@ export default function TemposModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={exit} />
-        <View style={s.brandMark}><HourglassIcon size={18} color="#5fd39a" weight="bold" /></View>
+        <MarcaModulo icon={HourglassIcon} />
         <View style={s.flex}>
           <Text style={s.brandName} numberOfLines={1}>Tempos e Movimentos</Text>
           <Text style={s.brandSub}>Módulo</Text>

@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeftIcon, CaretDownIcon, CaretRightIcon, ListMagnifyingGlassIcon, LockSimpleIcon, MagnifyingGlassIcon } from '../../ui/icons';
 import { Button, Card, EmptyState, Field, IconButton, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
+import { Carregando } from '../../ui/carregando';
 
 /** Uma linha do registro (tabela auditoria_log). */
 type Linha = {
@@ -201,7 +202,7 @@ export default function RastroScreen() {
             );
           })}
 
-          {carregando ? <ActivityIndicator color={colors.textMuted} style={{ marginVertical: space.md }} /> : null}
+          {carregando ? <Carregando texto="Carregando o registro…" /> : null}
           {!carregando && linhas.length && !fim ? <Button title="Carregar mais" variant="secondary" onPress={() => void carregar(false)} /> : null}
           {!carregando && linhas.length && fim ? <Text style={[t.caption, { textAlign: 'center' }]}>Fim do registro neste filtro ({linhas.length} atividades).</Text> : null}
         </ScrollView>

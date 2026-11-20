@@ -12,7 +12,7 @@ import {
   ArrowLeftIcon, CalendarBlankIcon, CaretDownIcon, HourglassIcon, ListChecksIcon, CaretUpIcon, EyeIcon, CameraIcon, CheckIcon, ClipboardTextIcon, InfoIcon, PencilSimpleIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, EnvelopeIcon, FilePdfIcon,
   ImagesIcon, MagnifyingGlassIcon, PlusIcon, ResetIcon, SealCheckIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
-import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill, type Tone } from '../../ui/kit';
+import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, MarcaModulo, notify, SectionHeader, Sheet, StatusPill, type Tone } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import {
   type Auditoria, type Catalogo, catalogo, catalogoDa, contar, CORES_STATUS, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, itensDoModelo, MODELO_PADRAO, type ModeloChecklist, type RelatorioFinal, relatorioHtml, setorDoItem, type StatusDef,
@@ -73,7 +73,7 @@ export default function AuditoriaModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
-        <View style={s.brandMark}><ClipboardTextIcon size={18} color="#5fd39a" weight="bold" /></View>
+        <MarcaModulo icon={ClipboardTextIcon} />
         <View style={s.flex}>
           <Text style={s.brandName}>Auditoria</Text>
           <Text style={t.caption}>Sistema de Gestão Integrada</Text>
@@ -982,7 +982,6 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   stack: { gap: space.md },
   alignStart: { alignSelf: 'flex-start' },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text },
   content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: pageMaxWidth(900), alignSelf: 'center' },
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },

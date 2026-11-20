@@ -56,8 +56,8 @@ export default function AgendaTab({ d }: { d: DadosRiscos }) {
             </View>
             {busca || pri !== 'Todas' || de || ate ? <Button title="Limpar filtros" icon={ResetIcon} variant="ghost" size="sm" style={s.alignStart} onPress={() => { setBusca(''); setPri('Todas'); setDe(''); setAte(''); }} /> : null}
           </Card>
-          <Text style={t.caption}>Prioridade automática: risco da unidade e data da próxima visita (vencida, hoje, próximos 15 ou 30 dias).</Text>
-          <Text style={t.section}>Visitas a realizar</Text>
+          <Text style={t.captionBg}>Prioridade automática: risco da unidade e data da próxima visita (vencida, hoje, próximos 15 ou 30 dias).</Text>
+          <Text style={t.sectionBg}>Visitas a realizar</Text>
         </View>}
         ListEmptyComponent={<EmptyState icon={CalendarCheckIcon} title="Nenhuma visita encontrada" text="Nenhuma unidade com os filtros selecionados." />}
         renderItem={({ item: { u, p, dias }, index }) => {

@@ -3,7 +3,7 @@ import { type ComponentRef, useCallback, useContext, useEffect, useMemo, useRef,
 import { AppState, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeftIcon, CalendarBlankIcon, CaretRightIcon, CheckCircleIcon, CheckIcon, ClipboardTextIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, DownloadSimpleIcon, DropIcon, EnvelopeIcon, FileCsvIcon, FilePdfIcon, GasPumpIcon, HouseIcon, type Icon, ListChecksIcon, MagnifyingGlassIcon, MinusIcon, PencilSimpleIcon, PlayIcon, PlusIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, XCircleIcon, XIcon } from '../../ui/icons';
-import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, IconTile, ListRow, notify, SectionHeader, Sheet, Skeleton, Stat, StatusPill, Steps, type Tone } from '../../ui/kit';
+import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, IconTile, ListRow, MarcaModulo, notify, SectionHeader, Sheet, Skeleton, Stat, StatusPill, Steps, type Tone } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors, tint } from '../../ui/theme';
 import { useRouter } from 'expo-router';
 import { useAuth, useUsuarioLogado } from '../../lib/auth';
@@ -696,7 +696,7 @@ export default function AfericoesModule() {
     <View style={s.pageHead}>
       <View style={s.flex}>
         <Text style={textStyles.title}>{page[tab].title}</Text>
-        <Text style={textStyles.caption} numberOfLines={1}>{page[tab].subtitle}</Text>
+        <Text style={textStyles.captionBg} numberOfLines={1}>{page[tab].subtitle}</Text>
       </View>
       {headerAction}
     </View>
@@ -707,7 +707,7 @@ export default function AfericoesModule() {
   return <SafeAreaView style={s.safe} edges={['top']}>
     <View style={s.header}>
       <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} />
-      <View style={s.brandMark}><GasPumpIcon size={18} color="#5fd39a" weight="bold" /></View>
+      <MarcaModulo icon={GasPumpIcon} />
       <View style={s.flex}>
         <Text style={s.brandName}>Aferições</Text>
         <Text style={s.brandSub}>Módulo</Text>
@@ -1004,7 +1004,6 @@ const createScreenStyles = (colors: ThemeColors) => StyleSheet.create({
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  brandMark: { width: 34, height: 34, borderRadius: radius.tile, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
   brandSub: { fontSize: 12, color: colors.textMuted },
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 10, backgroundColor: colors.warningSoft },

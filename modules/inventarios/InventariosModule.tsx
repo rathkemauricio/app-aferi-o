@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Filial } from '../../lib/data';
 import { shareText } from '../../lib/share';
@@ -11,8 +11,9 @@ import {
   ArchiveIcon, ArrowLeftIcon, CalendarBlankIcon, CheckIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, FileCsvIcon, MagnifyingGlassIcon, PlusIcon,
   ResetIcon, StorefrontIcon, TrashIcon,
 } from '../../ui/icons';
-import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, Sheet, StatusPill } from '../../ui/kit';
+import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, MarcaModulo, notify, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { Carregando } from '../../ui/carregando';
 import { type Categoria, type Inventario, inventariosCol, num, type Unidade, useCategorias, useInventarios } from './store';
 
 const SESSAO = 'nevoeiro.inventarios.sessao.v1';
@@ -46,14 +47,14 @@ export default function InventariosModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
-        <View style={s.brandMark}><ArchiveIcon size={18} color="#5fd39a" weight="bold" /></View>
+        <MarcaModulo icon={ArchiveIcon} />
         <View style={s.flex}>
           <Text style={s.brandName}>Inventários</Text>
           <Text style={t.caption}>Base histórica por unidade</Text>
         </View>
         {syncPill}
       </View>
-      {!loaded || !pronta ? <View style={s.carregando}><ActivityIndicator color={colors.accent} /></View>
+      {!loaded || !pronta ? <Carregando texto="Carregando os inventários…" />
         : inv && unidade ? <DetalheInventario key={inv.id} inv={inv} unidade={unidade} onVoltar={() => setSessao({ unidade: unidade.chave, inv: null })} />
         : unidade ? <ListaInventarios unidade={unidade} filiais={filiais} todos={todos} onVoltar={() => setSessao({ unidade: null, inv: null })} onAbrir={id => setSessao({ unidade: unidade.chave, inv: id })} />
         : <ListaUnidades unidades={unidades} filiais={filiais} todos={todos} onAbrir={chave => setSessao({ unidade: chave, inv: null })} />}
@@ -305,7 +306,7 @@ function DetalheInventario({ inv, unidade, onVoltar }: { inv: Inventario; unidad
           <Text style={t.caption}>{cats.length ? `${cats.length} categoria(s).${cats.length - ativas.length ? ` ${cats.length - ativas.length} inativada(s), fora das somas.` : ''} Resultado = soma da coluna Resultado das categorias ativas.` : ''}</Text>
         </View>}
         ListEmptyComponent={carregando || lista === null && !erro
-          ? <View style={s.carregando}><ActivityIndicator color={colors.accent} /></View>
+          ? <Carregando texto="Carregando os inventários…" />
           : erro ? <EmptyState icon={CloudSlashIcon} title="Não foi possível carregar as categorias" text={erro} action={{ label: 'Tentar de novo', icon: ResetIcon, onPress: () => void recarregar() }} />
           : <EmptyState icon={ArchiveIcon} title="Nenhuma categoria cadastrada" text="Este inventário ainda não tem resultado por categoria." />}
         ListFooterComponent={inv.origem === 'manual' ? <Button title="Excluir inventário" icon={TrashIcon} variant="danger" size="sm" style={[s.alignStart, { marginTop: space.lg }]} onPress={excluir} /> : undefined}
@@ -478,7 +479,6 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   stack: { gap: space.md },
   alignStart: { alignSelf: 'flex-start' },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text },
   content: { padding: space.lg, paddingBottom: space.xxl * 2, width: '100%', maxWidth: pageMaxWidth(1000), alignSelf: 'center' },
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },

@@ -136,7 +136,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   const sMarca = useAnimatedStyle(() => ({ opacity: textoOp(larg.value), transform: [{ translateX: (1 - abertura(larg.value)) * -10 }] }));
   const sPerfil = useAnimatedStyle(() => ({ opacity: textoOp(larg.value), transform: [{ translateX: (1 - abertura(larg.value)) * -10 }] }));
   const sAba = useAnimatedStyle(() => ({ opacity: indOp.value, height: indH.value, transform: [{ translateY: indY.value }] }));
-  const sAlca = useAnimatedStyle(() => ({ left: larg.value - 16 }));
+  const sAlca = useAnimatedStyle(() => ({ left: larg.value - 12 }));
   const sSeta = useAnimatedStyle(() => ({ transform: [{ rotate: `${(1 - abertura(larg.value)) * 180}deg` }] }));
 
   const isActive = (route: string) => route === '/' ? pathname === '/' || pathname === '/index' : pathname === route || pathname.startsWith(`${route}/`);
@@ -217,7 +217,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
       <Animated.View style={[styles.alca, sAlca]}>
         <Pressable accessibilityRole="button" accessibilityLabel={compact ? 'Expandir menu lateral' : 'Recolher menu lateral'} hitSlop={8} onPress={() => setCollapsed(v => !v)}
           style={({ pressed }) => [styles.alcaBotao, pressed && { transform: [{ scale: 0.92 }] }]}>
-          <Animated.View style={sSeta}><CaretLeftIcon size={14} color={colors.accent} weight="bold" /></Animated.View>
+          <Animated.View style={sSeta}><CaretLeftIcon size={12} color={colors.accent} weight="bold" /></Animated.View>
         </Pressable>
       </Animated.View>
 
@@ -237,7 +237,7 @@ const st = StyleSheet.create({
 
 const makeStyles = (c: ThemeColors, p: Paleta) => StyleSheet.create({
   shell: { flex: 1, minHeight: '100%', flexDirection: 'row', backgroundColor: c.bg },
-  sidebar: { flexShrink: 0, overflow: 'hidden', paddingTop: 22, paddingBottom: 14, backgroundColor: p.fundo, borderTopRightRadius: RAIO + 8, borderBottomRightRadius: RAIO + 8 },
+  sidebar: { flexShrink: 0, overflow: 'hidden', paddingTop: 22, paddingBottom: 14, backgroundColor: p.fundo },
   brand: { height: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, marginBottom: 14 },
   logo: { width: 38, height: 38, borderRadius: 12 },
   brandCopy: { width: 150, gap: 1 },
@@ -256,7 +256,7 @@ const makeStyles = (c: ThemeColors, p: Paleta) => StyleSheet.create({
   profileCopy: { width: 130, gap: 2 },
   profileName: { color: p.texto, fontSize: 12, fontWeight: '700' },
   profileRole: { color: p.suave, fontSize: 10.5 },
-  alca: { position: 'absolute', top: 30, zIndex: 30 },
-  alcaBotao: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, borderWidth: 1, borderColor: c.border },
+  alca: { position: 'absolute', top: 34, zIndex: 30 },
+  alcaBotao: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, borderWidth: 1, borderColor: c.border },
   main: { flex: 1, minWidth: 0, minHeight: 0 },
 });

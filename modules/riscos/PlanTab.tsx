@@ -63,7 +63,7 @@ export default function PlanTab({ d }: { d: DadosRiscos }) {
             </View>
           </Card>
           <View style={s.pageHead}>
-            <Text style={[t.section, s.flex]}>Unidades</Text>
+            <Text style={[t.sectionBg, s.flex]}>Unidades</Text>
             <Button title="Novo planejamento" icon={ListPlusIcon} size="sm" onPress={() => setLote(true)} />
           </View>
           <ChoiceChips value={filtro} options={['Todas', 'Com pendências']} onChange={setFiltro} />

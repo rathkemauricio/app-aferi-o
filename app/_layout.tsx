@@ -1,11 +1,12 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { type ReactNode, useContext, useMemo } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { type ReactNode, useContext, useEffect, useMemo } from 'react';
+import { KeyboardAvoidingView, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { AvisosHost } from '../ui/avisos';
+import { BarraSincronizacao, Carregando, removerCarregamentoInicial } from '../ui/carregando';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TUTORIAIS } from '../lib/tutoriais';
 import { armazenamentoAsync, TutorialProvider } from '../tutoriais';
@@ -38,11 +39,7 @@ function Shell() {
   const paraVisitante = Platform.OS === 'web' ? '/inicio' : '/login';
 
   if (!ready || (userEmail && !perfilPronto)) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
+    return <Carregando cheio texto="Abrindo o EasyAudit…" />;
   }
 
   return <>
@@ -77,6 +74,8 @@ function Tutoriais({ children }: { children: ReactNode }) {
 }
 
 export default function RootLayout() {
+  // O app abriu: tira a tela de espera do HTML (web), que a tela de carregamento do app substitui.
+  useEffect(() => { removerCarregamentoInicial(); }, []);
   // GestureHandlerRootView: necessário para os gestos (ex.: deslizar atividade em Tempos e Movimentos).
   // KeyboardAvoidingView global: no Android (edge-to-edge, obrigatório no RN atual) a janela não encolhe sozinha
   // quando o teclado abre. Aqui o app inteiro ganha um espaço do tamanho do teclado embaixo, então as telas encolhem,
@@ -96,6 +95,8 @@ export default function RootLayout() {
               <AvisoAtualizacao />
               {/* Toasts e confirmações do app (no lugar do alert/confirm do navegador e do Alert do Android). */}
               <AvisosHost />
+              {/* Faixa "Sincronizando… N s" no alto: mostra se o app está trabalhando ou travado. */}
+              <BarraSincronizacao />
             </Zoom>
             </Tutoriais>
           </KeyboardAvoidingView>

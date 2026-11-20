@@ -29,8 +29,8 @@ export default function HistTab({ d }: { d: DadosRiscos }) {
   return (
     <ScrollView contentContainerStyle={s.content}>
       <View style={s.stack}>
-        <Text style={t.section}>Notas mensais por unidade</Text>
-        <Text style={t.caption}>As notas vêm do histórico e das pontuações lançadas no Programa Filial Destaque. Toque numa unidade para corrigir as notas do ano.</Text>
+        <Text style={t.sectionBg}>Notas mensais por unidade</Text>
+        <Text style={t.captionBg}>As notas vêm do histórico e das pontuações lançadas no Programa Filial Destaque. Toque numa unidade para corrigir as notas do ano.</Text>
         <ChoiceChips value={String(ano)} options={anos.map(String)} onChange={v => setAno(Number(v))} />
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <ScrollView horizontal>
@@ -58,7 +58,7 @@ export default function HistTab({ d }: { d: DadosRiscos }) {
           </ScrollView>
         </Card>
 
-        <Text style={[t.section, { marginTop: space.md }]}>Critérios de avaliação</Text>
+        <Text style={[t.sectionBg, { marginTop: space.md }]}>Critérios de avaliação</Text>
         <View style={s.wrap}>
           {NOTA_FAIXAS.map(f => (
             <Card key={f.label} style={{ flexGrow: 1, flexBasis: 200 }}>
@@ -68,7 +68,7 @@ export default function HistTab({ d }: { d: DadosRiscos }) {
           ))}
         </View>
 
-        <Text style={[t.section, { marginTop: space.md }]}>Matriz de classificação de risco</Text>
+        <Text style={[t.sectionBg, { marginTop: space.md }]}>Matriz de classificação de risco</Text>
         {MATRIZ.map(m => (
           <Card key={m.k}>
             <Text style={t.bodyStrong}>{m.nome} <Text style={t.caption}>· compõe {m.feeds}</Text></Text>

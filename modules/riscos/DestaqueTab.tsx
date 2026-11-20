@@ -51,20 +51,20 @@ export default function DestaqueTab({ d }: { d: DadosRiscos }) {
         { label: 'Ouro', valor: reais.filter(x => x.m.selo === 'Ouro').length, cor: '#946500' },
         { label: 'Aguardando Lançamento', valor: dados.length - reais.length, cor: '#6250a4' },
       ]} />
-      <Text style={t.caption}>A pontuação vai de 0 a 100 e usa os critérios das auditorias: <Text style={{ fontWeight: '800' }}>Auditoria 40%</Text> (nota 0–10 × 10), <Text style={{ fontWeight: '800' }}>Evolução 20%</Text> (Histórico Auditorias), <Text style={{ fontWeight: '800' }}>Controle de Perdas 15%</Text> (média de Produtos, Combustíveis e Caixa), <Text style={{ fontWeight: '800' }}>Planos de Ação 15%</Text> (% concluídos) e <Text style={{ fontWeight: '800' }}>Consistência 10%</Text> (Pessoas e Gestão). Nos critérios de risco, 1 vale 100 pontos e 5 vale 0. Unidades sem lançamento ou nota aparecem estimadas e não recebem selo nem certificado.</Text>
+      <Text style={t.captionBg}>A pontuação vai de 0 a 100 e usa os critérios das auditorias: <Text style={{ fontWeight: '800' }}>Auditoria 40%</Text> (nota 0–10 × 10), <Text style={{ fontWeight: '800' }}>Evolução 20%</Text> (Histórico Auditorias), <Text style={{ fontWeight: '800' }}>Controle de Perdas 15%</Text> (média de Produtos, Combustíveis e Caixa), <Text style={{ fontWeight: '800' }}>Planos de Ação 15%</Text> (% concluídos) e <Text style={{ fontWeight: '800' }}>Consistência 10%</Text> (Pessoas e Gestão). Nos critérios de risco, 1 vale 100 pontos e 5 vale 0. Unidades sem lançamento ou nota aparecem estimadas e não recebem selo nem certificado.</Text>
       <ChoiceChips value={modo} options={modos} onChange={setModo} toneFor={() => 'accent'} />
       {modos.length > 1 ? <Text style={t.caption}>Período: {ROTULO_MODO(modo)}</Text> : null}
       <View style={s.wrap}>
         <Button title="Lançar pontuação" icon={PlusIcon} size="sm" disabled={!d.unidades.length} onPress={() => setLancar({})} />
         <Button title="Imprimir ranking" icon={PrinterIcon} variant="secondary" size="sm" disabled={!dados.length} onPress={() => void imprimir()} />
       </View>
-      <Text style={t.section}>🏆 Ranking do Programa Filial Destaque</Text>
+      <Text style={t.sectionBg}>🏆 Ranking do Programa Filial Destaque</Text>
     </View>
   );
 
   const rodape = (
     <View style={[s.stack, { marginTop: space.lg }]}>
-      <Text style={t.section}>Critérios e premiações</Text>
+      <Text style={t.sectionBg}>Critérios e premiações</Text>
       <View style={s.wrap}>
         {[
           ['🏆 Filial Destaque', 'Maior pontuação entre as avaliadas, com auditoria Boa ou Excelente (nota 7 ou mais), sem Risco Alto e sem plano de ação não concluído.'],
@@ -75,8 +75,8 @@ export default function DestaqueTab({ d }: { d: DadosRiscos }) {
           ['Em acompanhamento', 'Pontuação abaixo de 70 ou auditoria Regular ou Crítica (nota abaixo de 7). Sem selo e sem certificado.'],
         ].map(([a, b]) => <Card key={a} style={{ flexGrow: 1, flexBasis: 220 }}><Text style={t.bodyStrong}>{a}</Text><Text style={t.caption}>{b}</Text></Card>)}
       </View>
-      <Text style={t.section}>Pontuações lançadas</Text>
-      {!lancadas.length ? <Text style={t.caption}>Nenhuma pontuação lançada ainda. Use "Lançar pontuação".</Text> : null}
+      <Text style={t.sectionBg}>Pontuações lançadas</Text>
+      {!lancadas.length ? <Text style={t.captionBg}>Nenhuma pontuação lançada ainda. Use "Lançar pontuação".</Text> : null}
       {lancadas.map(p => {
         const sc = { nota: Number(p.nota), p: p.p, c: p.c, cx: p.cx, pe: p.pe, h: p.h, plans: Number(p.planos) };
         const tot = totalDe(compsDe(sc)); const f = notaFaixa(sc.nota);

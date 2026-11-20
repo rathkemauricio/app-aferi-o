@@ -7,7 +7,7 @@ import {
   ArrowLeftIcon, CalendarBlankIcon, CalendarDotsIcon, CaretRightIcon, CheckIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, GoogleLogoIcon,
   MagnifyingGlassIcon, PlusIcon, ResetIcon, StorefrontIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
-import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
+import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, MarcaModulo, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import {
   dataDe, dataValida, diaLongo, type Evento, excluirEvento, hojeIso, horaValida, horario, isoDe, MESES, ocorreEm, salvarEvento, SEMANA, uid, useAgenda, useGoogleAgenda,
@@ -98,7 +98,7 @@ export default function AgendaModule() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
-        <View style={s.brandMark}><CalendarDotsIcon size={18} color="#5fd39a" weight="bold" /></View>
+        <MarcaModulo icon={CalendarDotsIcon} />
         <View style={s.flex}>
           <Text style={s.brandName}>Agenda</Text>
           <Text style={t.caption}>Integrada ao Google Agenda</Text>
@@ -135,7 +135,7 @@ export default function AgendaModule() {
           </Card>
           <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar evento, local ou filial" />
           <View style={s.row}>
-            <Text style={[t.section, s.flex]}>{q ? `Resultados (${doDia.length})` : diaLongo(dia)}</Text>
+            <Text style={[t.sectionBg, s.flex]}>{q ? `Resultados (${doDia.length})` : diaLongo(dia)}</Text>
             <Button title="Novo evento" icon={PlusIcon} size="sm" onPress={novo} />
           </View>
           {doDia.length ? <Card style={s.lista}>{doDia.map(linhaEvento)}</Card>
@@ -229,7 +229,6 @@ const estilos = (c: ThemeColors) => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   twoCol: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#0f1f3d', alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 15.5, fontWeight: '800', color: c.text },
   content: { padding: space.lg, paddingBottom: space.xxl * 2, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center' },
   gTile: { width: 40, height: 40, borderRadius: radius.tile, alignItems: 'center', justifyContent: 'center' },
