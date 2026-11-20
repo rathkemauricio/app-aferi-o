@@ -1,4 +1,4 @@
-import { bicoNoTopo, CANTOS_MAQUETE, local, prisma, type Proj, type Pt, pts, r1, type Tela, tom } from './iso';
+import { bicoNoTopo, CANTOS_MAQUETE, local, prisma, type Proj, type Pt, pts, r1, raioDoTanque, TERRA, type Tela, tom, TOPO_TANQUE } from './iso';
 import { combustivelDoTanque, fuelOf, type Item, mesmoTanque, nBicos, T } from './model';
 
 /*
@@ -13,8 +13,7 @@ import { combustivelDoTanque, fuelOf, type Item, mesmoTanque, nBicos, T } from '
 export type Ponto3D = { p: Pt; z: number };
 export type Ligacao = { bombaId: string; bico: number; tanqueId: string; cor: string; inferida: boolean; caminho: Ponto3D[] };
 
-const Z_TUBO = -5; // profundidade dos tubos
-const raio = (tq: Item) => Math.min(9.5, tq.h * 0.3);
+const Z_TUBO = -7; // profundidade dos tubos (entre o piso e o topo dos tanques)
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /** Ligações tanque → bico de todas as bombas do croqui. */
@@ -46,7 +45,7 @@ export function ligacoesDosBicos(items: Item[]): Ligacao[] {
     const bocas = [local(tq, -tq.w * 0.2, 0), local(tq, tq.w * 0.2, 0)].sort((x, y) => dist(x, Q) - dist(y, Q));
     const A = bocas[0];
     const caminho: Ponto3D[] = [
-      { p: A, z: -3 },
+      { p: A, z: TOPO_TANQUE },
       { p: { x: A.x, y: A.y + d }, z: Z_TUBO },
       { p: { x: Q.x + d, y: A.y + d }, z: Z_TUBO },
       { p: { x: Q.x + d, y: Q.y }, z: Z_TUBO },
@@ -71,7 +70,7 @@ function envoltoria(l: Tela[]) {
 /** Tanque deitado (cilindro facetado) embaixo do desenho do tanque, com as bocas de visita subindo até o piso. */
 function cilindro(P: Proj, tq: Item) {
   const f = combustivelDoTanque(tq), cor = f ? T[f].c : T.tanque.c;
-  const r = raio(tq), zc = -3 - r, meio = tq.w * 0.42, N = 16;
+  const r = raioDoTanque(tq), zc = TOPO_TANQUE - r, meio = tq.w * 0.47, N = 18;
   const a = (tq.rot * Math.PI) / 180, ex = { x: Math.cos(a), y: Math.sin(a) }, ey = { x: -Math.sin(a), y: Math.cos(a) };
   const anel = (s: number) => Array.from({ length: N }, (_, k) => {
     const th = (k / N) * Math.PI * 2;
@@ -89,8 +88,9 @@ function cilindro(P: Proj, tq: Item) {
   const tampa = ve(ex.x, ex.y, 0) ? B : A;
   s += `<polygon points="${pts(tampa)}" fill="${tom(cor, 0.82)}" stroke="${tom(cor, 0.6)}" stroke-width="0.6"/>`;
   [-tq.w * 0.2, tq.w * 0.2].forEach(d => {
-    const p = local(tq, d, 0), b = P.p(p, -3), t = P.p(p, 0);
-    s += `<line x1="${r1(b.X)}" y1="${r1(b.Y)}" x2="${r1(t.X)}" y2="${r1(t.Y)}" stroke="${tom(cor, 0.55)}" stroke-width="4"/>`;
+    const p = local(tq, d, 0), b = P.p(p, TOPO_TANQUE + 1), t = P.p(p, 0);
+    s += `<line x1="${r1(b.X)}" y1="${r1(b.Y)}" x2="${r1(t.X)}" y2="${r1(t.Y)}" stroke="${tom(cor, 0.5)}" stroke-width="6"/>` +
+      `<line x1="${r1(b.X)}" y1="${r1(b.Y)}" x2="${r1(t.X)}" y2="${r1(t.Y)}" stroke="${tom(cor, 0.8)}" stroke-width="2.5"/>`;
   });
   return s;
 }
@@ -101,8 +101,8 @@ function cilindro(P: Proj, tq: Item) {
  */
 export function subsoloSvg(items: Item[], ligacoes: Ligacao[], P: Proj) {
   let s = P.deCima
-    ? `<polygon points="${pts(envoltoria([...CANTOS_MAQUETE.map(p => P.p(p, 0)), ...CANTOS_MAQUETE.map(p => P.p(p, -22))]))}" fill="#f3f5f7" opacity="0.66"/>`
-    : prisma(P, CANTOS_MAQUETE, -22, 0, '#b59f7c', { fundo: '#8d7a5c', opac: 0.42 });
+    ? `<polygon points="${pts(envoltoria([...CANTOS_MAQUETE.map(p => P.p(p, 0)), ...CANTOS_MAQUETE.map(p => P.p(p, -TERRA))]))}" fill="#f3f5f7" opacity="0.66"/>`
+    : prisma(P, CANTOS_MAQUETE, -TERRA, 0, '#b59f7c', { fundo: '#8d7a5c', opac: 0.42 });
   items.filter(i => T[i.type]?.k === 't').sort((a, b) => P.prof(a) - P.prof(b)).forEach(tq => { s += cilindro(P, tq); });
   let fios = '', pontas = '';
   for (const l of ligacoes) {

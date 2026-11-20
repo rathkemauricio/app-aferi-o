@@ -53,7 +53,7 @@ export function projecao(cam: Camera): Proj {
 /** Espaço que a maquete pode ocupar na tela com esta câmera (qualquer giro cabe; depende só da inclinação). */
 export function moldura(P: Proj): Caixa {
   const R = Math.hypot(VW / 2 + BORDA, VH / 2 + BORDA), sf = Math.abs(P.sen), cf = Math.sqrt(Math.max(0, 1 - sf * sf));
-  const y0 = K * (-R * sf - 160 * cf) - 8, y1 = K * (R * sf + 34 * cf) + 14;
+  const y0 = K * (-R * sf - 160 * cf) - 8, y1 = K * (R * sf + (TERRA + 4) * cf) + 14;
   return { x: -K * R - 12, y: y0, w: 2 * (K * R + 12), h: y1 - y0 };
 }
 export const svgCom = (vb: Caixa, conteudo: string) =>
@@ -156,6 +156,11 @@ export function dentro(it: Pick<Item, 'x' | 'y' | 'w' | 'h' | 'rot'>, p: Pt) {
 
 /** Margem de gramado em volta do croqui na maquete. */
 export const BORDA = 26;
+/** Espessura da terra da maquete (os tanques ficam enterrados nela). */
+export const TERRA = 60;
+/** Tanque enterrado: topo do cilindro (abaixo do piso) e raio. */
+export const TOPO_TANQUE = -16;
+export const raioDoTanque = (tq: Pick<Item, 'h'>) => Math.min(16, tq.h * 0.38);
 /** Cantos da maquete (com a margem de gramado). */
 export const CANTOS_MAQUETE: Pt[] = [{ x: -BORDA, y: -BORDA }, { x: VW + BORDA, y: -BORDA }, { x: VW + BORDA, y: VH + BORDA }, { x: -BORDA, y: VH + BORDA }];
 
@@ -180,7 +185,9 @@ export function cena3d(items: Item[], opts: { bandeira: string; nomes: boolean; 
   // ---------- Terreno: gramado com borda de terra e o pátio de concreto (só por cima; por baixo a terra é o subsolo) ----------
   let chao = '';
   if (P.deCima) {
-    chao = prisma(P, CANTOS_MAQUETE, -22, 0, '#b59f7c', { topo: '#cfe2b1' });
+    // camadas do solo nas laterais da terra
+    const camadas = (a: Pt, b: Pt) => [0.3, 0.62].map(f => `<polyline points="${pts([P.p(a, -TERRA * f), P.p(b, -TERRA * f)])}" fill="none" stroke="#8f7a59" stroke-width="1.2" opacity="0.55"/>`).join('');
+    chao = prisma(P, CANTOS_MAQUETE, -TERRA, 0, '#b59f7c', { topo: '#cfe2b1', faceExtra: camadas });
     chao += piso(P, [{ x: 6, y: 6 }, { x: VW - 6, y: 6 }, { x: VW - 6, y: VH - 6 }, { x: 6, y: VH - 6 }], 0.1, '#ecece6');
     for (let x = 100; x < VW; x += 100) chao += `<polyline points="${pts([P.p({ x, y: 6 }, 0.15), P.p({ x, y: VH - 6 }, 0.15)])}" fill="none" stroke="#d9d9d1" stroke-width="0.8"/>`;
     for (let y = 100; y < VH; y += 100) chao += `<polyline points="${pts([P.p({ x: 6, y }, 0.15), P.p({ x: VW - 6, y }, 0.15)])}" fill="none" stroke="#d9d9d1" stroke-width="0.8"/>`;
