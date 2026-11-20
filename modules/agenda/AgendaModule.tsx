@@ -9,6 +9,7 @@ import {
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, MarcaModulo, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 import {
   dataDe, dataValida, diaLongo, type Evento, excluirEvento, hojeIso, horaValida, horario, isoDe, MESES, ocorreEm, salvarEvento, SEMANA, uid, useAgenda, useGoogleAgenda,
 } from './store';
@@ -97,7 +98,7 @@ export default function AgendaModule() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
+        <BotaoVoltar label="Voltar aos módulos" onPress={voltar} />
         <MarcaModulo icon={CalendarDotsIcon} />
         <View style={s.flex}>
           <Text style={s.brandName}>Agenda</Text>

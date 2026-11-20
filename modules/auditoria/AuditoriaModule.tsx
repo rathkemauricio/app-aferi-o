@@ -14,6 +14,7 @@ import {
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, MarcaModulo, notify, SectionHeader, Sheet, StatusPill, type Tone } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 import {
   type Auditoria, type Catalogo, catalogo, catalogoDa, contar, CORES_STATUS, dataBR, dataValida, ESCOPO_PADRAO, hoje, type ItemAuditoria, itensDoModelo, MODELO_PADRAO, type ModeloChecklist, type RelatorioFinal, relatorioHtml, setorDoItem, type StatusDef,
   type StatusReq, tituloCurto, uid,
@@ -72,7 +73,7 @@ export default function AuditoriaModule() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
+        <BotaoVoltar label="Voltar aos módulos" onPress={voltar} />
         <MarcaModulo icon={ClipboardTextIcon} />
         <View style={s.flex}>
           <Text style={s.brandName}>Auditoria</Text>
@@ -415,7 +416,7 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
   const barraFixa = (
     <View style={s.fixo}>
       <View style={s.row}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar às auditorias" onPress={onVoltar} />
+        <BotaoVoltar label="Voltar às auditorias" onPress={onVoltar} />
         <Text style={s.fixoFilial} numberOfLines={1}>{filial}</Text>
         <StatusPill label={!sincronizado ? 'Sem sincronizar' : concluida ? 'Concluída' : 'Rascunho'} tone={!sincronizado ? 'warning' : concluida ? 'success' : 'accent'} icon={sincronizado ? CloudCheckIcon : CloudSlashIcon} />
       </View>

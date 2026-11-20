@@ -13,6 +13,7 @@ import {
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 import { CroquiCanvas, IconeElemento, type Movimento, useCatalogoCroqui } from './Canvas';
 import {
   type BombaCadastro, clamp, croquiSvg, type CroquiDoc, elementosDoGrupo, espelharBombas, filhosDaIlha, fuelOf, girarPonto, GRUPOS, iconSvg, type Item, lerCroquiAntigo, modeloBasico,
@@ -152,7 +153,7 @@ export default function CroquiModule() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <View style={s.flex}>
           <Text style={s.title} numberOfLines={1}>Croqui</Text>
           <Text style={t.caption} numberOfLines={1}>{filial ? `${filial.codigo} · ${filial.nome}` : 'Escolha a filial'}</Text>

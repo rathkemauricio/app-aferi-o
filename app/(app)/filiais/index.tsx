@@ -10,6 +10,7 @@ import { ArrowLeftIcon, CheckIcon, MagnifyingGlassIcon, PlusIcon, StorefrontIcon
 import { FilialFields, type FilialForm, filialVazia, validarFilial } from '../../../components/FilialForm';
 import { Button, Card, EmptyState, Field, IconButton, ListRow, notify, Sheet, StatusPill } from '../../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../../ui/theme';
+import { BotaoVoltar } from '../../../ui/voltar';
 
 export default function FiliaisScreen() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function FiliaisScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+        <BotaoVoltar label="Voltar" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Filiais</Text>
           <Text style={t.caption}>Cadastro único, usado por todos os módulos</Text>

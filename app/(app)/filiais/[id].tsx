@@ -9,6 +9,7 @@ import { type CroquiDoc, PALETA_CLARA, PALETA_ESCURA, resumo } from '../../../mo
 import { ArrowLeftIcon, CheckIcon, DropIcon, GasPumpIcon, PencilSimpleIcon, StorefrontIcon, TrashIcon } from '../../../ui/icons';
 import { Button, Card, confirmAction, EmptyState, IconButton, notify, SectionHeader, StatusPill } from '../../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../../ui/theme';
+import { BotaoVoltar } from '../../../ui/voltar';
 import { AcessoFilial } from '../../../components/AcessoFilial';
 import { FilialFields, type FilialForm, validarFilial } from '../../../components/FilialForm';
 
@@ -49,7 +50,7 @@ export default function FilialScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }} numberOfLines={1}>{filial ? `${filial.codigo} · ${filial.nome}` : 'Filial'}</Text>
           <Text style={t.caption}>Cadastro da filial</Text>

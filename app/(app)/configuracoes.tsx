@@ -11,6 +11,7 @@ import { rotuloVersao, VERSAO } from '../../lib/versao';
 import { ArrowLeftIcon, CheckIcon, MinusIcon, PlusIcon, ResetIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, IconButton, notify, SectionHeader, Sheet } from '../../ui/kit';
 import { createTypography, ESCALAS, pageMaxWidth, radius, space, type Tema, TEMAS, ThemeContext } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 
 const LIMITES: [number, string][] = [[0, 'Nunca'], [50, 'Acima de 50'], [100, 'Acima de 100'], [500, 'Acima de 500']];
 const TIPOS: ['completo' | 'parcial', string][] = [['completo', 'Completo'], ['parcial', 'Parcial']];
@@ -98,7 +99,7 @@ export default function ConfiguracoesScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <Text style={{ flex: 1, fontSize: 15.5, fontWeight: '800', color: colors.text }}>Configurações</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }}>

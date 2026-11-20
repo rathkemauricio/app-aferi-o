@@ -8,6 +8,7 @@ import { novoId, useFiliais } from '../../lib/data';
 import { ArrowLeftIcon, CheckIcon, PencilSimpleIcon, PlusIcon } from '../../ui/icons';
 import { Button, Card, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 
 type Form = { id: string | null; nome: string; cor: string; corTexto: string };
 
@@ -57,7 +58,7 @@ export default function BandeirasScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Bandeiras</Text>
           <Text style={t.caption}>Usadas no cadastro da filial e no croqui</Text>

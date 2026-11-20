@@ -15,6 +15,7 @@ import { ArrowRightIcon, BarcodeIcon, HourglassIcon, CaretDownIcon, FloppyDiskIc
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { Carregando } from '../../ui/carregando';
+import { useVoltarSemBotao } from '../../ui/voltar';
 import {
   bateBusca, categoriasDe, categoriasDoArquivo, podeSobra, rotuloSemSaldo, normalizar, progressoPorCategoria, type ClasseContagem, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
   percentualContagem, percentualGeral, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
@@ -105,9 +106,10 @@ function useCores() { return useContext(ThemeContext).colors; }
 
 function Topo({ titulo, sub, onVoltar, direita, cor }: { titulo: string; sub?: string; onVoltar?: () => void; direita?: ReactNode; cor?: string }) {
   const insets = useSafeAreaInsets();
+  const semBotao = useVoltarSemBotao(onVoltar); // no painel web largo voltar é por Esc / Alt+← / botão do mouse
   return (
     <View style={[k.topo, { backgroundColor: cor ?? P.topo, paddingTop: insets.top + 12 }]}>
-      {onVoltar ? <Pressable accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={10} onPress={onVoltar} style={k.voltar}><CaretLeftIcon size={22} color="#fff" weight="bold" /></Pressable> : null}
+      {onVoltar && !semBotao ? <Pressable accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={10} onPress={onVoltar} style={k.voltar}><CaretLeftIcon size={22} color="#fff" weight="bold" /></Pressable> : null}
       <View style={{ flex: 1 }}>
         <Text style={[k.topoTit, !cor && { color: P.topoTxt }]} numberOfLines={1}>{titulo}</Text>
         {sub ? <Text style={[k.topoSub, !cor && { color: P.topoTxt, opacity: 0.85 }]} numberOfLines={1}>{sub}</Text> : null}

@@ -8,6 +8,7 @@ import { MODULES } from '../../modules/registry';
 import { ArrowLeftIcon, CheckIcon, LockSimpleIcon, PencilSimpleIcon, StorefrontIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, Skeleton, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 
 type Status = 'aguardando' | 'ativa' | 'suspensa';
 type Empresa = {
@@ -119,7 +120,7 @@ export default function PlataformaScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Empresas e planos</Text>
           <Text style={t.caption}>Clientes do EasyAudit, liberação e planos</Text>

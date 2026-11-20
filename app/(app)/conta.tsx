@@ -12,6 +12,7 @@ import { rotuloVersao } from '../../lib/versao';
 import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, GearIcon, ListMagnifyingGlassIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SquaresFourIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 
 /** Informações da conta: foto, nome, e-mail, senha, módulos liberados, tema e saída. */
 export default function ContaScreen() {
@@ -61,7 +62,7 @@ export default function ContaScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <Text style={{ flex: 1, fontSize: 15.5, fontWeight: '800', color: colors.text }}>Minha conta</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }} keyboardShouldPersistTaps="handled">

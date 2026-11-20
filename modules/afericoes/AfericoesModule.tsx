@@ -5,6 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeftIcon, CalendarBlankIcon, CaretRightIcon, CheckCircleIcon, CheckIcon, ClipboardTextIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, DownloadSimpleIcon, DropIcon, EnvelopeIcon, FileCsvIcon, FilePdfIcon, GasPumpIcon, HouseIcon, type Icon, ListChecksIcon, MagnifyingGlassIcon, MinusIcon, PencilSimpleIcon, PlayIcon, PlusIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, XCircleIcon, XIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, IconTile, ListRow, MarcaModulo, notify, SectionHeader, Sheet, Skeleton, Stat, StatusPill, Steps, type Tone } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors, tint } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 import { useRouter } from 'expo-router';
 import { useAuth, useUsuarioLogado } from '../../lib/auth';
 import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
@@ -706,7 +707,7 @@ export default function AfericoesModule() {
 
   return <SafeAreaView style={s.safe} edges={['top']}>
     <View style={s.header}>
-      <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} />
+      <BotaoVoltar label="Voltar aos módulos" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} />
       <MarcaModulo icon={GasPumpIcon} />
       <View style={s.flex}>
         <Text style={s.brandName}>Aferições</Text>

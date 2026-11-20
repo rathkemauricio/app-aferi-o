@@ -8,6 +8,7 @@ import { ArrowLeftIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, Shield
 import { IconButton, MarcaModulo, StatusPill } from '../../ui/kit';
 import { space } from '../../ui/theme';
 import { Carregando } from '../../ui/carregando';
+import { BotaoVoltar } from '../../ui/voltar';
 import AgendaTab from './AgendaTab';
 import DestaqueTab from './DestaqueTab';
 import HistTab from './HistTab';
@@ -49,7 +50,7 @@ export default function RiscosModule() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={[e.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
+        <BotaoVoltar label="Voltar aos módulos" onPress={voltar} />
         <MarcaModulo icon={ShieldWarningIcon} />
         <View style={s.flex}>
           <Text style={[e.nome, { color: colors.text }]}>Mapa de Risco</Text>

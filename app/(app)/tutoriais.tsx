@@ -8,6 +8,7 @@ import { useTutorial } from '../../tutoriais';
 import { ArrowLeftIcon, GraduationCapIcon, PlayCircleIcon, ResetIcon } from '../../ui/icons';
 import { Button, Card, IconButton, IconTile, notify, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
+import { BotaoVoltar } from '../../ui/voltar';
 
 /** Tutoriais interativos: lista os disponíveis para a conta, com Começar/Rever e Recomeçar todos. */
 export default function TutoriaisScreen() {
@@ -23,7 +24,7 @@ export default function TutoriaisScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Tutoriais</Text>
           <Text style={t.caption}>{vistos} de {lista.length} vistos neste aparelho</Text>

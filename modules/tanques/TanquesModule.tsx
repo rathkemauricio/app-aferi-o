@@ -12,6 +12,7 @@ import {
 import { Button, Card, confirmAction, EmptyState, Field, IconButton, ListRow, MarcaModulo, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { Carregando } from '../../ui/carregando';
+import { BotaoVoltar } from '../../ui/voltar';
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
 import { Deslizavel } from '../tempos/Deslizavel';
 import { MedicaoInterativa } from './MedicaoInterativa';
@@ -57,7 +58,7 @@ export default function TanquesModule() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <IconButton icon={ArrowLeftIcon} label={pilha.length > 1 ? 'Voltar' : 'Voltar aos módulos'} onPress={voltar} />
+        <BotaoVoltar label={pilha.length > 1 ? 'Voltar' : 'Voltar aos módulos'} onPress={voltar} />
         <MarcaModulo icon={RulerIcon} />
         <View style={s.flex}><Text style={s.brandName} numberOfLines={1}>Conferência de Estoque</Text><Text style={t.caption}>Combustíveis: medição dos tanques</Text></View>
         {dados.status === 'error' ? <StatusPill icon={CloudSlashIcon} label="Sem sincronizar" tone="warning" /> : <StatusPill icon={CloudCheckIcon} label="Sincronizado" tone="success" />}

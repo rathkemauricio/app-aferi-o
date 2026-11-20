@@ -8,6 +8,7 @@ import { ArrowLeftIcon, CaretDownIcon, CaretRightIcon, ListMagnifyingGlassIcon, 
 import { Button, Card, EmptyState, Field, IconButton, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 import { Carregando } from '../../ui/carregando';
+import { BotaoVoltar } from '../../ui/voltar';
 
 /** Uma linha do registro (tabela auditoria_log). */
 type Linha = {
@@ -132,7 +133,7 @@ export default function RastroScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar" onPress={voltar} />
+        <BotaoVoltar label="Voltar" onPress={voltar} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Rastreabilidade</Text>
           <Text style={t.caption}>O que cada conta fez no sistema</Text>

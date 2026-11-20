@@ -14,6 +14,7 @@ import {
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, MarcaModulo, notify, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { Carregando } from '../../ui/carregando';
+import { BotaoVoltar } from '../../ui/voltar';
 import { type Categoria, type Inventario, inventariosCol, num, type Unidade, useCategorias, useInventarios } from './store';
 
 const SESSAO = 'nevoeiro.inventarios.sessao.v1';
@@ -46,7 +47,7 @@ export default function InventariosModule() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <IconButton icon={ArrowLeftIcon} label="Voltar aos módulos" onPress={voltar} />
+        <BotaoVoltar label="Voltar aos módulos" onPress={voltar} />
         <MarcaModulo icon={ArchiveIcon} />
         <View style={s.flex}>
           <Text style={s.brandName}>Inventários</Text>
