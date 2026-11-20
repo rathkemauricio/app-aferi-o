@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUsuarioLogado } from '../../lib/auth';
+import { docsCol } from '../../lib/data';
 import type { Combustivel } from '../../lib/combustiveis';
 import { esc, imprimirHtml, rotuloFilial } from '../../lib/util';
 import {
@@ -13,10 +14,10 @@ import { createTypography, pageMaxWidth, radius, space, ThemeContext, type Theme
 import { dataBR, fmtL, fmtSinal, lerNumero, type LinhaTanque, type Medicao, resumo, type ValoresCombustivel, valoresPorCombustivel } from './model';
 import { Deslizavel } from '../tempos/Deslizavel';
 import { MedicaoInterativa } from './MedicaoInterativa';
-import { alturaMaxima, litrosPelaTabela, type TabelaArqueacao, tabelaDoTanque, useTabelas, vincularTanque } from './arqueacao';
+import { alturaMaxima, litrosPelaTabela, type TabelaArqueacao, tabelaDoTanque, tabelasCol, useTabelas, vincularTanque } from './arqueacao';
 import { TabelasArqueacao } from './TabelasArqueacao';
 import { CadastroTanques } from './CadastroTanques';
-import { garantirTanque, type TanqueFilial, useTanquesFilial } from './cadastro';
+import { garantirTanque, type TanqueFilial, tanquesCol, useTanquesFilial } from './cadastro';
 import { aplicarCroqui, linhaVazia, medicoesCol, novaMedicao, type TanqueCroqui, useTanques, useTanquesDoCroqui } from './store';
 
 type Tela = { n: 'filiais' } | { n: 'filial'; id: string } | { n: 'medicao'; id: string };
@@ -32,7 +33,9 @@ export default function TanquesModule() {
   const tela = pilha[pilha.length - 1];
   const ir = (x: Tela) => setPilha(p => [...p, x]);
   const voltar = () => { if (pilha.length > 1) setPilha(p => p.slice(0, -1)); else if (router.canGoBack()) router.back(); else router.replace('/'); };
-  useEffect(() => { void medicoesCol.sync(); }, []);
+  // Tudo que a tela usa: medições, tanques cadastrados, tabelas de arqueação e o croqui (docs da filial). Sem isto, o
+  // cadastro feito no painel só chegava ao celular na próxima atualização geral.
+  useEffect(() => { void Promise.all([medicoesCol.sync(), tanquesCol.sync(), tabelasCol.sync(), docsCol.sync()]).catch(() => undefined); }, []);
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { if (pilha.length > 1) { setPilha(p => p.slice(0, -1)); return true; } return false; });
     return () => sub.remove();

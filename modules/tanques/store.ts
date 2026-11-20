@@ -3,6 +3,8 @@ import { useCombustiveis } from '../../lib/combustiveis';
 import { useFiliais, useFilialDoc } from '../../lib/data';
 import { combustivelDoTanque, type CroquiDoc } from '../croqui/model';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
+import { tabelasCol } from './arqueacao';
+import { tanquesCol } from './cadastro';
 import { hojeIso, type LinhaTanque, type Medicao, uid } from './model';
 
 /** Medições sincronizadas (web e app; funcionam sem internet e enviam depois). */
@@ -11,9 +13,11 @@ export const medicoesCol = new Collection<Medicao>({ table: 'tq_medicoes', stora
 export function useTanques() {
   const f = useFiliais();
   const m = useCollection(medicoesCol);
+  const tq = useCollection(tanquesCol);
+  const tb = useCollection(tabelasCol);
   const combustiveis = useCombustiveis();
   const medicoes = useMemo(() => [...m.list].sort((a, b) => b.data.localeCompare(a.data) || (b.updated_at ?? '').localeCompare(a.updated_at ?? '')), [m.list]);
-  return { filiais: f.filiais, medicoes, combustiveis, loaded: f.loaded && m.loaded, status: combinedStatus([f.status, m.status]) };
+  return { filiais: f.filiais, medicoes, combustiveis, loaded: f.loaded && m.loaded && tq.loaded && tb.loaded, status: combinedStatus([f.status, m.status, tq.status, tb.status]) };
 }
 
 export const linhaVazia = (tanque = '', combustivel = ''): LinhaTanque => ({ id: uid('tq'), tanque, combustivel, metragem: null, litros: null, informada: null });
