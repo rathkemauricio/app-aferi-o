@@ -850,9 +850,9 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   const semLeitor = COLETA_AQUI && dados.filiais.find(f => f.id === inv.filial_id)?.contagem_leitor === false;
   const modoSL = usePreferencias().modoSemLeitor;
   const minhas = useMinhasColetas(ct, r);
-  // Na web a lista de Itens é a própria coleta manual (sem coletor nem câmera): cada item tem o campo de somar e, ao
-  // expandir o cartão, as informações e o histórico de coleta.
-  const itensColetaveis = Platform.OS === 'web';
+  // Coleta simples (web e app, ligada em Configurações): a aba Itens é a própria coleta manual, sem coletor nem câmera:
+  // cada item tem o campo de somar e, ao expandir o cartão, as informações e o histórico de coleta.
+  const itensColetaveis = usePreferencias().coletaSimples; // Configurações → Contagens → Coleta simples (web e app)
   const [disp, setDisp] = useState<string | null>(null);
   useEffect(() => { void idDispositivo().then(setDisp); }, []);
   const lancamentos = useMemo(() => {
@@ -926,7 +926,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
       <View style={[k.abas, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         {(COLETA_AQUI ? (['itens', 'coleta', 'detalhe'] as const) : (['itens', 'detalhe'] as const)).map(a => (
           <Pressable key={a} accessibilityRole="tab" accessibilityState={{ selected: tela.aba === a }} onPress={() => mudar({ aba: a })} style={[k.aba, tela.aba === a && { borderBottomColor: P.acao }]}>
-            <Text style={[k.abaTxt, { color: tela.aba === a ? c.text : c.textMuted }]}>{a === 'itens' ? 'Itens' : a === 'coleta' ? 'Coleta' : 'Detalhamento'}</Text>
+            <Text style={[k.abaTxt, { color: tela.aba === a ? c.text : c.textMuted }]}>{a === 'itens' ? (itensColetaveis && coletavel ? 'Coleta simples' : 'Itens') : a === 'coleta' ? 'Coleta' : 'Detalhamento'}</Text>
           </Pressable>
         ))}
       </View>

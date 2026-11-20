@@ -129,6 +129,8 @@ export default function ConfiguracoesScreen() {
         <Card>
           {linha('Layout da tela de coleta', pref.layoutColeta === 'simples' ? 'Simples: quadro amarelo do item e botões grandes com nome.' : 'Completo: cartão do item, quantidade com Salvar ao lado e total embaixo.', null)}
           {escolha(LAYOUTS, pref.layoutColeta, v => setPreferencia('layoutColeta', v))}
+          {linha('Coleta simples', 'A aba vira a própria coleta: cada item tem o campo para somar e, ao tocar no cartão, mostra as informações e o histórico. Desligada, a aba Itens só lista os itens.',
+            <Switch value={pref.coletaSimples} onValueChange={v => setPreferencia('coletaSimples', v)} accessibilityLabel="Coleta simples" />)}
           {linha('Sons', 'Correto ao reconhecer o item, salvo ao gravar e barrado quando não pode coletar.',
             <Switch value={pref.sons} onValueChange={v => { setPreferencia('sons', v); if (v) tocar('correto'); }} accessibilityLabel="Sons da coleta" />)}
           {linha('Celular sem leitor', 'Nas filiais marcadas "sem leitor" (cadastro da filial): como contar neste aparelho. Dá para trocar na tela da contagem.', null)}
