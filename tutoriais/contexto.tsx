@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, type RefObject, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Camada } from './Camada';
-import type { Armazenamento, ElementoAlvo, Passo, RotulosTutorial, TemaTutorial, Tutorial } from './tipos';
+import type { Armazenamento, ElementoAlvo, ItemRolagem, Passo, RotulosTutorial, TemaTutorial, Tutorial } from './tipos';
 
 export const TEMA_PADRAO: TemaTutorial = {
   veu: 'rgba(8, 16, 34, 0.62)', cartao: '#ffffff', borda: '#e2e7ef', texto: '#0f1f3d', textoSuave: '#4a5873',
@@ -32,6 +32,9 @@ type Ctx = {
   /** Esquece os tutoriais vistos (todos ou um). */
   esquecer: (id?: string) => void;
   carregado: boolean;
+  registrarRolagem: (r: ItemRolagem) => void;
+  removerRolagem: (r: ItemRolagem) => void;
+  rolagens: () => ItemRolagem[];
   registrar: (id: string, ref: RefObject<ElementoAlvo | null>) => void;
   remover: (id: string, ref: RefObject<ElementoAlvo | null>) => void;
   alvo: (id: string) => RefObject<ElementoAlvo | null> | undefined;
@@ -57,6 +60,7 @@ export function TutorialProvider({ tutoriais, children, armazenamento = ARMAZENA
   aoConcluir?: (id: string, concluido: boolean) => void;
 }) {
   const alvos = useRef(new Map<string, RefObject<ElementoAlvo | null>>());
+  const rolagens = useRef(new Set<ItemRolagem>());
   const [ativo, setAtivo] = useState<Ctx['ativo']>(null);
   const [vistos, setVistos] = useState<Set<string>>(new Set());
   const [carregado, setCarregado] = useState(false);
@@ -108,6 +112,9 @@ export function TutorialProvider({ tutoriais, children, armazenamento = ARMAZENA
     tutoriais, ativo, iniciar, parar, avancar, voltar, vistos, carregado,
     jaVisto: id => vistos.has(id),
     esquecer: id => guardar(id ? new Set([...vistos].filter(x => x !== id)) : new Set()),
+    registrarRolagem: r => { rolagens.current.add(r); },
+    removerRolagem: r => { rolagens.current.delete(r); },
+    rolagens: () => [...rolagens.current],
     registrar: (id, ref) => { alvos.current.set(id, ref); },
     remover: (id, ref) => { if (alvos.current.get(id) === ref) alvos.current.delete(id); },
     alvo: id => alvos.current.get(id),

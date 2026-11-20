@@ -64,5 +64,8 @@ export type RotulosTutorial = {
   progresso: (atual: number, total: number) => string;
 };
 
+/** Uma área rolável que o tutorial pode rolar (ver RolagemTutorial). */
+export type ItemRolagem = { ref: { current: { scrollTo: (o: { y: number; animated?: boolean }) => void } | null }; posicao: () => number };
+
 /** Elemento nativo de uma View (o que o tutorial mede). */
 export type ElementoAlvo = ComponentRef<typeof View>;

@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View, type ViewStyle, type StyleProp } from 'react-native';
+import { RolagemTutorial } from '../tutoriais';
 import { avisosProntos, mostrarToast, perguntar, type TomAviso } from './avisos';
 import { CaretRightIcon, XIcon, type Icon } from './icons';
 import { color, radius, shadow, space, ThemeContext, tint as tints, type Tint, type as t } from './theme';
@@ -293,7 +294,7 @@ function SheetView({ title, onClose, children, footer, centro = false }: SheetPr
           <Text style={[t.section, k.flex, { color: colors.text }]}>{title}</Text>
           <IconButton icon={XIcon} label="Fechar" onPress={onClose} />
         </View>
-        <ScrollView contentContainerStyle={k.sheetBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="none">{children}</ScrollView>
+        <RolagemTutorial contentContainerStyle={k.sheetBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="none">{children}</RolagemTutorial>
         {footer ? <View style={[k.sheetFooter, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>{footer}</View> : null}
       </Animated.View>
     </Animated.View>

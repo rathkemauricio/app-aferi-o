@@ -25,7 +25,8 @@ import {
 import { lerPdfBarras } from './barras';
 import { htmlDivergencias, htmlDoInventario, type LinhaDivergente } from './impressao';
 import { Deslizavel } from '../tempos/Deslizavel';
-import { Alvo } from '../../tutoriais';
+import { aoReiniciarContagens } from '../../lib/ganchosTutorial';
+import { Alvo, RolagemTutorial } from '../../tutoriais';
 import { LeitorCamera, LeitorDaFilial, SeletorModo } from './SemLeitor';
 
 // Cores do design da Contagem de Estoque (cabeçalho azul-marinho, ação principal âmbar).
@@ -53,6 +54,8 @@ export default function ColetaModule() {
   const trocar = (t: Tela) => setPilha(p => [...p.slice(0, -1), t]);
   const voltar = () => { if (pilha.length > 1) setPilha(p => p.slice(0, -1)); else if (router.canGoBack()) router.back(); else router.replace('/'); };
   const inicio = () => setPilha([{ n: 'lista' }]);
+  // Tutorial de Contagens: volta para a lista (o módulo guarda a última tela aberta).
+  useEffect(() => aoReiniciarContagens(() => setPilha([{ n: 'lista' }])), []);
   const nav = { ir, trocar, voltar, inicio };
   const dados = useColeta();
   const { colors } = useContext(ThemeContext);
@@ -111,7 +114,7 @@ function Corpo({ children, rodape }: { children: ReactNode; rodape?: ReactNode }
   const c = useCores();
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView contentContainerStyle={k.corpo} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+      <RolagemTutorial contentContainerStyle={k.corpo} keyboardShouldPersistTaps="handled">{children}</RolagemTutorial>
       {rodape ? <Rodape>{rodape}</Rodape> : null}
     </View>
   );

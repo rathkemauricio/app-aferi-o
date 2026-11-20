@@ -1,4 +1,5 @@
 import { type Href, router } from 'expo-router';
+import { reiniciarContagens } from './ganchosTutorial';
 import type { Tutorial } from '../tutoriais';
 import { CheckSquareOffsetIcon, type Icon, SquaresFourIcon, UserCircleIcon } from '../ui/icons';
 
@@ -15,6 +16,9 @@ export type TutorialApp = Tutorial & {
 };
 
 const ir = (rota: string) => () => { router.navigate(rota as Href); };
+const esperar = (ms: number) => new Promise(r => setTimeout(r, ms));
+/** Abre Contagens na lista de inventários, mesmo que o módulo tenha ficado dentro de um inventário. */
+const irContagens = async () => { router.navigate('/coleta' as Href); await esperar(500); reiniciarContagens(); };
 
 export const TUTORIAIS: TutorialApp[] = [
   {
@@ -38,7 +42,7 @@ export const TUTORIAIS: TutorialApp[] = [
     icone: CheckSquareOffsetIcon,
     modulo: 'coleta',
     passos: [
-      { titulo: 'Contagens de estoque', texto: 'Aqui ficam os inventários de cada filial: os saldos do sistema, até 3 contagens e o relatório das diferenças.', antes: ir('/coleta'), espera: 600 },
+      { titulo: 'Contagens de estoque', texto: 'Aqui ficam os inventários de cada filial: os saldos do sistema, até 3 contagens e o relatório das diferenças.', antes: irContagens, espera: 500 },
       { alvo: 'contagens-abas', titulo: 'Em aberto e encerrados', texto: 'Em aberto: as filiais com inventário em andamento. Encerrados: os finalizados, com o relatório e a opção de reabrir.' },
       { alvo: 'contagens-leitor', opcional: true, titulo: 'Como a filial conta', texto: 'Com leitor de código (coletor) ou pelo celular: lista dos itens, câmera ou digitando o código.' },
       { alvo: 'contagens-bases', opcional: true, titulo: 'Base de códigos de barra', texto: 'Importe uma vez a relação de códigos da rede: ela vale para todas as filiais e liga cada código ao item.' },

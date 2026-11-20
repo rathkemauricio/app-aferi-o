@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../lib/auth';
 import { useFiliais } from '../../lib/data';
-import { Alvo } from '../../tutoriais';
+import { Alvo, RolagemTutorial } from '../../tutoriais';
 import { emailValido, enviarEmail } from '../../lib/email';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
@@ -245,7 +245,7 @@ export default function UsuariosScreen() {
           <Text style={t.caption}>{empresa ? `Contas da ${empresa.nome}` : 'Convide as contas da sua empresa'}</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center', paddingBottom: 56 }}
+      <RolagemTutorial contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(760), alignSelf: 'center', paddingBottom: 56 }}
         refreshControl={<RefreshControl refreshing={atualizando} onRefresh={() => { setAtualizando(true); void carregar().finally(() => setAtualizando(false)); }} />}>
         {!isAdmin ? <EmptyState icon={LockSimpleIcon} title="Acesso restrito" text="Somente o administrador gerencia usuários." />
           : erro ? <EmptyState icon={UserCircleIcon} title="Sem conexão" text={erro} action={{ label: 'Tentar de novo', onPress: () => void carregar() }} />
@@ -314,7 +314,7 @@ export default function UsuariosScreen() {
 
             <Text style={t.caption}>Cada conta vê só os dados da sua empresa e usa só os módulos marcados; o banco de dados aplica a mesma regra.</Text>
           </>}
-      </ScrollView>
+      </RolagemTutorial>
 
       {edicao && (
         <Sheet title="Editar usuário" onClose={() => !salvandoEdicao && setEdicao(null)}

@@ -48,6 +48,54 @@ export function Camada({ pularPasso }: { pularPasso: (direcao: 1 | -1) => void }
     return null;
   };
 
+  /** Posição da camada na janela (para converter entre as coordenadas da janela e as da camada). */
+  const origem = () => new Promise<{ x: number; y: number }>(ok => {
+    const base = raiz.current;
+    if (!base) { ok({ x: 0, y: 0 }); return; }
+    base.measureInWindow((x, y) => ok({ x: x || 0, y: y || 0 }));
+  });
+  const naJanela = (el: { measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void }) =>
+    new Promise<Ret | null>(ok => el.measureInWindow((x, y, w, h) => ok(w > 0 && h > 0 ? { x, y, w, h } : null)));
+
+  /**
+   * Se o alvo não está na parte visível, rola a área rolável que o contém até ele (RolagemTutorial; na web, sem
+   * área registrada, usa scrollIntoView). Devolve true se rolou.
+   */
+  const trazerParaVista = async (r: Ret): Promise<boolean> => {
+    const MARGEM = 10;
+    const dentro = r.y >= MARGEM && (r.y + r.h <= H - MARGEM || (r.h > H * 0.6 && r.y < H * 0.4));
+    if (dentro) return false;
+    const alvoEl = passo.alvo ? ctx.alvo(passo.alvo)?.current : null;
+    if (!alvoEl) return false;
+    const o = await origem();
+    const alvoJ = { x: r.x + o.x, y: r.y + o.y, w: r.w, h: r.h };
+    // Área rolável que contém o alvo (pelo eixo horizontal); a mais estreita vence (a do conteúdo, não a da página).
+    let melhor: { it: ReturnType<typeof ctx.rolagens>[number]; rect: Ret } | null = null;
+    for (const it of ctx.rolagens()) {
+      const no = it.ref.current as unknown as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | null;
+      if (!no?.measureInWindow) continue;
+      const rect = await naJanela(no as { measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void });
+      if (!rect) continue;
+      const cx = alvoJ.x + alvoJ.w / 2;
+      if (cx < rect.x - 2 || cx > rect.x + rect.w + 2) continue;
+      if (!melhor || rect.w < melhor.rect.w) melhor = { it, rect };
+    }
+    if (melhor) {
+      const { it, rect } = melhor;
+      // Alvo alto demais para a janela: alinha o topo; senão, deixa ele no alto para sobrar espaço ao cartão embaixo.
+      const aim = r.h > rect.h * 0.55 ? 12 : Math.min(rect.h * 0.22, 150);
+      const y = Math.max(0, it.posicao() + (alvoJ.y - rect.y - aim));
+      if (Math.abs(y - it.posicao()) < 2) return false;
+      it.ref.current?.scrollTo({ y, animated: !reduz });
+      return true;
+    }
+    if (Platform.OS === 'web') {
+      const el = alvoEl as unknown as { scrollIntoView?: (o: object) => void };
+      if (el.scrollIntoView) { el.scrollIntoView({ block: 'center', behavior: reduz ? 'auto' : 'smooth' }); return true; }
+    }
+    return false;
+  };
+
   // Prepara o passo: roda o `antes`, espera, mede; passo opcional sem alvo na tela é pulado.
   useEffect(() => {
     direcao.current = indice >= anterior.current ? 1 : -1;
@@ -59,9 +107,16 @@ export function Camada({ pularPasso }: { pularPasso: (direcao: 1 | -1) => void }
       const extra = passo.espera ?? (passo.antes ? 350 : 0);
       if (extra) await esperar(extra);
       if (!vivo) return;
-      const r = await medir(passo.opcional ? 4 : 8);
+      let r = await medir(passo.opcional ? 4 : 8);
       if (!vivo) return;
       if (passo.alvo && !r && passo.opcional) { pularPasso(direcao.current); return; }
+      // Alvo fora da parte visível: rola até ele (até 2 tentativas) e mede de novo.
+      for (let i = 0; r && i < 2; i++) {
+        if (!(await trazerParaVista(r))) break;
+        await esperar(reduz ? 80 : 520);
+        if (!vivo) return;
+        r = (await medir(2)) ?? r;
+      }
       setRet(r);
       setPronto(true);
     })();
@@ -110,20 +165,28 @@ export function Camada({ pularPasso }: { pularPasso: (direcao: 1 | -1) => void }
     return () => sub.remove();
   }, [toque, ctx]);
 
-  // Cartão: embaixo do alvo se couber, senão em cima; sem espaço nos dois, preso embaixo da tela.
+  // Cartão: embaixo do alvo se couber, senão em cima; sem espaço nos dois, preso embaixo da tela. Sempre dentro da tela.
   const cw = Math.min(380, W - 24);
-  const ESPACO = 220;
-  let cartaoPos: object = { left: (W - cw) / 2, top: Math.max(16, H / 2 - 130) };
+  const [altCartao, setAltCartao] = useState(210);
+  const LIVRE = 12;
+  const limitar = (v: number) => Math.min(Math.max(LIVRE, v), Math.max(LIVRE, H - altCartao - LIVRE));
+  let cartaoPos: { left: number; top: number } = { left: (W - cw) / 2, top: limitar(H / 2 - altCartao / 2) };
   let seta: { x: number; lado: 'cima' | 'baixo' } | null = null;
   if (ret) {
-    const abaixo = H - (ret.y + ret.h + folga);
-    const acima = ret.y - folga;
-    const lado = passo.lado && passo.lado !== 'auto' ? passo.lado : abaixo >= ESPACO ? 'baixo' : acima >= ESPACO ? 'cima' : 'fixo';
+    const abaixo = H - (ret.y + ret.h + folga) - 14;
+    const acima = ret.y - folga - 14;
+    const lado = passo.lado && passo.lado !== 'auto' ? passo.lado : abaixo >= altCartao ? 'baixo' : acima >= altCartao ? 'cima' : 'fixo';
     const left = Math.min(Math.max(12, ret.x + ret.w / 2 - cw / 2), W - cw - 12);
     const xSeta = Math.min(Math.max(18, ret.x + ret.w / 2 - left - 8), cw - 34);
-    if (lado === 'baixo') { cartaoPos = { left, top: ret.y + ret.h + folga + 14 }; seta = { x: xSeta, lado: 'cima' }; }
-    else if (lado === 'cima') { cartaoPos = { left, bottom: H - (ret.y - folga - 14) }; seta = { x: xSeta, lado: 'baixo' }; }
-    else cartaoPos = { left: (W - cw) / 2, bottom: 16 };
+    if (lado === 'baixo') {
+      const top = ret.y + ret.h + folga + 14;
+      cartaoPos = { left, top: limitar(top) };
+      if (Math.abs(cartaoPos.top - top) < 4) seta = { x: xSeta, lado: 'cima' };
+    } else if (lado === 'cima') {
+      const top = ret.y - folga - 14 - altCartao;
+      cartaoPos = { left, top: limitar(top) };
+      if (Math.abs(cartaoPos.top - top) < 4) seta = { x: xSeta, lado: 'baixo' };
+    } else cartaoPos = { left: (W - cw) / 2, top: limitar(H - altCartao - 16) };
   }
 
   const bloqueio = (estilo: object, k: string) => <Pressable key={k} accessible={false} style={[s.abs, estilo]} onPress={() => undefined} />;
@@ -147,6 +210,7 @@ export function Camada({ pularPasso }: { pularPasso: (direcao: 1 | -1) => void }
         <Animated.View key={indice}
           entering={reduz ? FadeIn.duration(120) : (seta?.lado === 'baixo' ? FadeInDown : FadeInUp).springify().damping(18).stiffness(200).reduceMotion(ReduceMotion.System)}
           exiting={FadeOut.duration(90)}
+          onLayout={e => { const h = Math.round(e.nativeEvent.layout.height); if (h && Math.abs(h - altCartao) > 2) setAltCartao(h); }}
           style={[s.cartao, { width: cw, backgroundColor: T.cartao, borderColor: T.borda }, cartaoPos]}
           accessibilityRole="alert" accessibilityLabel={`${passo.titulo}. ${passo.texto ?? ''}`}>
           {seta ? <View style={[s.seta, { left: seta.x, backgroundColor: T.cartao, borderColor: T.borda }, seta.lado === 'cima' ? s.setaCima : s.setaBaixo]} /> : null}

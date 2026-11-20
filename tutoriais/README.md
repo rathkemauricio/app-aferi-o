@@ -10,8 +10,10 @@ projeto e use.
 - **Passos de leitura e de toque**: no passo de leitura a pessoa lê e toca em Próximo, e o resto da tela fica
   bloqueado. No passo de toque (`acao: 'toque'`), ela toca no próprio elemento destacado, que funciona de verdade
   (ex.: abre um menu), e o tutorial segue sozinho. Um pulso em volta do destaque mostra onde tocar.
+- **Rola sozinho até o elemento**: se o elemento explicado está fora da parte visível, o tutorial rola a área até
+  ele (use `RolagemTutorial` no lugar de `ScrollView` nas telas com `<Alvo>`; na web, sem ela, usa `scrollIntoView`).
 - **Cartão posicionado sozinho**: fica embaixo do elemento se couber, senão em cima, com uma seta apontando para
-  ele. Sem espaço nos dois lados, fica preso embaixo da tela.
+  ele. Sempre inteiro dentro da tela, mesmo com elementos grandes.
 - **Passos opcionais**: se o alvo não está na tela (ex.: o menu lateral só existe no computador), o passo é pulado.
 - **Navegação entre telas**: `antes` roda antes do passo (ex.: `router.navigate('/outra-tela')`), e o destaque
   espera o alvo aparecer.
@@ -57,13 +59,16 @@ export default function App() {
 }
 ```
 
-2. Marque os elementos com `<Alvo>` (ele só envolve o filho numa View; use `style` para manter o layout):
+2. Marque os elementos com `<Alvo>` (ele só envolve o filho numa View; use `style` para manter o layout) e troque
+   o `ScrollView` das telas por `RolagemTutorial` (mesmas propriedades) para o tutorial poder rolar até o elemento:
 
 ```tsx
-import { Alvo } from './tutoriais';
+import { Alvo, RolagemTutorial } from './tutoriais';
 
-<Alvo id="novo"><Button title="Novo item" onPress={criar} /></Alvo>
-<Alvo id="lista" style={{ flex: 1 }}><FlatList ... /></Alvo>
+<RolagemTutorial contentContainerStyle={{ padding: 16 }}>
+  <Alvo id="novo"><Button title="Novo item" onPress={criar} /></Alvo>
+  <Alvo id="lista"><Lista ... /></Alvo>
+</RolagemTutorial>
 ```
 
 3. Abra o tutorial:
@@ -82,6 +87,7 @@ const { iniciar, jaVisto, esquecer } = useTutorial();
 | --- | --- |
 | `TutorialProvider` | `tutoriais`, `armazenamento?`, `chave?` (onde guardar os vistos), `tema?`, `rotulos?`, `aoConcluir?(id, concluido)` |
 | `Alvo` | `id`, `style?`: marca um elemento destacável |
+| `RolagemTutorial` | ScrollView (mesmas propriedades) que o tutorial rola até o elemento |
 | `useTutorial()` | `iniciar(id)`, `parar()`, `jaVisto(id)`, `esquecer(id?)`, `emAndamento`, `tutoriais`, `carregado` |
 | `useTutorialAutomatico(id, quando?, esperaMs?)` | abre o tutorial na primeira vez em que `quando` for verdadeiro |
 | `armazenamentoAsync(storage)` | adaptador para qualquer objeto com `getItem`/`setItem` |
@@ -95,12 +101,14 @@ const { iniciar, jaVisto, esquecer } = useTutorial();
 - `tipos.ts`: tipos dos tutoriais, do tema, dos rótulos e do armazenamento.
 - `contexto.tsx`: provider, estado do tutorial, registro dos alvos e hooks.
 - `Alvo.tsx`: marcador dos elementos.
+- `Rolagem.tsx`: `RolagemTutorial`, o ScrollView que o tutorial sabe rolar.
 - `Camada.tsx`: véu com recorte, pulso, cartão, teclado e botão voltar.
 
 ## Dicas
 
-- Elemento dentro de uma lista rolável: role até ele no `antes` do passo, ou marque um elemento que esteja sempre
-  visível.
+- Elemento dentro de uma `FlatList`: marque um elemento fora da lista, ou envolva a tela em `RolagemTutorial`.
+- Módulo que lembra a última tela aberta: faça o `antes` do primeiro passo voltá-lo à tela inicial (no EasyAudit,
+  `lib/ganchosTutorial.ts`), senão o elemento do passo pode não existir na tela.
 - Um passo de toque que abre uma janela (Sheet ou Modal): o próximo passo pode destacar um `<Alvo>` dentro da
   janela. Use `espera` para dar tempo da animação de abertura.
 - No EasyAudit, os roteiros ficam em `lib/tutoriais.ts`, e a tela de rever fica em `app/(app)/tutoriais.tsx`.

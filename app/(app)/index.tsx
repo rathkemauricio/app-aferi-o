@@ -11,7 +11,7 @@ import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useFiliais } from '../../lib/data';
 import { MODULES, type AppModule } from '../../modules/registry';
-import { Alvo, useTutorialAutomatico } from '../../tutoriais';
+import { Alvo, RolagemTutorial, useTutorialAutomatico } from '../../tutoriais';
 import { ArrowRightIcon, DropIcon, HourglassIcon, GasPumpIcon, LockSimpleIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon } from '../../ui/icons';
 import { Card, confirmAction, EmptyState, IconButton, IconTile, ListRow, SectionHeader, StatusPill } from '../../ui/kit';
 import { createTypography, radius, space, ThemeContext, type ThemeColors } from '../../ui/theme';
@@ -49,7 +49,7 @@ export default function ModuleLauncher() {
     ];
     return (
       <SafeAreaView style={s.webSafe} edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={s.webContent}>
+        <RolagemTutorial contentContainerStyle={s.webContent}>
           <View style={s.webGreeting}>
             <View style={s.flex}>
               <Text style={s.webTitle}>{saudacao}{nome ? `, ${nome.split(' ')[0]}` : ''}</Text>
@@ -93,7 +93,7 @@ export default function ModuleLauncher() {
             {isAdmin && isSupabaseConfigured ? <ListRow style={s.divided} icon={UserCircleIcon} tint="slate" title="Usuários e permissões" subtitle="Acessos e módulos de cada conta" onPress={() => router.push('/usuarios')} /> : null}
           </Card></Alvo>
           </>}
-        </ScrollView>
+        </RolagemTutorial>
       </SafeAreaView>
     );
   }
@@ -115,7 +115,7 @@ export default function ModuleLauncher() {
         ) : null}
       </View>
 
-      <ScrollView contentContainerStyle={s.content}>
+      <RolagemTutorial contentContainerStyle={s.content}>
         <Pressable style={s.account} onPress={() => router.push('/conta')} accessibilityRole="button" accessibilityLabel="Minha conta">
           <UserCircleIcon size={18} color={colors.onBgMuted} />
           <Text style={t.captionBg} numberOfLines={1}>
@@ -157,7 +157,7 @@ export default function ModuleLauncher() {
         </Card></Alvo>
         </>}
         <Text style={[t.captionBg, { textAlign: 'center', marginTop: space.sm }]}>{rotuloVersao}</Text>
-      </ScrollView>
+      </RolagemTutorial>
     </SafeAreaView>
   );
 }
