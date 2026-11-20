@@ -132,7 +132,8 @@ export default function CroquiModule() {
   };
   const passo = grade ? 10 : 2;
   const ZOOMS = [1, 1.5, 2, 3];
-  const mudarZoom = (dir: 1 | -1) => setZoom(z => ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + dir))]);
+  // O 3D também muda o zoom pela pinça (valores fora da lista): vai para o próximo nível acima ou abaixo.
+  const mudarZoom = (dir: 1 | -1) => setZoom(z => (dir > 0 ? ZOOMS.find(v => v > z + 0.01) ?? ZOOMS[ZOOMS.length - 1] : [...ZOOMS].reverse().find(v => v < z - 0.01) ?? ZOOMS[0]));
   const adicionar = (type: string) => { const it = novoItem(type, items); commit([...items, it]); setSel(it.id); };
 
   // Teclado na web: Delete remove, R gira (como no HTML).
@@ -210,7 +211,7 @@ export default function CroquiModule() {
               action={{ label: 'Começar a desenhar', icon: PencilSimpleIcon, onPress: () => setEditando(true) }} />
           ) : (
             !editando && ver3d
-              ? <Croqui3D items={items} bandeira={filial.bandeira} mostrarNomes={nomes} vista={giro} fundo={paleta.ground} zoom={zoom} />
+              ? <Croqui3D items={items} bandeira={filial.bandeira} mostrarNomes={nomes} vista={giro} fundo={paleta.ground} zoom={zoom} onZoom={setZoom} onDragChange={setArrastando} />
               : <CroquiCanvas items={items} bandeira={filial.bandeira} mostrarNomes={nomes} paleta={paleta} editavel={editando} selecionado={sel}
                 zoom={zoom} passo={passo} onSelect={setSel} onDragChange={setArrastando} onMove={aplicarMovimentos} />
           )}
@@ -379,7 +380,7 @@ export default function CroquiModule() {
             </View>
             <ScrollView contentContainerStyle={{ padding: space.sm }} scrollEnabled={!arrastando}>
               {!editando && ver3d
-                ? <Croqui3D items={items} bandeira={filial.bandeira} mostrarNomes={nomes} vista={giro} fundo={paleta.ground} zoom={zoom} />
+                ? <Croqui3D items={items} bandeira={filial.bandeira} mostrarNomes={nomes} vista={giro} fundo={paleta.ground} zoom={zoom} onZoom={setZoom} onDragChange={setArrastando} />
                 : <CroquiCanvas items={items} bandeira={filial.bandeira} mostrarNomes={nomes} paleta={paleta} editavel={editando} selecionado={sel}
                   zoom={zoom} passo={passo} onSelect={setSel} onDragChange={setArrastando} onMove={aplicarMovimentos} />}
             </ScrollView>

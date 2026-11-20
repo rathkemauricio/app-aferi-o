@@ -1,4 +1,4 @@
-import { bicoNoTopo, CARRO, dentro, girarVista, local, type Pt, type Vista } from './iso';
+import { bicoNoTopo, CARRO, dentro, local, type Pt } from './iso';
 import { fuelOf, type Item, nBicos, T, VH, VW } from './model';
 
 /*
@@ -205,16 +205,16 @@ function distSeg(a: Pt, b: Pt, c: Pt, d: Pt) {
 }
 
 /** Pontos de passeio e de partida de cada frentista (cada um cuida de um grupo de bombas). */
-function zonas(items: Item[], n: number, vista: Vista) {
+function zonas(items: Item[], n: number) {
   const bombas = items.filter(i => T[i.type]?.k === 'b');
   const obst = obstaculos(items);
   const valido = (p: Pt) => p.x > 10 && p.y > 10 && p.x < VW - 10 && p.y < VH - 10 && !obst.some(o => dentroObst(o, p));
   const cobertura = items.find(i => i.type === 'cobertura');
   const pateo = cobertura ? [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => local(cobertura, sx * (cobertura.w / 2 - 30), sy * (cobertura.h / 2 - 30))).filter(valido) : [];
-  // Porta da loja: o lado virado para quem olha (para ninguém ficar "em cima" do prédio).
+  // Porta da loja: o lado virado para as bombas (a câmera gira livre; o movimento não depende dela).
   const loja = items.find(i => i.type === 'loja');
-  const frente = (p: Pt) => { const g = girarVista(p, vista); return g.x + g.y; };
-  const porta = loja ? [local(loja, 0, loja.h / 2 + 16), local(loja, 0, -loja.h / 2 - 16), local(loja, loja.w / 2 + 16, 0), local(loja, -loja.w / 2 - 16, 0)].sort((a, b) => frente(b) - frente(a)).filter(valido)[0] : undefined;
+  const alvo = bombas.length ? { x: bombas.reduce((s, b) => s + b.x, 0) / bombas.length, y: bombas.reduce((s, b) => s + b.y, 0) / bombas.length } : { x: VW / 2, y: VH / 2 };
+  const porta = loja ? [local(loja, 0, loja.h / 2 + 16), local(loja, 0, -loja.h / 2 - 16), local(loja, loja.w / 2 + 16, 0), local(loja, -loja.w / 2 - 16, 0)].filter(valido).sort((a, b) => dist(a, alvo) - dist(b, alvo))[0] : undefined;
   const servicos = items.filter(i => ['banheiro', 'calibrador', 'lavagem'].includes(i.type)).map(i => local(i, 0, i.h / 2 + 16)).filter(valido);
   const ladosDe = (b: Item) => {
     const a = (b.rot * Math.PI) / 180, ux = { x: Math.cos(a), y: Math.sin(a) }, uy = { x: -Math.sin(a), y: Math.cos(a) };
@@ -241,10 +241,10 @@ function zonas(items: Item[], n: number, vista: Vista) {
 }
 
 /** Planeja o ciclo inteiro. `n` = quantos frentistas. */
-export function planejarMovimento(items: Item[], opts: { frentistas: number; vista: Vista }): Movimento {
+export function planejarMovimento(items: Item[], opts: { frentistas: number }): Movimento {
   const rnd = sorteio(items.length * 7919 + items.reduce((s, i) => s + i.x * 3 + i.y, 0));
   const obst = obstaculos(items);
-  const zs = zonas(items, opts.frentistas, opts.vista);
+  const zs = zonas(items, opts.frentistas);
   const gente = zs.map(z => new Andarilho(z.casa, z.pontos, obst, rnd));
   const lugares = vagas(items);
   const visitas: Visita[] = [];
