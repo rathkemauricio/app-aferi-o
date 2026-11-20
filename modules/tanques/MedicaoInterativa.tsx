@@ -6,7 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { ClipPath, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ArrowRightIcon, CheckIcon, XIcon } from '../../ui/icons';
-import { darkColor, ThemeContext } from '../../ui/theme';
+import { darkColor, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { type PaletaImersiva, paletaImersiva } from '../../ui/imersivo';
 import { faixa, Roleta } from '../afericoes/Roleta';
 import { alturaMaxima, litrosPelaTabela, type TabelaArqueacao, volumeTotal } from './arqueacao';
 import { fmtL, lerNumero, type LinhaTanque } from './model';
@@ -19,7 +20,9 @@ import { fmtL, lerNumero, type LinhaTanque } from './model';
  * litros saem sozinhos da tabela; sem tabela, a escala é de referência (0 a 260 cm) e os litros são digitados.
  */
 
-const NAVY = '#0b1426', PAINEL = '#13213b', PAINEL2 = '#1b2c4b', LINHA = '#2a3d62', FG = '#eef2f8', MUTED = '#9fb0c9', MINT = '#5fd39a';
+// Cores da tela: seguem o tema (ver ui/imersivo.ts). O desenho do tanque mantém as cores próprias.
+const P: PaletaImersiva = paletaImersiva(darkColor);
+const MINT_ARTE = '#5fd39a';
 /** Diâmetro de referência do desenho (cm) para tanque sem tabela de arqueação. */
 const DIAM_REF = 260;
 // Desenho (viewBox 340 × 320): tanque subterrâneo horizontal visto de lado (cilindro com tampos abaulados),
@@ -43,12 +46,13 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
   onMudar: (id: string, patch: Partial<LinhaTanque>) => void;
   onFechar: () => void;
 }) {
+  aplicarTema(useContext(ThemeContext).colors);
   const insets = useSafeAreaInsets();
   const reduz = useReducedMotion();
   const primeiroPendente = Math.max(0, tanques.findIndex(l => l.metragem === null || l.litros === null));
   const [atual, setAtual] = useState(primeiroPendente);
   const t = tanques[atual];
-  const cor = t ? corComb(t.combustivel) : MINT;
+  const cor = t ? corComb(t.combustivel) : P.acao;
   const tab = t ? tabelaDe(t.tanque) : undefined;
   const DIAM = tab ? Math.max(1, Math.ceil(alturaMaxima(tab))) : DIAM_REF;
   const valoresCm = useMemo(() => faixa(0, DIAM, 1), [DIAM]);
@@ -138,19 +142,19 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
     if (alvo >= 0 && alvo !== atual) setAtual(alvo); else onFechar();
   };
   const ctxTema = useContext(ThemeContext);
-  const temaEscuro = useMemo(() => ({ ...ctxTema, mode: 'dark' as const, colors: { ...darkColor, bg: NAVY, surface: PAINEL, surfaceMuted: PAINEL2, accent: MINT, primaryText: NAVY, campo: NAVY } }), [ctxTema]);
+  const temaEscuro = ctxTema; // a roleta usa as cores do tema escolhido
   if (!t) return null;
   const litrosAgora = lerNumero(litrosTxt);
   const pct = tab && litrosAgora !== null && volumeTotal(tab) ? Math.round((litrosAgora / volumeTotal(tab)) * 100) : cm === null ? null : Math.round((Math.min(cm, DIAM) / DIAM) * 100);
 
   return (
     <Modal visible animationType={reduz ? 'none' : 'slide'} presentationStyle="fullScreen" statusBarTranslucent onRequestClose={onFechar}>
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: NAVY }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: P.fundo }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={[e.corpo, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
             {/* Topo */}
             <View style={e.linha}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fechar a medição interativa" onPress={onFechar} hitSlop={10} style={e.redondo}><XIcon size={20} color={FG} weight="bold" /></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar a medição interativa" onPress={onFechar} hitSlop={10} style={e.redondo}><XIcon size={20} color={P.fg} weight="bold" /></Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={e.titulo} numberOfLines={1}>Tanque {t.tanque || '?'} · {t.combustivel ? nomeComb(t.combustivel) : 'sem combustível'}</Text>
                 <Text style={e.sub} numberOfLines={1}>{filial}</Text>
@@ -167,10 +171,10 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
                 const on = i === atual, feito = l.metragem !== null && l.litros !== null;
                 return (
                   <Pressable key={l.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setAtual(i)}
-                    style={[e.chip, on && { backgroundColor: FG, borderColor: FG }]}>
+                    style={[e.chip, on && { backgroundColor: P.fg, borderColor: P.fg }]}>
                     <View style={[e.gota, { backgroundColor: corComb(l.combustivel) }]}><Text style={e.gotaTxt}>{l.tanque || '?'}</Text></View>
-                    <Text style={[e.chipTxt, on && { color: NAVY }]} numberOfLines={1}>{l.combustivel ? nomeComb(l.combustivel) : 'Tanque'}</Text>
-                    {feito ? <CheckIcon size={14} color={on ? NAVY : MINT} weight="bold" /> : null}
+                    <Text style={[e.chipTxt, on && { color: P.fundo }]} numberOfLines={1}>{l.combustivel ? nomeComb(l.combustivel) : 'Tanque'}</Text>
+                    {feito ? <CheckIcon size={14} color={on ? P.fundo : P.destaqueTxt} weight="bold" /> : null}
                   </Pressable>
                 );
               })}
@@ -227,7 +231,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
                         </G>
                       );
                     })}
-                    <AnimatedLine x1={X0} x2={X1} stroke={MINT} strokeWidth={1.5} strokeDasharray="6 5" animatedProps={linhaProps} />
+                    <AnimatedLine x1={X0} x2={X1} stroke={MINT_ARTE} strokeWidth={1.5} strokeDasharray="6 5" animatedProps={linhaProps} />
                   </Svg>
                 </View>
               </GestureDetector>
@@ -244,7 +248,7 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
 
             {/* Leitura */}
             <View style={e.leitura}>
-              <Text style={[e.num, { color: cm === null ? MUTED : FG }]}>{cm === null ? '—' : String(cm).replace('.', ',')}</Text>
+              <Text style={[e.num, { color: cm === null ? P.muted : P.fg }]}>{cm === null ? '—' : String(cm).replace('.', ',')}</Text>
               <Text style={e.un}>cm</Text>
               {pct !== null ? <View style={e.tag}><Text style={e.tagTxt}>{pct}% {tab ? 'do tanque' : 'da régua'}</Text></View> : null}
             </View>
@@ -255,16 +259,16 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
             {/* Litros */}
             <View style={e.caixa}>
               <Text style={e.rot}>{tab ? `Litros pela tabela ${tab.nome}` : 'Litros (tabela do tanque)'}</Text>
-              <TextInput value={litrosTxt} onChangeText={mudarLitros} keyboardType="decimal-pad" placeholder="0" placeholderTextColor="#6b7891"
+              <TextInput value={litrosTxt} onChangeText={mudarLitros} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={P.muted}
                 style={e.litros} accessibilityLabel="Litros pela tabela do tanque" />
-              {tab && cm !== null && cm > alturaMaxima(tab) ? <Text style={[e.sub, { color: '#ffb547' }]}>Altura acima da tabela ({alturaMaxima(tab)} cm): os litros ficam no volume total. Confira a medida.</Text> : null}
+              {tab && cm !== null && cm > alturaMaxima(tab) ? <Text style={[e.sub, { color: P.aviso }]}>Altura acima da tabela ({alturaMaxima(tab)} cm): os litros ficam no volume total. Confira a medida.</Text> : null}
               {tab ? <Text style={e.sub}>{t.litrosTabela ? 'Calculado pela altura (dá para corrigir digitando).' : 'Digitado à mão; mexa na régua para calcular pela tabela.'}</Text> : null}
-              <Text style={e.sub}>Informada (medição anterior): <Text style={{ color: FG, fontWeight: '800' }}>{fmtL(t.informada)} L</Text></Text>
+              <Text style={e.sub}>Informada (medição anterior): <Text style={{ color: P.fg, fontWeight: '800' }}>{fmtL(t.informada)} L</Text></Text>
             </View>
 
-            <Pressable accessibilityRole="button" onPress={proximo} style={[e.btn, { backgroundColor: MINT, flexDirection: 'row', gap: 8 }]}>
-              <Text style={[e.btnTxt, { color: NAVY }]}>{tanques.some((l, i) => i !== atual && (l.metragem === null || l.litros === null)) ? 'Próximo tanque' : 'Concluir'}</Text>
-              <ArrowRightIcon size={18} color={NAVY} weight="bold" />
+            <Pressable accessibilityRole="button" onPress={proximo} style={[e.btn, { backgroundColor: P.acao, flexDirection: 'row', gap: 8 }]}>
+              <Text style={[e.btnTxt, { color: P.acaoTxt }]}>{tanques.some((l, i) => i !== atual && (l.metragem === null || l.litros === null)) ? 'Próximo tanque' : 'Concluir'}</Text>
+              <ArrowRightIcon size={18} color={P.acaoTxt} weight="bold" />
             </Pressable>
             <Text style={[e.sub, { textAlign: 'center' }]}>Venda, recebimento e a conferência por combustível continuam na tela normal da medição.</Text>
           </ScrollView>
@@ -274,27 +278,37 @@ export function MedicaoInterativa({ tanques, filial, nomeComb, corComb, tabelaDe
   );
 }
 
-const e = StyleSheet.create({
-  corpo: { paddingHorizontal: 16, gap: 14, backgroundColor: NAVY },
+const criarEstilos = () => StyleSheet.create({
+  corpo: { paddingHorizontal: 16, gap: 14, backgroundColor: P.fundo },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  redondo: { width: 40, height: 40, borderRadius: 12, backgroundColor: PAINEL2, alignItems: 'center', justifyContent: 'center' },
-  titulo: { color: FG, fontSize: 18, fontWeight: '800' },
-  sub: { color: MUTED, fontSize: 12 },
-  prog: { color: MINT, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 6, paddingRight: 12, borderRadius: 999, backgroundColor: PAINEL2, borderWidth: 1, borderColor: LINHA },
+  redondo: { width: 40, height: 40, borderRadius: 12, backgroundColor: P.painel2, alignItems: 'center', justifyContent: 'center' },
+  titulo: { color: P.fg, fontSize: 18, fontWeight: '800' },
+  sub: { color: P.muted, fontSize: 12 },
+  prog: { color: P.destaqueTxt, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 6, paddingRight: 12, borderRadius: 999, backgroundColor: P.painel2, borderWidth: 1, borderColor: P.linha },
   gota: { minWidth: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   gotaTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  chipTxt: { color: FG, fontSize: 13, fontWeight: '700', maxWidth: 150 },
-  cena: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PAINEL, borderRadius: 18, padding: 10 },
-  campoRoleta: { borderRadius: 12, borderWidth: 1, borderColor: LINHA, backgroundColor: NAVY, overflow: 'hidden' },
+  chipTxt: { color: P.fg, fontSize: 13, fontWeight: '700', maxWidth: 150 },
+  cena: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: P.painel, borderRadius: 18, padding: 10 },
+  campoRoleta: { borderRadius: 12, borderWidth: 1, borderColor: P.linha, backgroundColor: P.campo, overflow: 'hidden' },
   leitura: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   num: { fontSize: 44, fontWeight: '800', fontVariant: ['tabular-nums'], letterSpacing: -1 },
-  un: { color: MUTED, fontWeight: '700' },
-  tag: { marginLeft: 'auto', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: '#5fd39a22' },
-  tagTxt: { color: MINT, fontWeight: '700', fontSize: 12 },
-  caixa: { backgroundColor: PAINEL, borderRadius: 18, padding: 14, gap: 8 },
-  rot: { color: FG, fontWeight: '800', fontSize: 15 },
-  litros: { borderRadius: 12, borderWidth: 1.5, borderColor: LINHA, backgroundColor: '#ffffff', color: '#0f1f3d', fontSize: 26, fontWeight: '800', paddingHorizontal: 14, paddingVertical: 10, fontVariant: ['tabular-nums'] },
+  un: { color: P.muted, fontWeight: '700' },
+  tag: { marginLeft: 'auto', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: P.acaoSoft },
+  tagTxt: { color: P.destaqueTxt, fontWeight: '700', fontSize: 12 },
+  caixa: { backgroundColor: P.painel, borderRadius: 18, padding: 14, gap: 8 },
+  rot: { color: P.fg, fontWeight: '800', fontSize: 15 },
+  litros: { borderRadius: 12, borderWidth: 1.5, borderColor: P.linha, backgroundColor: P.campo, color: P.fg, fontSize: 26, fontWeight: '800', paddingHorizontal: 14, paddingVertical: 10, fontVariant: ['tabular-nums'] },
   btn: { borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  btnTxt: { color: FG, fontWeight: '800', fontSize: 15 },
+  btnTxt: { color: P.fg, fontWeight: '800', fontSize: 15 },
 });
+
+/** Estilos recriados quando o tema muda (as cores vêm da paleta do tema). */
+let e: ReturnType<typeof criarEstilos>;
+let temaAplicado: unknown = null;
+function aplicarTema(c: ThemeColors) {
+  if (temaAplicado === c) return;
+  temaAplicado = c;
+  Object.assign(P, paletaImersiva(c));
+  e = criarEstilos();
+}

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture, type PanGestureConfig } from 'react-native-gesture-handler';
 import Animated, { Extrapolation, interpolate, ReduceMotion, type SharedValue, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ArrowRightIcon, ResetIcon, XIcon } from '../../ui/icons';
+import { darkColor, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { type PaletaImersiva, paletaImersiva } from '../../ui/imersivo';
 import { type Catalogo, type ItemAuditoria, tituloCurto } from './model';
 
 /*
@@ -15,8 +17,8 @@ import { type Catalogo, type ItemAuditoria, tituloCurto } from './model';
  */
 
 type Dir = 'direita' | 'esquerda' | 'cima' | 'baixo';
-const NAVY = '#0b1426', PAINEL = '#13213b', PAINEL2 = '#1b2c4b', FG = '#eef2f8', MUTED = '#9fb0c9';
-const CARTAO = '#f4f6fa', CARTAO_TXT = '#0f1f3d', CARTAO_MUTED = '#4a5873';
+// Cores da tela: seguem o tema (ver ui/imersivo.ts). O cartão usa a cor dos campos, que sempre contrasta com a letra.
+const P: PaletaImersiva = paletaImersiva(darkColor);
 
 /** Status de cada direção do arraste, a partir dos status do checklist. */
 function direcoes(cat: Catalogo) {
@@ -35,6 +37,7 @@ export function ModoCartoes({ itens, cat, setorDe, filial, onMudar, onFechar }: 
   onMudar: (id: number, patch: Partial<ItemAuditoria>, imediato?: boolean) => void;
   onFechar: () => void;
 }) {
+  aplicarTema(useContext(ThemeContext).colors);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const largura = Math.min(width - 32, 460);
@@ -75,12 +78,12 @@ export function ModoCartoes({ itens, cat, setorDe, filial, onMudar, onFechar }: 
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" statusBarTranslucent onRequestClose={onFechar}>
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: NAVY }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: P.fundo }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={[e.tela, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 14 }]}>
             {/* Topo */}
             <View style={e.linha}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fechar o modo cartões" onPress={onFechar} hitSlop={10} style={e.redondo}><XIcon size={20} color={FG} weight="bold" /></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar o modo cartões" onPress={onFechar} hitSlop={10} style={e.redondo}><XIcon size={20} color={P.fg} weight="bold" /></Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={e.titulo}>Modo cartões</Text>
                 <Text style={e.sub} numberOfLines={1}>{filial}</Text>
@@ -97,7 +100,7 @@ export function ModoCartoes({ itens, cat, setorDe, filial, onMudar, onFechar }: 
                   <View style={e.selos}>
                     {contagem.map(x => <View key={x.codigo} style={[e.selo, { backgroundColor: x.cor }]}><Text style={e.seloTxt}>{x.n} {x.codigo}</Text></View>)}
                   </View>
-                  <Pressable accessibilityRole="button" onPress={onFechar} style={[e.btn, { backgroundColor: CARTAO_TXT }]}><Text style={[e.btnTxt, { color: '#fff' }]}>Voltar ao checklist</Text></Pressable>
+                  <Pressable accessibilityRole="button" onPress={onFechar} style={[e.btn, { backgroundColor: P.acao }]}><Text style={[e.btnTxt, { color: P.acaoTxt }]}>Voltar ao checklist</Text></Pressable>
                 </View>
               ) : (
                 [...visiveis].reverse().map(id => {
@@ -130,7 +133,7 @@ export function ModoCartoes({ itens, cat, setorDe, filial, onMudar, onFechar }: 
               </View>
             </> : null}
             <Pressable accessibilityRole="button" disabled={!pos} onPress={desfazer} style={[e.desfazer, !pos && { opacity: 0.4 }]}>
-              <ResetIcon size={16} color={FG} /><Text style={e.btnTxt}>Desfazer</Text>
+              <ResetIcon size={16} color={P.fg} /><Text style={e.btnTxt}>Desfazer</Text>
             </Pressable>
 
             {/* Observação dos status que pedem constatação */}
@@ -251,45 +254,55 @@ function Observacao({ item, status, cat, onMudar, onContinuar }: {
         <Text style={[e.titulo, { flex: 1, fontSize: 15 }]} numberOfLines={2}>{item.id}. {tituloCurto(item.titulo)}</Text>
       </View>
       <TextInput value={texto} onChangeText={v => { setTexto(v); onMudar(item.id, { obs: v }); }} autoFocus multiline placeholder={`${cat.nome(status)}: o que foi constatado?`}
-        placeholderTextColor="#6b7891" style={e.obsCampo} accessibilityLabel="Observação / constatação" />
-      <Pressable accessibilityRole="button" onPress={onContinuar} style={[e.btn, { backgroundColor: '#5fd39a', flexDirection: 'row', gap: 8 }]}>
-        <Text style={[e.btnTxt, { color: NAVY }]}>Continuar</Text><ArrowRightIcon size={18} color={NAVY} weight="bold" />
+        placeholderTextColor={P.muted} style={e.obsCampo} accessibilityLabel="Observação / constatação" />
+      <Pressable accessibilityRole="button" onPress={onContinuar} style={[e.btn, { backgroundColor: P.acao, flexDirection: 'row', gap: 8 }]}>
+        <Text style={[e.btnTxt, { color: P.acaoTxt }]}>Continuar</Text><ArrowRightIcon size={18} color={P.acaoTxt} weight="bold" />
       </Pressable>
       <Text style={e.sub}>Plano de ação e fotos continuam no checklist normal.</Text>
     </View>
   );
 }
 
-const e = StyleSheet.create({
+const criarEstilos = () => StyleSheet.create({
   tela: { flex: 1, paddingHorizontal: 16, gap: 12 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  redondo: { width: 40, height: 40, borderRadius: 12, backgroundColor: PAINEL2, alignItems: 'center', justifyContent: 'center' },
-  titulo: { color: FG, fontSize: 18, fontWeight: '800' },
-  sub: { color: MUTED, fontSize: 12 },
-  prog: { color: '#5fd39a', fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  barra: { height: 6, borderRadius: 3, backgroundColor: PAINEL2, overflow: 'hidden' },
-  barraCheia: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: '#5fd39a' },
+  redondo: { width: 40, height: 40, borderRadius: 12, backgroundColor: P.painel2, alignItems: 'center', justifyContent: 'center' },
+  titulo: { color: P.fg, fontSize: 18, fontWeight: '800' },
+  sub: { color: P.muted, fontSize: 12 },
+  prog: { color: P.destaqueTxt, fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  barra: { height: 6, borderRadius: 3, backgroundColor: P.painel2, overflow: 'hidden' },
+  barraCheia: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: P.acao },
   pilha: { flex: 1, minHeight: 360 },
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  cartao: { minHeight: 340, maxHeight: '96%', borderRadius: 24, backgroundColor: CARTAO, padding: 20, gap: 12, boxShadow: '0 18px 40px rgba(0, 0, 0, 0.35)' },
-  num: { minWidth: 40, height: 40, borderRadius: 12, backgroundColor: CARTAO_TXT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  numTxt: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  setor: { borderRadius: 999, backgroundColor: '#dde4ef', paddingHorizontal: 10, paddingVertical: 4, flexShrink: 1 },
-  setorTxt: { color: CARTAO_MUTED, fontSize: 12, fontWeight: '700' },
-  cTitulo: { color: CARTAO_TXT, fontSize: 23, fontWeight: '800', lineHeight: 29 },
-  cTexto: { color: CARTAO_MUTED, fontSize: 15, lineHeight: 22 },
+  cartao: { minHeight: 340, maxHeight: '96%', borderRadius: 24, backgroundColor: P.campo, padding: 20, gap: 12, boxShadow: '0 18px 40px rgba(0, 0, 0, 0.35)' },
+  num: { minWidth: 40, height: 40, borderRadius: 12, backgroundColor: P.fg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  numTxt: { color: P.campo, fontSize: 16, fontWeight: '900' },
+  setor: { borderRadius: 999, backgroundColor: P.painel2, paddingHorizontal: 10, paddingVertical: 4, flexShrink: 1 },
+  setorTxt: { color: P.muted, fontSize: 12, fontWeight: '700' },
+  cTitulo: { color: P.fg, fontSize: 23, fontWeight: '800', lineHeight: 29 },
+  cTexto: { color: P.muted, fontSize: 15, lineHeight: 22 },
   carimbo: { position: 'absolute', top: 22, borderWidth: 3, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.85)' },
   carimboTxt: { fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
   dica: { fontSize: 13, fontWeight: '800' },
   botoes: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   botao: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   botaoTxt: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  desfazer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: PAINEL },
+  desfazer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: P.painel },
   btn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
-  btnTxt: { color: FG, fontWeight: '800', fontSize: 15 },
+  btnTxt: { color: P.fg, fontWeight: '800', fontSize: 15 },
   selos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   selo: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   seloTxt: { color: '#fff', fontWeight: '900', fontSize: 13 },
-  obs: { position: 'absolute', left: 16, right: 16, bottom: 16, borderRadius: 20, backgroundColor: PAINEL, padding: 16, gap: 12, boxShadow: '0 -8px 30px rgba(0, 0, 0, 0.4)' },
-  obsCampo: { minHeight: 90, borderRadius: 12, borderWidth: 1.5, borderColor: '#3a4d70', backgroundColor: '#ffffff', color: CARTAO_TXT, fontSize: 15, paddingHorizontal: 12, paddingVertical: 10, textAlignVertical: 'top' },
+  obs: { position: 'absolute', left: 16, right: 16, bottom: 16, borderRadius: 20, backgroundColor: P.painel, padding: 16, gap: 12, boxShadow: '0 -8px 30px rgba(0, 0, 0, 0.4)' },
+  obsCampo: { minHeight: 90, borderRadius: 12, borderWidth: 1.5, borderColor: P.linha, backgroundColor: P.campo, color: P.fg, fontSize: 15, paddingHorizontal: 12, paddingVertical: 10, textAlignVertical: 'top' },
 });
+
+/** Estilos recriados quando o tema muda (as cores vêm da paleta do tema). */
+let e: ReturnType<typeof criarEstilos>;
+let temaAplicado: unknown = null;
+function aplicarTema(c: ThemeColors) {
+  if (temaAplicado === c) return;
+  temaAplicado = c;
+  Object.assign(P, paletaImersiva(c));
+  e = criarEstilos();
+}

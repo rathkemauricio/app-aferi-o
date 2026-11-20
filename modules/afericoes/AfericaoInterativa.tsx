@@ -6,7 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { ClipPath, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ArrowRightIcon, CheckIcon, PlayIcon, ResetIcon, StopIcon, TimerIcon, XIcon } from '../../ui/icons';
-import { darkColor, ThemeContext } from '../../ui/theme';
+import { darkColor, ThemeContext, type ThemeColors } from '../../ui/theme';
+import { type PaletaImersiva, paletaImersiva } from '../../ui/imersivo';
 import { faixa, Roleta } from './Roleta';
 
 const VALORES_VAZAO = faixa(0, 80, 1);
@@ -24,8 +25,10 @@ const VALORES_SEGUNDOS = faixa(0, 120, 1);
 export type BicoInterativo = { id: string; numero: string; bomba: string; combustivel: string; cor: string };
 type Dados = Record<string, { checks: string[]; notes: string[] }>;
 
-const NAVY = '#0b1426', PAINEL = '#13213b', PAINEL2 = '#1b2c4b', LINHA = '#2a3d62', FG = '#eef2f8', MUTED = '#9fb0c9';
-const MINT = '#5fd39a', VERMELHO = '#ff4d5e', AZUL = '#3d8bff', VERDE = '#12b05a';
+// Cores da tela: seguem o tema (ver ui/imersivo.ts). Os desenhos (bomba, medida-padrão) e as cores de resultado são fixos.
+const P: PaletaImersiva = paletaImersiva(darkColor);
+const MINT_ARTE = '#5fd39a', MUTED_ARTE = '#9fb0c9', LINHA_ARTE = '#2a3d62';
+const VERMELHO = '#ff4d5e', AZUL = '#3d8bff', VERDE = '#12b05a';
 const COR_RES: Record<string, string> = { C: VERDE, OB: AZUL, NC: VERMELHO, NA: '#7d8799' };
 const PASSO = 0.42; // ângulo entre os bicos na roda (rad)
 
@@ -61,6 +64,7 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
   /** Abre o bico atual no modo normal (vazão, desligamento, observações). */
   onModoNormal: (bicoId: string) => void;
 }) {
+  aplicarTema(useContext(ThemeContext).colors);
   const insets = useSafeAreaInsets();
   const reduz = useReducedMotion();
   const primeiroPendente = Math.max(0, bicos.findIndex(b => !dados[b.id]));
@@ -176,13 +180,13 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
   function gravarRef(v: number) { gravarAtual.current(v); }
   const panRegua = usePanGesture(configRegua);
   const fora = Math.abs(valor) > 100;
-  const corRegua = fora ? VERMELHO : MINT;
+  const corRegua = fora ? VERMELHO : P.acao;
   const yv = yDoValor(valor), b = 26;
   const dRegua = `M${RX} ${RY0} L${RX} ${yv - 46} C ${RX} ${yv - 22}, ${RX - b} ${yv - 22}, ${RX - b} ${yv} C ${RX - b} ${yv + 22}, ${RX} ${yv + 22}, ${RX} ${yv + 46} L${RX} ${RY1}`;
 
   /* ----- Vazão e desligamento em 60 s (roletas no campo + cronômetro; N/A para bombas que não desligam) ----- */
   const ctxTema = useContext(ThemeContext);
-  const temaEscuro = useMemo(() => ({ ...ctxTema, mode: 'dark' as const, colors: { ...darkColor, bg: NAVY, surface: PAINEL, surfaceMuted: PAINEL2, accent: MINT, primaryText: NAVY } }), [ctxTema]);
+  const temaEscuro = ctxTema; // a roleta usa as cores do tema escolhido
   const iVazao = indiceCodigo('Vazão'), iDes = indiceCodigo('Des. 60s');
   const vazao = checks[iVazao] ?? '', des = checks[iDes] ?? '';
   const [cronoInicio, setCronoInicio] = useState<number | null>(null);
@@ -211,11 +215,11 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
   if (!bico) return null;
   return (
     <Modal visible animationType={reduz ? 'none' : 'slide'} presentationStyle="fullScreen" statusBarTranslucent onRequestClose={onFechar}>
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: NAVY }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: P.fundo }}>
         <ScrollView contentContainerStyle={[e.corpo, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }]} scrollEnabled={!enchendo} keyboardShouldPersistTaps="handled">
           {/* Topo */}
           <View style={e.linha}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Fechar a aferição interativa" onPress={onFechar} hitSlop={10} style={e.fechar}><XIcon size={20} color={FG} weight="bold" /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Fechar a aferição interativa" onPress={onFechar} hitSlop={10} style={e.fechar}><XIcon size={20} color={P.fg} weight="bold" /></Pressable>
             <View style={{ flex: 1 }}>
               <Text style={e.titulo} numberOfLines={1}>{bico.bomba} · Bico {bico.numero}</Text>
               <Text style={e.sub} numberOfLines={1}>{filial} · {bico.combustivel}</Text>
@@ -234,7 +238,7 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
                   {Array.from({ length: 180 }, (_, k) => {
                     const a = (k / 180) * Math.PI * 2, longo = k % 4 === 0;
                     const r1 = RAIO - 22, r2 = RAIO - (longo ? 36 : 29);
-                    return <Line key={k} x1={RAIO + r1 * Math.cos(a)} y1={RAIO + r1 * Math.sin(a)} x2={RAIO + r2 * Math.cos(a)} y2={RAIO + r2 * Math.sin(a)} stroke={longo ? MINT : LINHA} strokeWidth={longo ? 2 : 1.4} strokeLinecap="round" />;
+                    return <Line key={k} x1={RAIO + r1 * Math.cos(a)} y1={RAIO + r1 * Math.sin(a)} x2={RAIO + r2 * Math.cos(a)} y2={RAIO + r2 * Math.sin(a)} stroke={longo ? P.acao : P.linha} strokeWidth={longo ? 2 : 1.4} strokeLinecap="round" />;
                   })}
                 </Svg>
               </Animated.View>
@@ -246,8 +250,8 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
           {/* Lenta / Rápida */}
           <View style={e.modo}>
             {(['lenta', 'rapida'] as const).map(m => (
-              <Pressable key={m} accessibilityRole="button" accessibilityState={{ selected: modo === m }} onPress={() => { esvaziar(); setModo(m); }} style={[e.modoBtn, modo === m && { backgroundColor: MINT }]}>
-                <Text style={[e.modoTxt, modo === m && { color: NAVY }]}>{m === 'lenta' ? 'Vazão lenta' : 'Vazão rápida'}</Text>
+              <Pressable key={m} accessibilityRole="button" accessibilityState={{ selected: modo === m }} onPress={() => { esvaziar(); setModo(m); }} style={[e.modoBtn, modo === m && { backgroundColor: P.acao }]}>
+                <Text style={[e.modoTxt, modo === m && { color: P.acaoTxt }]}>{m === 'lenta' ? 'Vazão lenta' : 'Vazão rápida'}</Text>
               </Pressable>
             ))}
           </View>
@@ -257,10 +261,10 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
             <Svg viewBox="0 0 92 220" style={{ width: 76, height: 182 }}>
               <Rect x={6} y={20} width={62} height={196} rx={10} fill="#1f3358" />
               <Rect x={12} y={30} width={50} height={34} rx={5} fill="#0a1222" />
-              <SvgText x={37} y={53} textAnchor="middle" fill={MINT} fontWeight="700" fontSize={15}>{litros.toFixed(2).replace('.', ',')}</SvgText>
-              <SvgText x={37} y={76} textAnchor="middle" fill={MUTED} fontSize={8}>LITROS</SvgText>
+              <SvgText x={37} y={53} textAnchor="middle" fill={MINT_ARTE} fontWeight="700" fontSize={15}>{litros.toFixed(2).replace('.', ',')}</SvgText>
+              <SvgText x={37} y={76} textAnchor="middle" fill={MUTED_ARTE} fontSize={8}>LITROS</SvgText>
               <Rect x={14} y={92} width={46} height={8} rx={4} fill={bico.cor} />
-              <Rect x={0} y={12} width={74} height={14} rx={5} fill={LINHA} />
+              <Rect x={0} y={12} width={74} height={14} rx={5} fill={LINHA_ARTE} />
               <Path d="M68 120 C 90 120, 92 60, 88 30" stroke="#0f1a2e" strokeWidth={7} fill="none" strokeLinecap="round" />
               <Rect x={80} y={18} width={12} height={16} rx={3} fill="#cfd4da" />
             </Svg>
@@ -297,16 +301,16 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
                     const v = -200 + k * 20, y = yDoValor(v), forte = v % 100 === 0;
                     return (
                       <G key={v}>
-                        <Line x1={forte ? 72 : 76} x2={84} y1={y} y2={y} stroke={LINHA} strokeWidth={forte ? 2 : 1.2} />
-                        {forte ? <SvgText x={v === 0 ? 20 : 8} y={y + 3} fill={MUTED} fontSize={9}>{v > 0 ? `+${v}` : String(v)}</SvgText> : null}
+                        <Line x1={forte ? 72 : 76} x2={84} y1={y} y2={y} stroke={P.linha} strokeWidth={forte ? 2 : 1.2} />
+                        {forte ? <SvgText x={v === 0 ? 20 : 8} y={y + 3} fill={P.muted} fontSize={9}>{v > 0 ? `+${v}` : String(v)}</SvgText> : null}
                       </G>
                     );
                   })}
                   <Path d={`M${RX - b} ${yv - 30} Q ${RX - b - 4} ${yv} ${RX - b} ${yv + 30}`} stroke={corRegua} strokeWidth={10} fill="none" opacity={0.35} strokeLinecap="round" />
                   <Path d={dRegua} stroke={corRegua} strokeWidth={3} fill="none" strokeLinecap="round" />
                   <G transform={`translate(${RX - b} ${yv})`}>
-                    <Rect x={-15} y={-15} width={30} height={30} rx={15} fill={NAVY} stroke={corRegua} strokeWidth={2.5} />
-                    <Path d="M-4 -3 L0 -7 L4 -3 M-4 3 L0 7 L4 3" stroke={FG} strokeWidth={1.8} fill="none" strokeLinecap="round" />
+                    <Rect x={-15} y={-15} width={30} height={30} rx={15} fill={P.campo} stroke={corRegua} strokeWidth={2.5} />
+                    <Path d="M-4 -3 L0 -7 L4 -3 M-4 3 L0 7 L4 3" stroke={P.fg} strokeWidth={1.8} fill="none" strokeLinecap="round" />
                   </G>
                 </Svg>
               </View>
@@ -317,20 +321,20 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
           <View style={e.leitura}>
             <Text style={[e.num, { color: corRegua }]}>{valor > 0 ? `+${valor}` : valor}</Text>
             <Text style={e.un}>mL</Text>
-            <View style={[e.tol, { backgroundColor: fora ? '#ff4d5e26' : '#5fd39a22' }]}><Text style={{ color: fora ? '#ff8592' : MINT, fontWeight: '700', fontSize: 12 }}>{fora ? 'fora de ±100 mL' : 'dentro de ±100 mL'}</Text></View>
+            <View style={[e.tol, { backgroundColor: fora ? '#ff4d5e26' : P.acaoSoft }]}><Text style={{ color: fora ? P.perigo : P.destaqueTxt, fontWeight: '700', fontSize: 12 }}>{fora ? 'fora de ±100 mL' : 'dentro de ±100 mL'}</Text></View>
           </View>
 
           <View style={e.linha}>
             <Pressable accessibilityRole="button" accessibilityLabel="Segure para abastecer" onPressIn={abastecer} onPressOut={soltar}
-              style={[e.btn, { flex: 1, backgroundColor: enchendo ? '#8ce9b9' : MINT }]}>
-              <Text style={[e.btnTxt, { color: NAVY }]}>{enchendo ? 'Abastecendo…' : 'Segure para abastecer'}</Text>
+              style={[e.btn, { flex: 1, backgroundColor: enchendo ? P.acaoPress : P.acao }]}>
+              <Text style={[e.btnTxt, { color: P.acaoTxt }]}>{enchendo ? 'Abastecendo…' : 'Segure para abastecer'}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={esvaziar} style={[e.btn, { backgroundColor: PAINEL2 }]}><Text style={e.btnTxt}>Esvaziar</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={esvaziar} style={[e.btn, { backgroundColor: P.painel2 }]}><Text style={e.btnTxt}>Esvaziar</Text></Pressable>
           </View>
 
           <View style={e.vals}>
             {([['Lenta', 0], ['Rápida', 1]] as const).map(([rot, i]) => (
-              <View key={rot} style={[e.val, idxModo === i && { borderColor: MINT }]}>
+              <View key={rot} style={[e.val, idxModo === i && { borderColor: P.acao }]}>
                 <Text style={e.sub}>{rot}</Text>
                 <Text style={e.valNum}>{fmt(checks[i])}</Text>
               </View>
@@ -341,7 +345,7 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
           <View style={e.itens}>
             <View style={e.linha}>
               <Text style={[e.titulo, { fontSize: 15, flex: 1 }]}>Itens do bico</Text>
-              <Pressable accessibilityRole="button" onPress={tudoC} style={[e.tudoC]}><CheckIcon size={14} color={NAVY} weight="bold" /><Text style={{ color: NAVY, fontWeight: '800', fontSize: 13 }}>Tudo C</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={tudoC} style={[e.tudoC]}><CheckIcon size={14} color={P.acaoTxt} weight="bold" /><Text style={{ color: P.acaoTxt, fontWeight: '800', fontSize: 13 }}>Tudo C</Text></Pressable>
             </View>
             {criteriosCodigo.map(c => {
               const i = indiceCodigo(c);
@@ -364,7 +368,7 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
                   </View>
                 </View>
                 {v === 'OB' || v === 'NC' ? (
-                  <TextInput value={nota} onChangeText={t => onNota(bico.id, i, t)} multiline placeholderTextColor={MUTED}
+                  <TextInput value={nota} onChangeText={t => onNota(bico.id, i, t)} multiline placeholderTextColor={P.muted}
                     placeholder={v === 'OB' ? `Observação de ${c}` : `Não conformidade de ${c}: o que foi encontrado?`}
                     style={[e.nota, { borderColor: COR_RES[v] }]} accessibilityLabel={`Observação de ${c}`} />
                 ) : null}
@@ -389,8 +393,8 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
                     <Text style={[e.sub, { flex: 1 }]}>Des. 60s (s){des === '' ? ' · não medido' : ''}</Text>
                     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: des === 'NA' }} accessibilityLabel="Des. 60s não se aplica"
                       onPress={() => { setCronoInicio(null); onCheck(bico.id, iDes, des === 'NA' ? '' : 'NA'); }}
-                      style={[e.na, des === 'NA' && { backgroundColor: MUTED, borderColor: MUTED }]}>
-                      <Text style={[e.naTxt, des === 'NA' && { color: NAVY }]}>N/A</Text>
+                      style={[e.na, des === 'NA' && { backgroundColor: P.muted, borderColor: P.muted }]}>
+                      <Text style={[e.naTxt, des === 'NA' && { color: P.fundo }]}>N/A</Text>
                     </Pressable>
                   </View>
                   {des === 'NA' ? (
@@ -406,13 +410,13 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
               </View>
               {des !== 'NA' ? (
                 <View style={e.crono}>
-                  <TimerIcon size={20} color={MUTED} />
+                  <TimerIcon size={20} color={P.muted} />
                   <Text style={e.cronoTxt}>{cronoInicio === null ? '0,0 s' : `${((agora - cronoInicio) / 1000).toFixed(1).replace('.', ',')} s`}</Text>
-                  <Pressable accessibilityRole="button" onPress={cronometro} style={[e.cronoBtn, { backgroundColor: cronoInicio === null ? PAINEL2 : MINT }]}>
-                    {cronoInicio === null ? <PlayIcon size={16} color={FG} weight="fill" /> : <StopIcon size={16} color={NAVY} weight="fill" />}
-                    <Text style={{ color: cronoInicio === null ? FG : NAVY, fontWeight: '800' }}>{cronoInicio === null ? 'Iniciar' : 'Parar e salvar'}</Text>
+                  <Pressable accessibilityRole="button" onPress={cronometro} style={[e.cronoBtn, { backgroundColor: cronoInicio === null ? P.painel2 : P.acao }]}>
+                    {cronoInicio === null ? <PlayIcon size={16} color={P.fg} weight="fill" /> : <StopIcon size={16} color={P.acaoTxt} weight="fill" />}
+                    <Text style={{ color: cronoInicio === null ? P.fg : P.acaoTxt, fontWeight: '800' }}>{cronoInicio === null ? 'Iniciar' : 'Parar e salvar'}</Text>
                   </Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Zerar cronômetro" onPress={() => setCronoInicio(null)} hitSlop={8} style={e.cronoZerar}><ResetIcon size={18} color={MUTED} /></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Zerar cronômetro" onPress={() => setCronoInicio(null)} hitSlop={8} style={e.cronoZerar}><ResetIcon size={18} color={P.muted} /></Pressable>
                 </View>
               ) : null}
               <Text style={e.sub}>Deslize dentro do campo para girar a roleta. Cronômetro: inicie quando parar de abastecer e pare quando a bomba desligar; o tempo vai para o Des. 60s.</Text>
@@ -420,13 +424,13 @@ export function AfericaoInterativa({ filial, bicos, dados, criteriosCodigo, indi
           </ThemeContext.Provider>
 
           <View style={e.linha}>
-            <Pressable accessibilityRole="button" onPress={() => onModoNormal(bico.id)} style={[e.btn, { backgroundColor: PAINEL2, flex: 1 }]}>
+            <Pressable accessibilityRole="button" onPress={() => onModoNormal(bico.id)} style={[e.btn, { backgroundColor: P.painel2, flex: 1 }]}>
               <Text style={e.btnTxt}>Abrir no modo normal (observações)</Text>
             </Pressable>
           </View>
-          <Pressable accessibilityRole="button" onPress={proximo} style={[e.btn, { backgroundColor: MINT, flexDirection: 'row', gap: 8, justifyContent: 'center' }]}>
-            <Text style={[e.btnTxt, { color: NAVY }]}>{bicos.some((x, i) => i !== atual && !dados[x.id]) ? 'Próximo bico' : 'Concluir'}</Text>
-            <ArrowRightIcon size={18} color={NAVY} weight="bold" />
+          <Pressable accessibilityRole="button" onPress={proximo} style={[e.btn, { backgroundColor: P.acao, flexDirection: 'row', gap: 8, justifyContent: 'center' }]}>
+            <Text style={[e.btnTxt, { color: P.acaoTxt }]}>{bicos.some((x, i) => i !== atual && !dados[x.id]) ? 'Próximo bico' : 'Concluir'}</Text>
+            <ArrowRightIcon size={18} color={P.acaoTxt} weight="bold" />
           </Pressable>
           <Text style={[e.sub, { textAlign: 'center' }]}>Segure "Abastecer" para encher a medida-padrão: ao soltar, a diferença para 20 L vai para a régua. Arraste o botão da régua para ajustar.</Text>
         </ScrollView>
@@ -451,11 +455,11 @@ function ChipBico({ i, rot, bico, atual, resultado, cx, cy, raio, onPress }: {
   return (
     <Animated.View style={[e.chipBox, estilo]}>
       <Pressable accessibilityRole="button" accessibilityState={{ selected: atual }} accessibilityLabel={`Bico ${bico.numero}, ${bico.combustivel}${resultado ? `, ${resultado}` : ''}`} onPress={onPress}
-        style={[e.chip, atual && { backgroundColor: FG, borderColor: FG }]}>
+        style={[e.chip, atual && { backgroundColor: P.fg, borderColor: P.fg }]}>
         <View style={[e.gota, { backgroundColor: bico.cor }]}><Text style={e.gotaTxt}>{bico.numero}</Text></View>
         <View>
-          <Text style={[e.chipNome, atual && { color: NAVY }]}>Bico {bico.numero}</Text>
-          <Text style={[e.chipSub, atual && { color: '#3e4e6a' }]} numberOfLines={1}>{bico.combustivel}</Text>
+          <Text style={[e.chipNome, atual && { color: P.fundo }]}>Bico {bico.numero}</Text>
+          <Text style={[e.chipSub, atual && { color: P.fundo }]} numberOfLines={1}>{bico.combustivel}</Text>
         </View>
         {resultado ? <View style={[e.selo, { backgroundColor: COR_RES[resultado] }]}><Text style={e.seloTxt}>{resultado}</Text></View> : null}
       </Pressable>
@@ -463,49 +467,59 @@ function ChipBico({ i, rot, bico, atual, resultado, cx, cy, raio, onPress }: {
   );
 }
 
-const e = StyleSheet.create({
-  corpo: { paddingHorizontal: 16, gap: 14, backgroundColor: NAVY },
+const criarEstilos = () => StyleSheet.create({
+  corpo: { paddingHorizontal: 16, gap: 14, backgroundColor: P.fundo },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  fechar: { width: 40, height: 40, borderRadius: 12, backgroundColor: PAINEL2, alignItems: 'center', justifyContent: 'center' },
-  titulo: { color: FG, fontSize: 18, fontWeight: '800' },
-  sub: { color: MUTED, fontSize: 12 },
-  prog: { color: MINT, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  roda: { height: 224, borderRadius: 18, backgroundColor: PAINEL, overflow: 'hidden' },
-  dicaRoda: { position: 'absolute', right: 12, bottom: 10, color: MUTED, fontSize: 11 },
+  fechar: { width: 40, height: 40, borderRadius: 12, backgroundColor: P.painel2, alignItems: 'center', justifyContent: 'center' },
+  titulo: { color: P.fg, fontSize: 18, fontWeight: '800' },
+  sub: { color: P.muted, fontSize: 12 },
+  prog: { color: P.destaqueTxt, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  roda: { height: 224, borderRadius: 18, backgroundColor: P.painel, overflow: 'hidden' },
+  dicaRoda: { position: 'absolute', right: 12, bottom: 10, color: P.muted, fontSize: 11 },
   chipBox: { position: 'absolute', left: 0, top: 0 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 6, paddingRight: 10, borderRadius: 999, backgroundColor: PAINEL2, borderWidth: 1, borderColor: LINHA },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 6, paddingRight: 10, borderRadius: 999, backgroundColor: P.painel2, borderWidth: 1, borderColor: P.linha },
   gota: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   gotaTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  chipNome: { color: FG, fontSize: 13, fontWeight: '800' },
-  chipSub: { color: MUTED, fontSize: 11 },
+  chipNome: { color: P.fg, fontSize: 13, fontWeight: '800' },
+  chipSub: { color: P.muted, fontSize: 11 },
   selo: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, marginLeft: 2 },
   seloTxt: { color: '#fff', fontSize: 10.5, fontWeight: '900' },
-  modo: { flexDirection: 'row', gap: 6, backgroundColor: PAINEL, padding: 5, borderRadius: 999 },
+  modo: { flexDirection: 'row', gap: 6, backgroundColor: P.painel, padding: 5, borderRadius: 999 },
   modoBtn: { flex: 1, borderRadius: 999, paddingVertical: 10, alignItems: 'center' },
-  modoTxt: { color: MUTED, fontWeight: '800', fontSize: 14 },
-  cena: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, backgroundColor: PAINEL, borderRadius: 18, paddingHorizontal: 10, paddingTop: 14, paddingBottom: 10 },
+  modoTxt: { color: P.muted, fontWeight: '800', fontSize: 14 },
+  cena: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, backgroundColor: P.painel, borderRadius: 18, paddingHorizontal: 10, paddingTop: 14, paddingBottom: 10 },
   leitura: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   num: { fontSize: 44, fontWeight: '800', fontVariant: ['tabular-nums'], letterSpacing: -1 },
-  un: { color: MUTED, fontWeight: '700' },
+  un: { color: P.muted, fontWeight: '700' },
   tol: { marginLeft: 'auto', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   btn: { borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  btnTxt: { color: FG, fontWeight: '800', fontSize: 15 },
+  btnTxt: { color: P.fg, fontWeight: '800', fontSize: 15 },
   vals: { flexDirection: 'row', gap: 8 },
-  val: { flex: 1, backgroundColor: PAINEL, borderRadius: 14, padding: 12, borderWidth: 1.5, borderColor: 'transparent' },
-  valNum: { color: FG, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  itens: { backgroundColor: PAINEL, borderRadius: 18, padding: 12, gap: 10 },
-  nota: { borderWidth: 1.5, borderRadius: 12, backgroundColor: NAVY, color: FG, paddingHorizontal: 12, paddingVertical: 10, minHeight: 46, fontSize: 14, textAlignVertical: 'top' },
-  campoRoleta: { borderRadius: 12, borderWidth: 1, borderColor: LINHA, backgroundColor: NAVY, overflow: 'hidden' },
-  na: { borderWidth: 1.5, borderColor: LINHA, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
-  naTxt: { color: MUTED, fontWeight: '800', fontSize: 12 },
-  crono: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: NAVY, borderRadius: 12, padding: 8, paddingLeft: 12 },
-  cronoTxt: { flex: 1, color: FG, fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  val: { flex: 1, backgroundColor: P.painel, borderRadius: 14, padding: 12, borderWidth: 1.5, borderColor: 'transparent' },
+  valNum: { color: P.fg, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  itens: { backgroundColor: P.painel, borderRadius: 18, padding: 12, gap: 10 },
+  nota: { borderWidth: 1.5, borderRadius: 12, backgroundColor: P.campo, color: P.fg, paddingHorizontal: 12, paddingVertical: 10, minHeight: 46, fontSize: 14, textAlignVertical: 'top' },
+  campoRoleta: { borderRadius: 12, borderWidth: 1, borderColor: P.linha, backgroundColor: P.campo, overflow: 'hidden' },
+  na: { borderWidth: 1.5, borderColor: P.linha, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  naTxt: { color: P.muted, fontWeight: '800', fontSize: 12 },
+  crono: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: P.campo, borderRadius: 12, padding: 8, paddingLeft: 12 },
+  cronoTxt: { flex: 1, color: P.fg, fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   cronoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
-  cronoZerar: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: PAINEL2 },
-  tudoC: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: MINT, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  cronoZerar: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: P.painel2 },
+  tudoC: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: P.acao, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  itemNome: { color: FG, fontWeight: '700', fontSize: 14, width: 86 },
+  itemNome: { color: P.fg, fontWeight: '700', fontSize: 14, width: 86 },
   codigos: { flex: 1, flexDirection: 'row', gap: 6 },
   cod: { flex: 1, minHeight: 40, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   codTxt: { fontWeight: '900', fontSize: 13 },
 });
+
+/** Estilos recriados quando o tema muda (as cores vêm da paleta do tema). */
+let e: ReturnType<typeof criarEstilos>;
+let temaAplicado: unknown = null;
+function aplicarTema(c: ThemeColors) {
+  if (temaAplicado === c) return;
+  temaAplicado = c;
+  Object.assign(P, paletaImersiva(c));
+  e = criarEstilos();
+}
