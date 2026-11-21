@@ -19,7 +19,7 @@ import { useVoltarSemBotao } from '../../ui/voltar';
 import {
   bateBusca, categoriasDe, categoriasDoArquivo, podeSobra, rotuloSemSaldo, normalizar, progressoPorCategoria, type ClasseContagem, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
   percentualContagem, percentualGeral, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
-  rodadaAtual, situacaoNaRodada, type StatusRodada, uid,
+  rodadaAtual, situacaoNaRodada, type StatusRodada, uid, alternarPausa, fmtDuracao, inicioContagem, pausaAberta, tempoPausado,
 } from './model';
 import {
   apagarCopiaLocal, associarEan, basesCol, escolherClasse, useClassesEscolhidas, carregarErp, limparCopiasAntigas, salvarNoServidor, coletasDe, contagensCol, enviarResultadoErp, escolherArquivoErp, gravarBarras, idDispositivo, indiceLeitura, itensDoCodigo, inventariosCol, registrarLeitura, statusErp, useColeta, useColetas, useProdutos,
@@ -461,6 +461,29 @@ function ArquivosErp({ custo, setCusto, venda, setVenda }: { custo: ArquivoErp |
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataHora = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 
+/** Relógio que anda de tempos em tempos (para o "pausada há…"); só liga quando precisa. */
+function useAgora(ligado: boolean, passo = 30000) {
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    if (!ligado) return;
+    setAgora(Date.now());
+    const id = setInterval(() => setAgora(Date.now()), passo);
+    return () => clearInterval(id);
+  }, [ligado, passo]);
+  return agora;
+}
+/** Até quando contam as pausas: agora, ou o encerramento do inventário. */
+const fimDasPausas = (inv: Inventario, agora: number) => (inv.status === 'encerrado' && inv.encerrado_em ? Date.parse(inv.encerrado_em) : agora);
+/** "Início 20/11/2026 08:32 (horário de impressão do PDF de saldos) · pausada 25 min em 2 pausas". */
+function textoTempo(ct: Contagem, inv: Inventario, agora: number, curto = false) {
+  const n = ct.pausas?.length ?? 0;
+  const origem = curto ? '' : inv.saldo_em ? ' (horário de impressão do PDF de saldos)' : ' (carga do arquivo de saldos)';
+  const partes = [`Início ${dataHora(inicioContagem(inv))}${origem}`];
+  if (n) partes.push(`pausada ${fmtDuracao(tempoPausado(ct, fimDasPausas(inv, agora)))}${n > 1 ? ` em ${n} pausas` : ''}`);
+  else if (!curto) partes.push('sem pausas');
+  return partes.join(' · ');
+}
+
 /* =====================================================================
    Bases de códigos de barra (uma por filial, importada uma vez)
    ===================================================================== */
@@ -596,6 +619,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   const prog = useMemo(() => (produtos ? percentualGeral(produtos, contagens, col.list) : { contado: 0, sistema: 0, itens: 0, coletados: 0, pct: 0 }), [produtos, contagens, col.list]);
   const enc = inv.status === 'encerrado';
   const sub = `${nomeFilial(dados, inv.filial_id)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'}`;
+  const agora = useAgora(contagens.some(x => x.pausada));
 
   const [arqCusto, setArqCusto] = useState<ArquivoErp | null>(null);
   const [arqVenda, setArqVenda] = useState<ArquivoErp | null>(null);
@@ -662,6 +686,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
               <Text style={[k.cTit, { color: c.text }]}>{ct.nome}</Text>
               <Text style={[k.cTxt, { color: c.textMuted }]}>{ROTULO_CLASSE[ct.classe]} · {ct.classe === 'completa' ? 'todas as categorias' : `${ct.categorias.length} categoria${ct.categorias.length === 1 ? '' : 's'}`} · {Math.round(pc * 100)}%</Text>
               {ct.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Criada por <Text style={[k.b, { color: c.text }]}>{ct.criado_por_nome}</Text>{ct.criado_em ? ` · ${dataHora(ct.criado_em)}` : ''}</Text> : null}
+              <Text style={[k.cap, { color: c.textMuted }]}>{textoTempo(ct, inv, agora, true)}</Text>
               <View style={[k.linha, { flexWrap: 'wrap' }]}>{ct.pausada ? <Pilula texto="Pausada" tom="alerta" /> : null}{ct.rodadas.map((r, i) => <Pilula key={i} texto={`${i + 1}ª ${ROTULO_RODADA[r]}`} tom={tomRodada(r)} icone={r === 'andamento' && !ct.pausada ? HourglassIcon : undefined} />)}</View>
               {feita && !enc ? (
                 <View style={k.linha}>
@@ -890,12 +915,16 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   const noEscopo = useMemo(() => new Set(itens.map(x => x.codigo)), [itens]);
   const catsArquivo = useMemo(() => (produtos ? categoriasDoArquivo(produtos) : new Set<string>()), [produtos]);
   const encerrado = inv.status === 'encerrado';
-  const pausar = () => { contagensCol.put({ ...ct, pausada: !ct.pausada }); setMenu(false); };
+  const usuario = useUsuarioLogado();
+  const agora = useAgora(!!ct.pausada);
+  const aberta = pausaAberta(ct);
+  // Cada pausa guarda o intervalo (e quem pausou), para mostrar quanto tempo a contagem ficou parada.
+  const pausar = () => { contagensCol.put(alternarPausa(ct, usuario)); setMenu(false); };
   // Botão de pausa no topo (todas as abas): pausar para os aparelhos, então confirma; retomar é direto.
   const podePausar = !encerrado && (!!ct.pausada || ct.rodadas.includes('andamento'));
-  const alternarPausa = () => {
-    if (ct.pausada) { contagensCol.put({ ...ct, pausada: false }); return; }
-    confirmAction('Pausar a contagem?', 'Nenhum aparelho recebe leituras desta contagem até ela ser retomada. O que já foi coletado continua valendo.', 'Pausar', () => contagensCol.put({ ...ct, pausada: true }));
+  const trocarPausa = () => {
+    if (ct.pausada) { contagensCol.put(alternarPausa(ct)); return; }
+    confirmAction('Pausar a contagem?', 'Nenhum aparelho recebe leituras desta contagem até ela ser retomada. O que já foi coletado continua valendo. O tempo pausado aparece na contagem e no relatório.', 'Pausar', () => contagensCol.put(alternarPausa(ct, usuario)));
   };
   const excluir = () => { setMenu(false); excluirContagem(ct, nav.voltar); };
 
@@ -923,7 +952,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
         onVoltar={nav.voltar} direita={<View style={k.linha}>
         {tela.aba === 'coleta' ? <Anel pct={prog} size={46} claro /> : null}
         {podePausar ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={ct.pausada ? 'Retomar contagem' : 'Pausar contagem'} hitSlop={8} onPress={alternarPausa}
+          <Pressable accessibilityRole="button" accessibilityLabel={ct.pausada ? 'Retomar contagem' : 'Pausar contagem'} hitSlop={8} onPress={trocarPausa}
             style={({ pressed }) => [k.pausa, { backgroundColor: pressed ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.18)' }]}>
             {ct.pausada ? <PlayIcon size={20} color="#fff" weight="fill" /> : <PauseIcon size={20} color="#fff" weight="fill" />}
           </Pressable>
@@ -931,9 +960,12 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
         {!encerrado ? <Pressable accessibilityRole="button" accessibilityLabel="Opções da contagem" hitSlop={10} onPress={() => setMenu(true)} style={k.voltar}><DotsThreeVerticalIcon size={24} color="#fff" weight="bold" /></Pressable> : null}
       </View>} />
       {ct.pausada ? (
-        <Pressable accessibilityRole="button" onPress={pausar} style={[k.linha, { backgroundColor: c.warningSoft, paddingHorizontal: space.lg, paddingVertical: 10 }]}>
+        <Pressable accessibilityRole="button" onPress={trocarPausa} style={[k.linha, { backgroundColor: c.warningSoft, paddingHorizontal: space.lg, paddingVertical: 10 }]}>
           <PauseIcon size={18} color={c.warning} weight="fill" />
-          <Text style={[k.b, { color: c.warning, flex: 1 }]}>Contagem pausada: não recebe leituras.</Text>
+          <Text style={[k.b, { color: c.warning, flex: 1 }]}>
+            Contagem pausada{aberta ? ` há ${fmtDuracao(Math.max(0, agora - Date.parse(aberta.de)))}` : ''}: não recebe leituras.
+            {aberta?.por ? <Text style={{ fontWeight: '400' }}>{` Pausada por ${aberta.por} às ${new Date(aberta.de).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`}</Text> : null}
+          </Text>
           <Text style={[k.b, { color: c.accentText }]}>Retomar</Text>
         </Pressable>
       ) : null}
@@ -957,6 +989,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
               keyboardShouldPersistTaps="handled"
               ListHeaderComponent={<View style={{ gap: space.md }}>
                 {rodadas}
+                <Text style={[k.cap, { color: c.textMuted }]}>{textoTempo(ct, inv, agora)}</Text>
                 <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar item: nome, código ou código de barras" />
                 <FiltroSituacao valor={filtro} onChange={setFiltro} n={nSit} />
                 {busca.trim() || filtro !== 'todos' ? <Text style={[k.cap, { color: c.textMuted }]}>{filtrada.length.toLocaleString('pt-BR')} de {lista.length.toLocaleString('pt-BR')} itens desta contagem</Text>
@@ -1086,6 +1119,7 @@ function CadastrarCodigo({ ean, inventarioId, produtos, noEscopo, onClose, onFei
 function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos: Produto[]; q: Map<string, [number | null, number | null, number | null]>; inv: Inventario; filial: string }) {
   const c = useCores();
   const usuario = useUsuarioLogado();
+  const agora = useAgora(!!ct.pausada);
   const d = useMemo(() => detalheContagem(ct, produtos, q), [ct, produtos, q]);
   type Linha = { tipo: 'cab'; titulo: string; n: number; cor: string } | { tipo: 'item'; l: LinhaDetalhe };
   const dados: Linha[] = [
@@ -1103,7 +1137,7 @@ function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos
     const divergentes: LinhaDivergente[] = [
       ...d.faltas.map(l => ({ ...l, situacao: 'Falta' })), ...d.sobras.map(l => ({ ...l, situacao: 'Sobra' })), ...d.naoColetados.map(l => ({ ...l, situacao: 'Não coletado' })),
     ];
-    const sub = `${filial}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
+    const sub = `${filial}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${textoTempo(ct, inv, Date.now(), true)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
     const html = htmlDivergencias({ titulo: `Itens divergentes · ${ct.nome}`, sub, divergentes, nota: 'Vale a última quantidade coletada de cada item; item não coletado entra como falta.' });
     try { await imprimirHtml(html, `Divergências ${ct.nome}`, true); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
@@ -1124,6 +1158,7 @@ function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos
           {kpi('Resultado R$ custo', t.temCusto ? brl(t.custo.resultado) : '—', t.custo.resultado < 0 ? c.danger : undefined)}
           {kpi('Resultado R$ venda', t.temVenda ? brl(t.venda.resultado) : '—', t.venda.resultado < 0 ? c.danger : undefined)}
         </View>
+        <Text style={[k.cap, { color: c.textMuted }]}>{textoTempo(ct, inv, agora)}</Text>
         <Text style={[k.cap, { color: c.textMuted }]}>{t.itens.toLocaleString('pt-BR')} itens · estoque sistema {fmtQ(t.sistema)} · contado {fmtQ(t.contagem)}{t.acuracia !== null ? ` · acurácia ${fmtQ(t.acuracia)}%` : ''}{t.eficiencia !== null ? ` · eficiência ${fmtQ(t.eficiencia)}%` : ''}. Vale a última quantidade coletada de cada item.</Text>
         {dados.length ? (
           <Pressable accessibilityRole="button" onPress={() => void imprimir()} style={[k.linha, k.acaoMini, { borderColor: c.borderStrong, alignSelf: 'flex-start' }]}>
@@ -1644,7 +1679,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas,
     <ScrollView contentContainerStyle={k.corpo}>
       {rodadas}
       {ct.pausada
-        ? <EmptyState icon={PauseIcon} title="Contagem pausada" text="Toque em Retomar (aqui ou no botão ▶ do topo) para voltar a coletar." action={{ label: 'Retomar contagem', onPress: () => contagensCol.put({ ...ct, pausada: false }) }} />
+        ? <EmptyState icon={PauseIcon} title="Contagem pausada" text="Toque em Retomar (aqui ou no botão ▶ do topo) para voltar a coletar." action={{ label: 'Retomar contagem', onPress: () => contagensCol.put(alternarPausa(ct)) }} />
         : <EmptyState icon={BarcodeIcon} title={`Contagem ${r} ${ROTULO_RODADA[ct.rodadas[r - 1]].toLowerCase()}`} text="Só a contagem em andamento recebe leituras. Para corrigir uma finalizada, reabra a contagem na tela do inventário." />}
     </ScrollView>
   );
@@ -2015,6 +2050,16 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
                 ) : <Text style={[k.cap, { color: c.textMuted }]}>sem o PDF</Text>}
               </View>
             ))}
+          </Cartao>
+          <Cartao>
+            <Text style={[k.cTit, { color: c.text }]}>{soDela ? 'Início e pausas' : 'Início e pausas das contagens'}</Text>
+            {contagens.map(ct => (
+              <View key={ct.id} style={{ paddingVertical: 4 }}>
+                {!soDela ? <Text style={[k.cTxt, k.b, { color: c.text }]}>{ct.nome}</Text> : null}
+                <Text style={[k.cap, { color: c.textMuted }]}>{textoTempo(ct, inv, Date.now(), contagens.length > 1)}</Text>
+              </View>
+            ))}
+            <Text style={[k.cap, { color: c.textMuted }]}>O início de cada contagem é o horário de impressão que vem no PDF de saldos (o momento do estoque congelado).</Text>
           </Cartao>
           {divergentes ? (
             <Cartao>

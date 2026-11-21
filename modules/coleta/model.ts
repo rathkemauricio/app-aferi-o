@@ -42,10 +42,53 @@ export type Contagem = SyncRow & {
   inventario_id: string; nome: string; classe: ClasseContagem; categorias: string[]; rodadas: StatusRodada[];
   /** Pausada: não recebe leituras até ser retomada. */
   pausada?: boolean;
+  /** Pausas da contagem (a última fica aberta, sem `ate`, enquanto estiver pausada), com quem pausou. */
+  pausas?: Pausa[];
   /** Quem criou a contagem e quando (o banco grava; não muda depois). */
   criado_por_nome?: string | null;
   criado_em?: string | null;
 };
+/** Intervalo de pausa: de quando até quando (null = ainda pausada) e quem pausou. */
+export type Pausa = { de: string; ate: string | null; por?: string | null };
+
+/**
+ * Início da contagem: o horário de impressão que vem no PDF de saldos (o momento do estoque congelado);
+ * sem ele, quando a carga entrou. Vale para todas as contagens do inventário.
+ */
+export const inicioContagem = (inv: Pick<Inventario, 'saldo_em' | 'erp_em'>) => inv.saldo_em ?? inv.erp_em ?? null;
+
+/** Tempo pausado em ms; a pausa aberta conta até `fim` (agora, ou o encerramento do inventário). */
+export function tempoPausado(ct: Pick<Contagem, 'pausas'>, fim: number = Date.now()) {
+  return (ct.pausas ?? []).reduce((s, p) => {
+    const de = Date.parse(p.de), ate = p.ate ? Date.parse(p.ate) : fim;
+    return Number.isFinite(de) && Number.isFinite(ate) ? s + Math.max(0, Math.min(ate, fim) - de) : s;
+  }, 0);
+}
+/** Pausa aberta (a contagem está pausada desde `de`). */
+export const pausaAberta = (ct: Pick<Contagem, 'pausas' | 'pausada'>) => (ct.pausada ? [...(ct.pausas ?? [])].reverse().find(p => !p.ate) ?? null : null);
+
+/** Pausa ou retoma a contagem, registrando o intervalo (e quem pausou). */
+export function alternarPausa<T extends Contagem>(ct: T, por?: string | null): T {
+  const agora = new Date().toISOString();
+  const pausas = [...(ct.pausas ?? [])];
+  if (ct.pausada) {
+    // Retomar: fecha a pausa aberta (pausas de antes deste registro não têm intervalo e ficam sem tempo).
+    const i = pausas.map(p => !p.ate).lastIndexOf(true);
+    if (i >= 0) pausas[i] = { ...pausas[i], ate: agora };
+    return { ...ct, pausada: false, pausas };
+  }
+  return { ...ct, pausada: true, pausas: [...pausas, { de: agora, ate: null, por: por || null }] };
+}
+
+/** Duração legível: "8 min", "1 h 05 min", "menos de 1 min". */
+export function fmtDuracao(ms: number) {
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'menos de 1 min';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m ? `${h} h ${String(m).padStart(2, '0')} min` : `${h} h`;
+}
+
 /** Soma das leituras de um item numa rodada, feitas por um aparelho. `hist`: [hora, quantidade], mais recente primeiro. */
 export type Coleta = SyncRow & {
   inventario_id: string; contagem_id: string; rodada: Rodada; codigo: string; qtd: number; hist: [string, number][]; dispositivo: string;

@@ -1,5 +1,5 @@
 import { dataBR, esc } from '../../lib/util';
-import { type Coleta, type Consolidado, type Contagem, fmtQ, type Inventario, percentualGeral, porCategoria, type Produto, relatorio } from './model';
+import { type Coleta, type Consolidado, type Contagem, fmtDuracao, fmtQ, inicioContagem, type Inventario, percentualGeral, porCategoria, type Produto, relatorio, tempoPausado } from './model';
 
 // Impressão (PDF) do inventário e das contagens — o mesmo documento no painel web e no app.
 // Letras maiores que as do relatório antigo (os itens saíam pequenos demais) e o detalhamento das faltas e
@@ -89,19 +89,22 @@ export function htmlRelatorioInventario(o: {
   titulo: string; sub: string; resumo: Metrica[];
   categorias: Consolidado[]; total: Consolidado;
   tituloContagens: string;
-  contagens: { nome: string; itens: number; sistema: number; contado: number; pct: number; corretos: number; divergentes: number; naoEncontrados: number }[];
+  contagens: { nome: string; itens: number; sistema: number; contado: number; pct: number; corretos: number; divergentes: number; naoEncontrados: number;
+    /** Início (horário de impressão do PDF de saldos) e tempo que ficou pausada. */
+    inicio?: string; pausado?: string }[];
   divergentes: LinhaDivergente[];
 }) {
   const pct = (v: number | null) => (v === null ? '—' : `${fmtQ(v)}%`);
   const rs = (v: number, tem: boolean) => (tem ? brl(v) : '—');
   const linhaCat = (x: Consolidado, tot = false) => `<tr${tot ? ' class="tot"' : ''}><td>${esc(x.nome)}</td><td class="n">${fmtQ(x.itens)}</td><td class="n">${fmtQ(x.sistema)}</td><td class="n">${fmtQ(x.contagem)}</td><td class="n">${fmtQ(x.faltas)}</td><td class="n">${fmtQ(x.sobras)}</td><td class="n${cor(x.resultado)}">${sinal(x.resultado)}</td><td class="n">${rs(x.custo.faltas, x.temCusto)}</td><td class="n">${rs(x.custo.sobras, x.temCusto)}</td><td class="n${cor(x.custo.resultado)}">${rs(x.custo.resultado, x.temCusto)}</td><td class="n">${rs(x.venda.faltas, x.temVenda)}</td><td class="n">${rs(x.venda.sobras, x.temVenda)}</td><td class="n${cor(x.venda.resultado)}">${rs(x.venda.resultado, x.temVenda)}</td><td class="n">${pct(x.acuracia)}</td><td class="n">${pct(x.eficiencia)}</td></tr>`;
-  const contagens = o.contagens.map(p => `<tr><td>${esc(p.nome)}</td><td class="n">${p.itens.toLocaleString('pt-BR')}</td><td class="n">${fmtQ(p.sistema)}</td><td class="n">${fmtQ(p.contado)}</td><td class="n"><b>${fmtQ(Math.round(p.pct * 1000) / 10)}%</b></td><td class="n">${p.corretos.toLocaleString('pt-BR')}</td><td class="n">${p.divergentes.toLocaleString('pt-BR')}</td><td class="n">${p.naoEncontrados.toLocaleString('pt-BR')}</td></tr>`).join('');
+  const comTempo = o.contagens.some(p => p.inicio !== undefined || p.pausado !== undefined);
+  const contagens = o.contagens.map(p => `<tr><td>${esc(p.nome)}</td>${comTempo ? `<td>${esc(p.inicio ?? '—')}</td><td>${esc(p.pausado ?? '—')}</td>` : ''}<td class="n">${p.itens.toLocaleString('pt-BR')}</td><td class="n">${fmtQ(p.sistema)}</td><td class="n">${fmtQ(p.contado)}</td><td class="n"><b>${fmtQ(Math.round(p.pct * 1000) / 10)}%</b></td><td class="n">${p.corretos.toLocaleString('pt-BR')}</td><td class="n">${p.divergentes.toLocaleString('pt-BR')}</td><td class="n">${p.naoEncontrados.toLocaleString('pt-BR')}</td></tr>`).join('');
   return pagina(o.titulo, `
 <h1>${esc(o.titulo)}</h1><div class="sub">${esc(o.sub)}</div>
 <h2>Resumo</h2>${grade(o.resumo)}
 <h2>Resultado por categoria</h2><table class="cat"><thead><tr><th>Categoria</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contagem</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">Resultado</th><th class="n">Falta R$ custo</th><th class="n">Sobra R$ custo</th><th class="n">Result. R$ custo</th><th class="n">Falta R$ venda</th><th class="n">Sobra R$ venda</th><th class="n">Result. R$ venda</th><th class="n">Acurácia</th><th class="n">Eficiência</th></tr></thead><tbody>${o.categorias.map(x => linhaCat(x)).join('')}${linhaCat(o.total, true)}</tbody></table>
-<h2>${esc(o.tituloContagens)}</h2><table><thead><tr><th>Contagem</th><th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contado</th><th class="n">Percentual</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr></thead><tbody>${contagens}</tbody></table>
-<p class="nota">Acurácia = contagem ÷ estoque sistema × 100. Eficiência = (1 − (falta + sobra) ÷ estoque sistema) × 100. Valores em R$ = diferença × preço unitário de custo ou de venda dos PDFs da carga. O detalhamento das faltas e sobras está na folha seguinte.</p>
+<h2>${esc(o.tituloContagens)}</h2><table><thead><tr><th>Contagem</th>${comTempo ? '<th>Início</th><th>Tempo pausado</th>' : ''}<th class="n">Itens</th><th class="n">Sistema</th><th class="n">Contado</th><th class="n">Percentual</th><th class="n">Corretos</th><th class="n">Divergentes</th><th class="n">Não encontrados</th></tr></thead><tbody>${contagens}</tbody></table>
+<p class="nota">${comTempo ? 'Início = horário de impressão do PDF de saldos (o estoque congelado). Tempo pausado = soma das pausas da contagem. ' : ''}Acurácia = contagem ÷ estoque sistema × 100. Eficiência = (1 − (falta + sobra) ÷ estoque sistema) × 100. Valores em R$ = diferença × preço unitário de custo ou de venda dos PDFs da carga. O detalhamento das faltas e sobras está na folha seguinte.</p>
 <div class="folha"><h1>${esc(tituloDetalhe(o.divergentes))}</h1><div class="sub">${esc(o.titulo)} · ${esc(o.sub)}</div>${tabelaDivergencias(o.divergentes)}</div>`);
 }
 
@@ -131,6 +134,7 @@ export function htmlDoInventario(o: {
   const rel = relatorio(o.produtos, contagens, o.coletas);
   const problemas = rel.linhas.filter(l => l.status !== 'correto');
   const enc = inv.status === 'encerrado';
+  const fim = enc && inv.encerrado_em ? Date.parse(inv.encerrado_em) : Date.now(); // pausa aberta conta até aqui
   const cons = porCategoria(rel.linhas);
   const geral = !soDela ? percentualGeral(o.produtos, contagens, o.coletas) : null;
   const n = (v: number) => fmtQ(v);
@@ -154,7 +158,10 @@ export function htmlDoInventario(o: {
     ],
     categorias: cons.categorias, total: t,
     tituloContagens: soDela ? 'Resultado da contagem' : 'Resultado por contagem',
-    contagens: rel.porContagem.map(p => ({ ...p, nome: p.contagem.nome })),
+    contagens: rel.porContagem.map(p => {
+      const n = p.contagem.pausas?.length ?? 0;
+      return { ...p, nome: p.contagem.nome, inicio: dataHora(inicioContagem(inv)), pausado: n ? `${fmtDuracao(tempoPausado(p.contagem, fim))}${n > 1 ? ` (${n} pausas)` : ''}` : 'sem pausas' };
+    }),
     divergentes,
   });
 }
