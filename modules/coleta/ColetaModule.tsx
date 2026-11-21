@@ -891,6 +891,12 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   const catsArquivo = useMemo(() => (produtos ? categoriasDoArquivo(produtos) : new Set<string>()), [produtos]);
   const encerrado = inv.status === 'encerrado';
   const pausar = () => { contagensCol.put({ ...ct, pausada: !ct.pausada }); setMenu(false); };
+  // Botão de pausa no topo (todas as abas): pausar para os aparelhos, então confirma; retomar é direto.
+  const podePausar = !encerrado && (!!ct.pausada || ct.rodadas.includes('andamento'));
+  const alternarPausa = () => {
+    if (ct.pausada) { contagensCol.put({ ...ct, pausada: false }); return; }
+    confirmAction('Pausar a contagem?', 'Nenhum aparelho recebe leituras desta contagem até ela ser retomada. O que já foi coletado continua valendo.', 'Pausar', () => contagensCol.put({ ...ct, pausada: true }));
+  };
   const excluir = () => { setMenu(false); excluirContagem(ct, nav.voltar); };
 
   const rodadas = (
@@ -916,6 +922,12 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
         sub={tela.aba === 'coleta' ? `${r}ª contagem · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}` : `${inv.codigo} · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}`}
         onVoltar={nav.voltar} direita={<View style={k.linha}>
         {tela.aba === 'coleta' ? <Anel pct={prog} size={46} claro /> : null}
+        {podePausar ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={ct.pausada ? 'Retomar contagem' : 'Pausar contagem'} hitSlop={8} onPress={alternarPausa}
+            style={({ pressed }) => [k.pausa, { backgroundColor: pressed ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.18)' }]}>
+            {ct.pausada ? <PlayIcon size={20} color="#fff" weight="fill" /> : <PauseIcon size={20} color="#fff" weight="fill" />}
+          </Pressable>
+        ) : null}
         {!encerrado ? <Pressable accessibilityRole="button" accessibilityLabel="Opções da contagem" hitSlop={10} onPress={() => setMenu(true)} style={k.voltar}><DotsThreeVerticalIcon size={24} color="#fff" weight="bold" /></Pressable> : null}
       </View>} />
       {ct.pausada ? (
@@ -1632,7 +1644,7 @@ function Coleta({ ct, r, ativa, produtos, itens, lista, q, sel, setSel, rodadas,
     <ScrollView contentContainerStyle={k.corpo}>
       {rodadas}
       {ct.pausada
-        ? <EmptyState icon={PauseIcon} title="Contagem pausada" text="Retome a contagem no menu do topo (⋮) para voltar a coletar." action={{ label: 'Retomar contagem', onPress: () => contagensCol.put({ ...ct, pausada: false }) }} />
+        ? <EmptyState icon={PauseIcon} title="Contagem pausada" text="Toque em Retomar (aqui ou no botão ▶ do topo) para voltar a coletar." action={{ label: 'Retomar contagem', onPress: () => contagensCol.put({ ...ct, pausada: false }) }} />
         : <EmptyState icon={BarcodeIcon} title={`Contagem ${r} ${ROTULO_RODADA[ct.rodadas[r - 1]].toLowerCase()}`} text="Só a contagem em andamento recebe leituras. Para corrigir uma finalizada, reabra a contagem na tela do inventário." />}
     </ScrollView>
   );
@@ -2075,6 +2087,7 @@ const k = StyleSheet.create({
   qtdLista: { width: 68, height: 44, borderRadius: 10, borderWidth: 1.5, textAlign: 'center', fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'], paddingHorizontal: 4 },
   topo: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingBottom: 14 },
   voltar: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
+  pausa: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', marginLeft: 6 },
   topoTit: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
   topoSub: { color: '#c9d4e2', fontSize: 14 },
   corpo: { padding: space.lg, paddingBottom: space.xxl * 2, gap: space.md, width: '100%', maxWidth: pageMaxWidth(720), alignSelf: 'center' },
