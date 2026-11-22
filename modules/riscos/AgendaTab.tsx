@@ -82,7 +82,7 @@ export default function AgendaTab({ d }: { d: DadosRiscos }) {
           );
         }}
       />
-      {editar && <UnidadeForm unidade={editar} filiais={d.filiais} onClose={() => setEditar(null)} />}
+      {editar && <UnidadeForm unidade={editar} filiais={d.filiais} unidades={d.unidades} onClose={() => setEditar(null)} />}
     </>
   );
 }

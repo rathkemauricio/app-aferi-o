@@ -79,7 +79,7 @@ export type RelatorioFinal = { caminho: string; em: string; fotos: number };
 
 export const ESCOPO_PADRAO = 'Sistema de Gestão Integrada';
 
-/** Requisitos do checklist (planilha de auditoria do Grupo Nevoeiro). */
+/** Requisitos do checklist padrão (modelo do EasyAudit, vindo da planilha de auditoria de uma rede de postos). */
 export const REQUISITOS: string[] = [
   'Fechamento imediato do caixa em operação.',
   'Validação fundo de caixa.',
@@ -125,7 +125,7 @@ export const REQUISITOS: string[] = [
   'O pátio e os canteiros estão limpos, sem papéis e objetos estranhos?',
   'O calibrador está funcionando corretamente? Possui as especificações do Inmetro (lacre, sem vazamento, não amassado)?',
   'Bomba, mangueiras, bicos, filtro e prensas sem vazamento e lacrados?',
-  'As bocas de descarga estão sem líquidos estranhos e as tampas externas dos bocais estão na cor padrão do Grupo Nevoeiro, com a devida numeração?',
+  'As bocas de descarga estão sem líquidos estranhos e as tampas externas dos bocais estão na cor padrão da rede, com a devida numeração?',
   'A caixa separadora está limpa e em bom estado de conservação? A limpeza é feita com frequência regular?',
   'Procedimentos para controle de pragas estão disponíveis. Há sistema documentado com responsabilidades, ações corretivas e medidas de melhoria?',
   'Conferência dos lacres do filtro de Diesel está OK?',
@@ -196,7 +196,7 @@ export function contar(itens: ItemAuditoria[]): Contagem {
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c));
 
 /** Relatório da auditoria. `fotoUrl` converte o caminho salvo da foto num endereço que o PDF consegue carregar. */
-export function relatorioHtml(a: Auditoria, filial: string, fotoUrl: (caminho: string) => string | undefined) {
+export function relatorioHtml(a: Auditoria, filial: string, fotoUrl: (caminho: string) => string | undefined, marca: { nome: string; logo: string | null }) {
   const c = contar(a.itens);
   const cat = catalogoDa(a);
   const constatacoes = a.itens.filter(i => i.status && cat.acao(i.status));
@@ -221,7 +221,7 @@ h3{border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin:22px 0 8px;font-siz
 .fotos{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}.fotos img{width:150px;height:110px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0}
 .assin{margin-top:36px}
 </style></head><body>
-<div class="head"><div><div class="marca">GRUPO NEVOEIRO</div><h1>Relatório de Auditoria</h1><div class="muted">${esc(a.escopo || ESCOPO_PADRAO)}</div></div>
+<div class="head"><div>${marca.logo ? `<img src="${marca.logo}" alt="${esc(marca.nome)}" style="max-height:44px;max-width:180px;object-fit:contain;display:block;margin-bottom:6px">` : ''}<div class="marca">${esc(marca.nome.toUpperCase())}</div><h1>Relatório de Auditoria</h1><div class="muted">${esc(a.escopo || ESCOPO_PADRAO)}</div></div>
 <div style="text-align:right"><b>${esc(filial)}</b><div>${esc(dataBR(a.data))}</div><small class="muted">${a.status === 'concluida' ? 'AUDITORIA CONCLUÍDA' : 'RASCUNHO'}</small></div></div>
 <h3>Identificação</h3><p><b>Auditor(es):</b> ${esc(a.auditores || 'Não informado')}<br><b>Processo / escopo:</b> ${esc(a.escopo || ESCOPO_PADRAO)}</p>
 <h3>Resumo executivo</h3><div class="grid">${cat.lista.map(s => `<div class="stat"><b style="color:${s.cor}">${c[s.codigo]}</b>${esc(s.nome)}</div>`).join('')}${c.pendentes ? `<div class="stat"><b>${c.pendentes}</b>Não avaliados</div>` : ''}</div>

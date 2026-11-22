@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { useUsuarioLogado } from '../../lib/auth';
+import { useIdentidade } from '../../lib/identidade';
 import { dataBR, hojeISO, imprimirHtml, isoValida, uid } from '../../lib/util';
 import { CalendarBlankIcon, CheckIcon, ListPlusIcon, MagnifyingGlassIcon, PlusIcon, PrinterIcon, TrashIcon, XIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
@@ -17,6 +19,7 @@ async function imprimir(html: string, titulo: string) {
 
 export default function PlanTab({ d }: { d: DadosRiscos }) {
   const { s, t } = useEstilos();
+  const marca = useIdentidade();
   const [filtro, setFiltro] = useState('Todas');
   const [busca, setBusca] = useState('');
   const [dia, setDia] = useState(hojeISO());
@@ -37,7 +40,7 @@ export default function PlanTab({ d }: { d: DadosRiscos }) {
     if (!isoValida(dia)) { notify('Data inválida', 'Use o formato AAAA-MM-DD.'); return; }
     const doDia = vs.filter(v => v.data === dia).sort((a, b) => nome(a.unidade_id).localeCompare(nome(b.unidade_id), 'pt-BR', { numeric: true }));
     const rows = doDia.flatMap(v => v.tarefas.map(x => ({ unidade: nome(v.unidade_id), titulo: x.titulo, desc: x.desc, obs: x.obs })));
-    void imprimir(checklistHtml('Planejamento do Dia — Todas as Filiais', `Data: ${dataBR(dia)} — ${doDia.length} filial(is) com planejamento`, rows, true), 'Planejamento do dia');
+    void imprimir(checklistHtml('Planejamento do Dia — Todas as Filiais', `Data: ${dataBR(dia)} — ${doDia.length} filial(is) com planejamento`, rows, true, marca), 'Planejamento do dia');
   };
 
   return (
@@ -152,6 +155,8 @@ function PlanoLote({ unidades, onClose }: { unidades: Unidade[]; onClose: () => 
 /* ---------- Planejamento da unidade ---------- */
 function PlanoUnidade({ u, visitas, onClose }: { u: Unidade; visitas: Visita[]; onClose: () => void }) {
   const { s, t } = useEstilos();
+  const usuario = useUsuarioLogado();
+  const marca = useIdentidade();
   const [data, setData] = useState(hojeISO());
   const [titulo, setTitulo] = useState('');
   const [desc, setDesc] = useState('');
@@ -177,11 +182,11 @@ function PlanoUnidade({ u, visitas, onClose }: { u: Unidade; visitas: Visita[]; 
     const novo: Tarefa = { ...x, status: x.status === st ? 'Pendente' : st };
     const agora = new Date().toISOString();
     if (novo.status === 'Concluída' && !novo.prodLancada) {
-      atividadesCol.put({ id: uid('rma'), unidade_id: u.id, data: v.data, tarefa: x.desc || x.titulo, categoria: 'Plano de Ação', obs: `Concluído via Planejamento de ${dataBR(v.data)}`, status: 'Concluído', levar_proxima: false, proxima_visita: null, evidencia: x.evidencia, concluido_em: agora });
+      atividadesCol.put({ id: uid('rma'), unidade_id: u.id, data: v.data, tarefa: x.desc || x.titulo, categoria: 'Plano de Ação', obs: `Concluído via Planejamento de ${dataBR(v.data)}`, status: 'Concluído', levar_proxima: false, proxima_visita: null, evidencia: x.evidencia, concluido_em: agora, criado_por_nome: usuario });
       novo.prodLancada = true;
     }
     if (novo.status === 'Não concluída' && novo.levar && !novo.acaoLancada) {
-      atividadesCol.put({ id: uid('rma'), unidade_id: u.id, data: v.data, tarefa: x.desc || x.titulo, categoria: 'Plano de Ação', obs: `Não realizado no planejamento de ${dataBR(v.data)}. Virou plano de ação para a próxima auditoria.`, status: 'Pendente', levar_proxima: true, proxima_visita: u.proxima_visita, evidencia: x.evidencia, concluido_em: null });
+      atividadesCol.put({ id: uid('rma'), unidade_id: u.id, data: v.data, tarefa: x.desc || x.titulo, categoria: 'Plano de Ação', obs: `Não realizado no planejamento de ${dataBR(v.data)}. Virou plano de ação para a próxima auditoria.`, status: 'Pendente', levar_proxima: true, proxima_visita: u.proxima_visita, evidencia: x.evidencia, concluido_em: null, criado_por_nome: usuario });
       novo.acaoLancada = true;
     }
     const atual = visitasCol.get(v.id) ?? v;
@@ -192,7 +197,7 @@ function PlanoUnidade({ u, visitas, onClose }: { u: Unidade; visitas: Visita[]; 
     const tarefas = atual.tarefas.filter(y => y.id !== x.id);
     if (tarefas.length) visitasCol.put({ ...atual, tarefas }); else visitasCol.remove(v.id);
   });
-  const imprimirVisita = (v: Visita) => void imprimir(checklistHtml('Checklist de Auditoria / Planejamento', `Filial: ${u.nome} — Data: ${dataBR(v.data)}`, v.tarefas.map(x => ({ unidade: u.nome, titulo: x.titulo, desc: x.desc, obs: x.obs })), false), 'Checklist da visita');
+  const imprimirVisita = (v: Visita) => void imprimir(checklistHtml('Checklist de Auditoria / Planejamento', `Filial: ${u.nome} — Data: ${dataBR(v.data)}`, v.tarefas.map(x => ({ unidade: u.nome, titulo: x.titulo, desc: x.desc, obs: x.obs })), false, marca), 'Checklist da visita');
 
   return (
     <Sheet title={u.nome} onClose={onClose}>

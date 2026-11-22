@@ -20,8 +20,9 @@ export function Kpis({ itens }: { itens: { label: string; valor: string | number
     <View style={s.kpis}>
       {itens.map(k => (
         <View key={k.label} style={[s.kpi, k.destaque && s.kpiDestaque]}>
-          <Text style={[s.kpiLabel, k.destaque && { color: colors.text }]} numberOfLines={1}>{k.label}</Text>
-          <Text style={[s.kpiValor, !k.destaque && k.cor ? { color: k.cor } : null]} numberOfLines={1}>{k.valor}</Text>
+          {/* Cartão em destaque: fundo na cor de destaque do tema, texto na cor feita para ficar sobre ela. */}
+          <Text style={[s.kpiLabel, k.destaque && { color: colors.primaryText, opacity: 0.85 }]} numberOfLines={1}>{k.label}</Text>
+          <Text style={[s.kpiValor, k.destaque ? { color: colors.primaryText } : k.cor ? { color: k.cor } : null]} numberOfLines={1}>{k.valor}</Text>
         </View>
       ))}
     </View>

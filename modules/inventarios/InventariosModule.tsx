@@ -5,6 +5,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Filial } from '../../lib/data';
 import { shareText } from '../../lib/share';
+import { useUsuarioLogado } from '../../lib/auth';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { dataBR, fmtMoeda, fmtNum, hojeISO, isoValida, rotuloFilial, uid } from '../../lib/util';
 import {
@@ -51,7 +52,7 @@ export default function InventariosModule() {
         <MarcaModulo icon={ArchiveIcon} />
         <View style={s.flex}>
           <Text style={s.brandName}>Inventários</Text>
-          <Text style={t.caption}>Base histórica por unidade</Text>
+          <Text style={t.caption}>Inventários por filial</Text>
         </View>
         {syncPill}
       </View>
@@ -83,10 +84,11 @@ function ListaUnidades({ unidades, filiais, todos, onAbrir }: { unidades: Unidad
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const s = useMemo(() => estilos(colors), [colors]);
+  const router = useRouter();
   const [busca, setBusca] = useState('');
   const [novo, setNovo] = useState(false);
   const q = busca.trim().toLowerCase();
-  const lista = unidades.filter(u => !q || `${u.nome} ${u.legado}`.toLowerCase().includes(q));
+  const lista = unidades.filter(u => !q || `${u.nome} ${u.legado} ${u.filial?.cidade ?? ''}`.toLowerCase().includes(q));
   const soma = (k: 'sobraR' | 'faltaR') => lista.reduce((a, u) => a + u[k], 0);
 
   return (
@@ -100,30 +102,34 @@ function ListaUnidades({ unidades, filiais, todos, onAbrir }: { unidades: Unidad
         ListHeaderComponent={<View style={s.stack}>
           <View style={s.pageHead}>
             <View style={s.flex}>
-              <Text style={t.title}>Unidades</Text>
-              <Text style={t.captionBg}>Consulta histórica extraída do sistema legado. Toque numa unidade para ver os inventários.</Text>
+              <Text style={t.title}>Filiais</Text>
+              <Text style={t.captionBg}>Inventários de cada filial da rede: sobras, faltas e resultado. Toque numa filial para ver os inventários ou lançar um novo.</Text>
             </View>
             <Button title="Novo inventário" icon={PlusIcon} size="sm" onPress={() => setNovo(true)} />
           </View>
           <View style={s.metricas}>
-            <Metrica label="Unidades" valor={String(lista.length)} />
+            <Metrica label="Filiais" valor={String(lista.length)} />
             <Metrica label="Inventários" valor={fmtNum(lista.reduce((a, u) => a + u.contagem, 0))} />
             <Metrica label="Sobra em valores" valor={fmtMoeda(soma('sobraR'))} tom="bom" />
             <Metrica label="Falta em valores" valor={fmtMoeda(soma('faltaR'))} tom="ruim" />
           </View>
-          <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar unidade (ex.: NEVOEIRO 01)" />
+          <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar filial (código, nome ou cidade)" />
           <View style={{ height: space.xs }} />
         </View>}
         ListEmptyComponent={unidades.length
-          ? <EmptyState icon={MagnifyingGlassIcon} title="Nenhuma unidade encontrada" text="Confira o que foi digitado na busca." />
-          : <EmptyState icon={ArchiveIcon} title="Base histórica ainda não carregada" text={isSupabaseConfigured ? 'Os inventários chegam do servidor na primeira sincronização. Verifique a conexão.' : 'A base histórica fica no servidor.'} />}
+          ? <EmptyState icon={MagnifyingGlassIcon} title="Nenhuma filial encontrada" text="Confira o que foi digitado na busca." />
+          : <EmptyState icon={StorefrontIcon} title="Nenhuma filial cadastrada" text="Cadastre as filiais da rede em Filiais: cada uma aparece aqui para lançar e consultar os inventários."
+            action={{ label: 'Abrir Filiais', icon: StorefrontIcon, onPress: () => router.push('/filiais') }} />}
         renderItem={({ item: u }) => (
           <Pressable accessibilityRole="button" onPress={() => onAbrir(u.chave)} style={({ pressed }) => [pressed && { opacity: 0.75 }]}>
             <Card>
               <View style={s.row}>
                 <View style={s.flex}>
                   <Text style={t.bodyStrong} numberOfLines={1}>{u.nome}</Text>
-                  <Text style={t.caption} numberOfLines={1}>{u.filial && u.legado ? `${u.legado} · ` : ''}Último inventário: {u.ultimaTxt || '—'}</Text>
+                  <Text style={t.caption} numberOfLines={1}>
+                    {!u.filial ? 'Sem filial ligada no cadastro · ' : u.legado && u.legado !== u.filial.nome ? `Importado como ${u.legado} · ` : ''}
+                    {u.inventarios.length ? `Último inventário: ${u.ultimaTxt || '—'}` : 'Nenhum inventário ainda'}
+                  </Text>
                 </View>
                 <StatusPill label={`${u.contagem} inventário(s)`} />
               </View>
@@ -177,7 +183,7 @@ function ListaInventarios({ unidade, filiais, todos, onVoltar, onAbrir }: { unid
         initialNumToRender={10}
         ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
         ListHeaderComponent={<View style={s.stack}>
-          <Button title="Unidades" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={onVoltar} />
+          <Button title="Filiais" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={onVoltar} />
           <View style={s.pageHead}>
             <View style={s.flex}>
               <Text style={t.title} numberOfLines={1}>{unidade.nome}</Text>
@@ -204,14 +210,17 @@ function ListaInventarios({ unidade, filiais, todos, onVoltar, onAbrir }: { unid
           </Card>
           <Text style={t.caption}>{lista.length} inventário(s) encontrado(s). Linhas inativas ficam fora das somas.</Text>
         </View>}
-        ListEmptyComponent={<EmptyState icon={MagnifyingGlassIcon} title="Nenhum inventário encontrado" text="Troque os filtros." />}
+        ListEmptyComponent={unidade.inventarios.length
+          ? <EmptyState icon={MagnifyingGlassIcon} title="Nenhum inventário encontrado" text="Troque os filtros." />
+          : <EmptyState icon={ArchiveIcon} title="Nenhum inventário desta filial" text="Lance o primeiro com o resultado do inventário: estoque do sistema, contagem, faltas e sobras."
+            action={{ label: 'Lançar inventário', icon: PlusIcon, onPress: () => setNovo(true) }} />}
         renderItem={({ item: r }) => (
           <Pressable accessibilityRole="button" onPress={() => onAbrir(r.id)} style={({ pressed }) => [pressed && { opacity: 0.75 }, !r.ativo && { opacity: 0.55 }]}>
             <Card>
               <View style={s.row}>
                 <View style={s.flex}>
                   <Text style={t.bodyStrong} numberOfLines={1}>{r.descricao || `Inventário ${r.cau_id}`}</Text>
-                  <Text style={t.caption} numberOfLines={1}>{r.agendamento || '—'} · ID {r.cau_id}{r.tin_id ? ` · tipo ${r.tin_id}` : ''}{r.origem === 'manual' ? ' · lançado no app' : ''}</Text>
+                  <Text style={t.caption} numberOfLines={1}>{r.agendamento || '—'} · ID {r.cau_id}{r.tin_id ? ` · tipo ${r.tin_id}` : ''}{r.origem === 'manual' ? ` · lançado no app${r.criado_por_nome ? ` por ${r.criado_por_nome}` : ''}` : ''}</Text>
                 </View>
                 <AtivoBotao ativo={r.ativo} onPress={() => inventariosCol.put({ ...r, ativo: !r.ativo })} />
               </View>
@@ -268,7 +277,7 @@ function DetalheInventario({ inv, unidade, onVoltar }: { inv: Inventario; unidad
   const exportar = () => {
     if (!cats.length) return;
     const cols: [string, (c: Categoria) => unknown][] = [
-      ['Inventário', () => inv.descricao], ['Empresa', c => c.empresa], ['Data', () => inv.agendamento], ['Categoria', c => c.classe],
+      ['Inventário', () => inv.descricao], ['Filial', () => unidade.nome], ['Data', () => inv.agendamento], ['Categoria', c => c.classe],
       ['Estoque sistema', c => c.sistema], ['Contagem', c => c.contagem], ['Falta', c => c.faltas], ['Sobra', c => c.sobras], ['Resultado', c => c.resultado],
       ['Falta R$ (custo)', c => c.faltas_rs], ['Sobra R$ (custo)', c => c.sobras_rs], ['Resultado R$ (custo)', c => c.resultado_rs],
       ['Falta R$ (venda)', c => c.faltas_venda_rs], ['Sobra R$ (venda)', c => c.sobras_venda_rs], ['Resultado R$ (venda)', c => c.resultado_venda_rs],
@@ -278,7 +287,7 @@ function DetalheInventario({ inv, unidade, onVoltar }: { inv: Inventario; unidad
     const csv = [cols.map(c => cel(c[0])).join(';'), ...cats.map(c => cols.map(([, f]) => cel(typeof f(c) === 'number' ? String(f(c)).replace('.', ',') : f(c))).join(';'))].join('\n');
     void shareText(`inventario_${inv.cau_id}_categorias.csv`, csv, 'text/csv;charset=utf-8');
   };
-  const excluir = () => confirmAction('Excluir inventário?', 'Este inventário foi lançado no app e será removido. Os dados históricos não são afetados.', 'Excluir', () => { inventariosCol.remove(inv.id); onVoltar(); });
+  const excluir = () => confirmAction('Excluir inventário?', 'Este inventário foi lançado no app e será removido. Os outros inventários da filial não são afetados.', 'Excluir', () => { inventariosCol.remove(inv.id); onVoltar(); });
 
   return (
     <>
@@ -291,7 +300,10 @@ function DetalheInventario({ inv, unidade, onVoltar }: { inv: Inventario; unidad
           <Button title="Inventários" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={onVoltar} />
           <View>
             <Text style={t.title}>{inv.descricao || `Inventário ${inv.cau_id}`}</Text>
-            <Text style={t.captionBg}>Empresa: {inv.empresa || unidade.nome}  •  Data: {inv.agendamento || '—'}  •  ID: {inv.cau_id}</Text>
+            <Text style={t.captionBg}>
+              Filial: {unidade.nome}{inv.empresa && unidade.filial && inv.empresa !== unidade.filial.nome ? ` (importado como ${inv.empresa})` : ''}  •  Data: {inv.agendamento || '—'}  •  ID: {inv.cau_id}
+              {inv.criado_por_nome ? `  •  Lançado por ${inv.criado_por_nome}` : ''}
+            </Text>
           </View>
           <View style={s.twoCol}>
             <Button title="Adicionar categoria" icon={PlusIcon} variant="secondary" size="sm" style={s.flex} disabled={!isSupabaseConfigured} onPress={() => setNova(true)} />
@@ -359,6 +371,7 @@ function NovoInventario({ filiais, todos, filialPadrao, onClose }: { filiais: Fi
   const s = useMemo(() => estilos(colors), [colors]);
   const proximo = useMemo(() => todos.reduce((m, r) => Math.max(m, r.cau_id), 0) + 1, [todos]);
   const [v, setV] = useState({ id: String(proximo), desc: '', data: hojeISO(), sistema: '0', contagem: '0', faltas: '0', sobras: '0', faltasR: '0', sobrasR: '0', resultR: '0', acuracia: '0' });
+  const usuario = useUsuarioLogado();
   const [filialId, setFilialId] = useState(filialPadrao ?? '');
   const [busca, setBusca] = useState('');
   const set = (k: keyof typeof v) => (x: string) => setV(o => ({ ...o, [k]: x }));
@@ -372,17 +385,17 @@ function NovoInventario({ filiais, todos, filialPadrao, onClose }: { filiais: Fi
       id: uid('inv'), cau_id: cau, descricao: v.desc.trim(), tin_id: null, cfi_id: null, empresa: f.nome, filial_id: f.id,
       agendamento: dataBR(v.data), data: v.data, sistema: lerNum(v.sistema), contagem: lerNum(v.contagem), faltas: lerNum(v.faltas), sobras: lerNum(v.sobras),
       resultado: lerNum(v.contagem) - lerNum(v.sistema), faltas_rs: lerNum(v.faltasR), sobras_rs: lerNum(v.sobrasR), resultado_rs: lerNum(v.resultR),
-      acuracia: lerNum(v.acuracia), eficiencia: 0, ativo: true, origem: 'manual',
+      acuracia: lerNum(v.acuracia), eficiencia: 0, ativo: true, origem: 'manual', criado_por_nome: usuario,
     });
     onClose();
   };
   return (
     <Sheet title="Novo inventário" onClose={onClose}
       footer={<View style={s.twoCol}><Button title="Cancelar" variant="secondary" style={s.flex} onPress={onClose} /><Button title="Salvar" icon={CheckIcon} style={s.flex} onPress={salvar} /></View>}>
-      <Text style={t.caption}>O lançamento fica junto da base histórica, que não é alterada.</Text>
+      <Text style={t.caption}>O inventário fica guardado na filial escolhida, junto dos que já foram registrados. Fica registrado que foi você ({usuario}) quem lançou.</Text>
       <View style={s.twoCol}>
         <Field style={{ width: 110 }} label="ID" value={v.id} onChangeText={set('id')} keyboardType="number-pad" />
-        <Field style={s.flex} label="Descrição" value={v.desc} onChangeText={set('desc')} placeholder="Ex.: Nev 01 - 09/2026" />
+        <Field style={s.flex} label="Descrição" value={v.desc} onChangeText={set('desc')} placeholder="Ex.: Inventário de setembro/2026" />
       </View>
       <Text style={t.label}>Filial</Text>
       <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Código, nome ou cidade" />

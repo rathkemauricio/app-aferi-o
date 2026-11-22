@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIdentidade } from '../../lib/identidade';
 import { useRouter } from 'expo-router';
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -232,6 +233,7 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const s = useMemo(() => estilos(colors), [colors]);
+  const marca = useIdentidade();
   const [cab, setCab] = useState({ data: auditoria.data, auditores: auditoria.auditores, escopo: auditoria.escopo });
   const [itens, setItens] = useState<ItemAuditoria[]>(auditoria.itens);
   // Execução: abre em "Pendentes" (a fila diminui sozinha conforme os itens são avaliados).
@@ -332,7 +334,7 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
     if (caminho) return lerRelatorio(caminho);
     const links2 = await linksDasFotos(itensRef.current.flatMap(i => i.fotos)).catch(() => ({} as Record<string, string>));
     const atual = { ...auditoria, ...cab, itens: itensRef.current };
-    return relatorioHtml(atual, filial, p => links2[p]);
+    return relatorioHtml(atual, filial, p => links2[p], marca);
   };
   const exportarPdf = async (caminho?: string) => {
     try { await imprimirHtml(await gerarHtml(caminho), `Auditoria ${filial.split(' · ')[0]} ${dataBR(cab.data)}`); }
@@ -349,7 +351,7 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
       if (isSupabaseConfigured) {
         try {
           const embutidas = await fotosEmbutidas(fotos);
-          const caminho = await guardarRelatorio(auditoria.id, relatorioHtml(base, filial, p => embutidas[p]));
+          const caminho = await guardarRelatorio(auditoria.id, relatorioHtml(base, filial, p => embutidas[p], marca));
           lista = [...relatorios, { caminho, em: new Date().toISOString(), fotos: fotos.length }];
         } catch (e) {
           // Sem fotos e sem relatório anterior dá para concluir sem guardar: o PDF é montado a partir do checklist.

@@ -4,8 +4,10 @@ import { supabase } from '../../lib/supabase';
 import { Collection, combinedStatus, type SyncRow, useCollection } from '../../lib/sync';
 import { filialPorNumero, numeroDe, rotuloFilial } from '../../lib/util';
 
-// Base histórica de inventários (sistema legado) + inventários lançados no app.
-// Hierarquia: Unidade (filial) → Inventário (linhas por tipo, mesmo cau_id) → Resultado por categoria.
+// Inventários de cada filial da rede: os importados de um sistema anterior (base histórica) e os lançados no app.
+// Hierarquia: Unidade (filial do cadastro) → Inventário (linhas por tipo, mesmo cau_id) → Resultado por categoria.
+// Toda filial do cadastro aparece, mesmo sem inventário; inventários antigos sem filial ligada aparecem pelo nome
+// que vieram (e são ligados à filial pelo número, quando dá).
 
 type Valores = {
   sistema: number; contagem: number; faltas: number; sobras: number; resultado: number;
@@ -14,6 +16,8 @@ type Valores = {
 export type Inventario = SyncRow & Valores & {
   cau_id: number; descricao: string; tin_id: number | null; cfi_id: number | null; empresa: string; filial_id: string | null;
   agendamento: string; data: string | null; ativo: boolean; origem: 'historico' | 'manual';
+  /** Quem lançou no app (vazio na base histórica). */
+  criado_por_nome?: string;
 };
 export type Categoria = SyncRow & Valores & {
   cau_id: number; empresa: string; classe: string; ativo: boolean; origem: 'historico' | 'manual';
@@ -56,7 +60,12 @@ export function useInventarios() {
       if (inv.data && (!u.ultima || inv.data > u.ultima)) { u.ultima = inv.data; u.ultimaTxt = inv.agendamento; }
     });
     mapa.forEach(u => { u.contagem = new Set(u.inventarios.filter(i => i.ativo).map(i => i.cau_id)).size; });
-    return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true }));
+    // Filiais do cadastro ainda sem inventário também aparecem (para lançar o primeiro).
+    f.filiais.forEach(fl => {
+      const chave = `f:${fl.id}`;
+      if (!mapa.has(chave)) mapa.set(chave, { chave, filial: fl, nome: rotuloFilial(fl), legado: '', inventarios: [], contagem: 0, inativos: 0, sobraR: 0, faltaR: 0, resultadoR: 0, sobraQ: 0, faltaQ: 0, ultima: null, ultimaTxt: '' });
+    });
+    return [...mapa.values()].sort((a, b) => (a.filial ? 0 : 1) - (b.filial ? 0 : 1) || a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true }));
   }, [snap.list, f.filiais]);
   return { unidades, todos: snap.list, filiais: f.filiais, loaded: snap.loaded && f.loaded, status: combinedStatus([snap.status, f.status]) };
 }

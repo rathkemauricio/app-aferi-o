@@ -154,7 +154,7 @@ export function StatusPill({ label, tone = 'neutral', icon: IconCmp }: { label: 
   );
 }
 
-export function ChoiceChips({ value, options, onChange, toneFor }: { value: string; options: string[]; onChange: (v: string) => void; toneFor?: (option: string) => Tone }) {
+export function ChoiceChips({ value, options, onChange, toneFor, labelFor }: { value: string; options: string[]; onChange: (v: string) => void; toneFor?: (option: string) => Tone; labelFor?: (option: string) => string }) {
   const { colors } = useContext(ThemeContext);
   return (
     <View style={k.chips}>
@@ -165,7 +165,7 @@ export function ChoiceChips({ value, options, onChange, toneFor }: { value: stri
         return (
           <Pressable key={option} onPress={() => onChange(option)} accessibilityRole="button" accessibilityState={{ selected: active }}
             style={({ pressed }) => [k.chip, { backgroundColor: colors.surface, borderColor: colors.borderStrong }, active && { backgroundColor: c.bg, borderColor: c.fg }, pressed && k.pressed]}>
-            <Text style={[k.chipText, { color: colors.textMuted }, active && { color: c.fg }]}>{option}</Text>
+            <Text style={[k.chipText, { color: colors.textMuted }, active && { color: c.fg }]}>{labelFor ? labelFor(option) : option}</Text>
           </Pressable>
         );
       })}

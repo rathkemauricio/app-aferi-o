@@ -1,19 +1,21 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import type { Filial } from '../../lib/data';
 import { shareText } from '../../lib/share';
 import { dataBR, isoValida, rotuloFilial } from '../../lib/util';
-import { CheckIcon, EyeIcon, FileCsvIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, ShieldWarningIcon, TrashIcon, UploadSimpleIcon } from '../../ui/icons';
+import { CheckIcon, EyeIcon, FileCsvIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, ShieldWarningIcon, StorefrontIcon, TrashIcon, UploadSimpleIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { space } from '../../ui/theme';
 import { avaliada, calcProxima, type Classe, CLASSES, COR_CLASSE, CRITS, MATRIZ, riscoDe, type Unidade, vencida } from './model';
-import { type DadosRiscos, importarBackup, lerArquivoJson, salvarUnidade, unidadesCol } from './store';
+import { type DadosRiscos, idUnidadeDaFilial, importarBackup, lerArquivoJson, nomeUnidade, salvarUnidade, unidadesCol } from './store';
 import { Barra, CritPicker, EtiquetaClasse, Kpis, Meta, Pips, useEstilos } from './ui';
 
 const FILTROS = ['Todas', 'Baixo', 'Médio', 'Alto'];
 
 export default function MapaTab({ d }: { d: DadosRiscos }) {
+  const router = useRouter();
   const { s, t, colors } = useEstilos();
   const [filtro, setFiltro] = useState('Todas');
   const [busca, setBusca] = useState('');
@@ -68,11 +70,12 @@ export default function MapaTab({ d }: { d: DadosRiscos }) {
         </View>
       ) : null}
       <View style={s.pageHead}>
-        <Text style={[t.sectionBg, s.flex]}>Unidades</Text>
-        <Button title="Adicionar" icon={PlusIcon} size="sm" onPress={() => setEditar('nova')} />
+        <Text style={[t.sectionBg, s.flex]}>Filiais</Text>
+        <Button title="Dividir em áreas" icon={PlusIcon} variant="secondary" size="sm" disabled={!d.filiais.length} onPress={() => setEditar('nova')} />
       </View>
+      <Text style={t.captionBg}>Toda filial do cadastro aparece aqui. Toque em Editar para avaliar o risco; divida uma filial em áreas (ex.: Pista e Loja) só se cada parte for avaliada separadamente.</Text>
       <ChoiceChips value={filtro} options={FILTROS} onChange={setFiltro} toneFor={o => (o === 'Baixo' ? 'success' : o === 'Médio' ? 'warning' : o === 'Alto' ? 'danger' : 'accent')} />
-      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar unidade" />
+      <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar filial ou área" />
     </View>
   );
 
@@ -85,15 +88,16 @@ export default function MapaTab({ d }: { d: DadosRiscos }) {
         keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
         ListHeaderComponent={<View style={{ marginBottom: space.md }}>{cabecalho}</View>}
-        ListEmptyComponent={us.length ? <EmptyState icon={MagnifyingGlassIcon} title="Nenhuma unidade encontrada" text="Troque o filtro ou a busca." />
-          : <EmptyState icon={ShieldWarningIcon} title="Nenhuma unidade no mapa" text="As unidades chegam do servidor na sincronização, ou podem ser adicionadas aqui." action={{ label: 'Adicionar unidade', icon: PlusIcon, onPress: () => setEditar('nova') }} />}
+        ListEmptyComponent={us.length ? <EmptyState icon={MagnifyingGlassIcon} title="Nenhuma filial encontrada" text="Troque o filtro ou a busca." />
+          : <EmptyState icon={ShieldWarningIcon} title="Nenhuma filial cadastrada" text="Cadastre as filiais da rede em Filiais: cada uma aparece aqui automaticamente para avaliar o risco." action={{ label: 'Abrir Filiais', icon: StorefrontIcon, onPress: () => router.push('/filiais') }} />}
         ListFooterComponent={<View style={[s.wrap, { marginTop: space.lg }]}>
           <Button title="Exportar CSV" icon={FileCsvIcon} variant="secondary" size="sm" disabled={!us.length} onPress={exportarCsv} />
           <Button title="Importar backup do HTML" icon={UploadSimpleIcon} variant="secondary" size="sm" onPress={() => void importar()} />
         </View>}
-        renderItem={({ item: u }) => <CartaoUnidade u={u} filiais={d.filiais} onVer={() => setVer(u)} onEditar={() => setEditar(u)} />}
+        renderItem={({ item: u }) => <CartaoUnidade u={u} filiais={d.filiais} semRegistro={d.semRegistro.has(u.id)} unicaDaFilial={!!u.filial_id && us.filter(x => x.filial_id === u.filial_id).length === 1}
+          onVer={() => setVer(u)} onEditar={() => setEditar(u)} />}
       />
-      {editar && <UnidadeForm unidade={editar === 'nova' ? null : editar} filiais={d.filiais} onClose={() => setEditar(null)} />}
+      {editar && <UnidadeForm unidade={editar === 'nova' ? null : editar} filiais={d.filiais} unidades={us} onClose={() => setEditar(null)} />}
       {ver && <VerUnidade u={ver} filiais={d.filiais} onClose={() => setVer(null)} onEditar={() => { setEditar(ver); setVer(null); }} />}
     </>
   );
@@ -116,7 +120,7 @@ function Rosca({ valores, cores }: { valores: number[]; cores: string[] }) {
   );
 }
 
-function CartaoUnidade({ u, filiais, onVer, onEditar }: { u: Unidade; filiais: Filial[]; onVer: () => void; onEditar: () => void }) {
+function CartaoUnidade({ u, filiais, semRegistro, unicaDaFilial, onVer, onEditar }: { u: Unidade; filiais: Filial[]; semRegistro: boolean; unicaDaFilial: boolean; onVer: () => void; onEditar: () => void }) {
   const { s, t } = useEstilos();
   const r = riscoDe(u);
   const f = u.filial_id ? filiais.find(x => x.id === u.filial_id) : undefined;
@@ -126,7 +130,7 @@ function CartaoUnidade({ u, filiais, onVer, onEditar }: { u: Unidade; filiais: F
       <View style={s.row}>
         <View style={s.flex}>
           <Text style={t.bodyStrong} numberOfLines={1}>{u.nome}</Text>
-          <Text style={t.caption} numberOfLines={1}>{f ? rotuloFilial(f) + ' · ' : ''}{avaliada(u) ? r.fr : 'Sem avaliação'}</Text>
+          <Text style={t.caption} numberOfLines={1}>{f ? `${f.cidade}${f.uf ? `/${f.uf}` : ''} · ` : 'Sem filial no cadastro · '}{avaliada(u) ? r.fr : 'Sem avaliação'}</Text>
         </View>
         {avaliada(u) ? <EtiquetaClasse cl={r.cl} /> : null}
       </View>
@@ -138,8 +142,14 @@ function CartaoUnidade({ u, filiais, onVer, onEditar }: { u: Unidade; filiais: F
       <Pips u={u} />
       <View style={s.wrap}>
         <Button title="Ver" icon={EyeIcon} variant="secondary" size="sm" onPress={onVer} />
-        <Button title="Editar" icon={PencilSimpleIcon} variant="secondary" size="sm" onPress={onEditar} />
-        <Button title="Excluir" icon={TrashIcon} variant="danger" size="sm" onPress={() => confirmAction(`Excluir "${u.nome}"?`, 'A unidade sai do mapa. Pontuações e registros dela ficam guardados no servidor.', 'Excluir', () => unidadesCol.remove(u.id))} />
+        <Button title={avaliada(u) ? 'Editar' : 'Avaliar'} icon={PencilSimpleIcon} variant="secondary" size="sm" onPress={onEditar} />
+        {semRegistro ? null : (
+          <Button title={unicaDaFilial ? 'Zerar avaliação' : 'Excluir área'} icon={TrashIcon} variant="danger" size="sm"
+            onPress={() => confirmAction(unicaDaFilial ? `Zerar a avaliação de "${u.nome}"?` : `Excluir "${u.nome}"?`,
+              unicaDaFilial ? 'A filial continua no mapa, sem avaliação. Pontuações, atividades e visitas já registradas ficam guardadas.'
+                : 'A área sai do mapa. Pontuações, atividades e visitas dela ficam guardadas no servidor.',
+              unicaDaFilial ? 'Zerar' : 'Excluir', () => unidadesCol.remove(u.id))} />
+        )}
       </View>
     </Card>
   );
@@ -171,38 +181,54 @@ function VerUnidade({ u, filiais, onClose, onEditar }: { u: Unidade; filiais: Fi
   );
 }
 
-export function UnidadeForm({ unidade, filiais, onClose }: { unidade: Unidade | null; filiais: Filial[]; onClose: () => void }) {
+export function UnidadeForm({ unidade, filiais, unidades, onClose }: { unidade: Unidade | null; filiais: Filial[]; unidades: Unidade[]; onClose: () => void }) {
   const { s, t, colors } = useEstilos();
-  const [nome, setNome] = useState(unidade?.nome ?? '');
+  const nova = !unidade;
   const [filialId, setFilialId] = useState(unidade?.filial_id ?? '');
+  const [area, setArea] = useState(unidade?.area ?? '');
   const [buscaF, setBuscaF] = useState('');
   const [crit, setCrit] = useState({ p: unidade?.p ?? 0, c: unidade?.c ?? 0, cx: unidade?.cx ?? 0, pe: unidade?.pe ?? 0, h: unidade?.h ?? 0 });
   const [ur, setUr] = useState(unidade?.ultima_revisao ?? '');
   const n = CRITS.filter(k => crit[k] >= 1).length;
   const r = riscoDe(crit);
   const pv = isoValida(ur) ? calcProxima(ur, r.cl) : null;
+  const filial = filiais.find(f => f.id === filialId);
   const filtradas = filiais.filter(f => `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(buscaF.toLowerCase())).slice(0, 40);
   const salvar = () => {
-    if (!nome.trim()) { notify('Nome obrigatório', 'Informe o nome da unidade.'); return; }
+    if (!filial && !unidade) { notify('Escolha a filial', 'A unidade do mapa é uma filial do cadastro (ou uma área dela).'); return; }
+    if (nova && !area.trim()) { notify('Informe a área', 'Toda filial já está no mapa. Para dividir, dê um nome à área (ex.: Pista ou Loja).'); return; }
+    // Uma unidade por filial e área.
+    const repetida = filial && unidades.some(x => x.id !== unidade?.id && x.filial_id === filial.id && (x.area ?? '').trim().toLowerCase() === area.trim().toLowerCase());
+    if (repetida) { notify('Já existe', `${nomeUnidade(filial, area)} já está no mapa.`); return; }
     if (n > 0 && n < 5) { notify('Critérios incompletos', 'Selecione de 1 a 5 em todos os critérios, ou deixe todos em branco.'); return; }
     if (ur && !isoValida(ur)) { notify('Data inválida', 'Use o formato AAAA-MM-DD na última revisão.'); return; }
-    salvarUnidade({ ...(unidade ?? { id: `rmu-${Date.now().toString(36)}`, notas: {}, proxima_visita: null }), nome: nome.trim(), filial_id: filialId || null, ...crit, ultima_revisao: ur || null } as Unidade);
+    const id = unidade?.id ?? (area.trim() ? `rmu-${Date.now().toString(36)}` : idUnidadeDaFilial(filialId));
+    const nome = filial ? nomeUnidade(filial, area) : unidade!.nome;
+    salvarUnidade({ ...(unidade ?? { notas: {}, proxima_visita: null }), id, nome, filial_id: filial?.id ?? unidade?.filial_id ?? null, area: area.trim(), ...crit, ultima_revisao: ur || null } as Unidade);
     onClose();
   };
   return (
-    <Sheet title={unidade ? 'Editar unidade' : 'Adicionar unidade'} onClose={onClose}
+    <Sheet title={nova ? 'Dividir filial em áreas' : `Avaliar ${unidade.nome}`} onClose={onClose}
       footer={<View style={s.twoCol}><Button title="Cancelar" variant="secondary" style={s.flex} onPress={onClose} /><Button title="Salvar" icon={CheckIcon} style={s.flex} onPress={salvar} /></View>}>
-      <Field label="Nome da unidade" value={nome} onChangeText={setNome} placeholder="Ex.: 2 Pista (Santa Cruz)" />
-      <Text style={t.label}>Filial do cadastro (opcional)</Text>
-      <Field value={buscaF} onChangeText={setBuscaF} placeholder="Buscar filial" icon={MagnifyingGlassIcon} />
-      <View style={s.listBox}>
-        <Pressable onPress={() => setFilialId('')} style={[s.opcao, !filialId && { backgroundColor: colors.accentSoft }]}><Text style={[t.body, s.flex]}>Sem vínculo</Text></Pressable>
-        {filtradas.map(f => (
-          <Pressable key={f.id} onPress={() => setFilialId(f.id)} style={[s.opcao, s.divided, f.id === filialId && { backgroundColor: colors.accentSoft }]}>
-            <Text style={[t.body, s.flex, f.id === filialId && { color: colors.accentText, fontWeight: '700' }]} numberOfLines={1}>{rotuloFilial(f)}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {nova ? <>
+        <Text style={t.caption}>Toda filial do cadastro já está no mapa. Crie uma área só para avaliar uma parte da filial separadamente (ex.: a Pista e a Loja).</Text>
+        <Text style={t.label}>Filial</Text>
+        <Field value={buscaF} onChangeText={setBuscaF} placeholder="Buscar filial (código, nome ou cidade)" icon={MagnifyingGlassIcon} />
+        <View style={s.listBox}>
+          {filtradas.map((f, i) => (
+            <Pressable key={f.id} accessibilityRole="radio" accessibilityState={{ selected: f.id === filialId }} onPress={() => setFilialId(f.id)} style={[s.opcao, i > 0 && s.divided, f.id === filialId && { backgroundColor: colors.accentSoft }]}>
+              <Text style={[t.body, s.flex, f.id === filialId && { color: colors.accentText, fontWeight: '700' }]} numberOfLines={1}>{rotuloFilial(f)}</Text>
+              {f.id === filialId ? <CheckIcon size={16} color={colors.accentText} weight="bold" /> : null}
+            </Pressable>
+          ))}
+          {!filtradas.length ? <Text style={[t.caption, { padding: 12 }]}>Nenhuma filial encontrada.</Text> : null}
+        </View>
+      </> : <Text style={t.caption}>{filial ? `Filial do cadastro: ${rotuloFilial(filial)}` : 'Unidade sem filial no cadastro.'}</Text>}
+      <Field label={nova ? 'Área' : 'Área (opcional)'} value={area} onChangeText={setArea} placeholder="Ex.: Pista" maxLength={40}
+        helper={filial ? `Aparece como: ${nomeUnidade(filial, area)}` : undefined} />
+      <View style={s.wrap}>{['Pista', 'Loja', 'Conveniência', 'Troca de óleo'].map(a => (
+        <Button key={a} title={a} variant={area === a ? 'primary' : 'secondary'} size="sm" onPress={() => setArea(a)} />
+      ))}</View>
       <Text style={t.label}>Matriz de classificação de risco (1 a 2 Baixo · 3 Médio · 4 a 5 Alto)</Text>
       {MATRIZ.map(m => <CritPicker key={m.k} k={m.k} valor={crit[m.k]} onChange={v => setCrit(c => ({ ...c, [m.k]: v }))} />)}
       <Text style={t.bodyStrong}>{n === 0 ? 'Sem avaliação. Selecione de 1 a 5 em cada critério.' : n < 5 ? `Faltam ${5 - n} critério(s).` : `Total ${r.tot} · ${r.cl} · frequência ${r.fr}`}</Text>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { useUsuarioLogado } from '../../lib/auth';
 import { dataBR, hojeISO, uid } from '../../lib/util';
 import { CheckIcon, ListChecksIcon, MagnifyingGlassIcon, PlusIcon, TrashIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
@@ -81,6 +82,7 @@ function ProdSheet({ u, atividades, onClose }: { u: Unidade; atividades: Ativida
   const [salvando, setSalvando] = useState(false);
   const pend = pendentes(atividades, u.id);
   const due = pendentesDaVisita(atividades, u);
+  const usuario = useUsuarioLogado();
   const regs = atividades.filter(a => a.unidade_id === u.id).sort((a, b) => b.data.localeCompare(a.data) || (b.updated_at ?? '').localeCompare(a.updated_at ?? ''));
 
   const adicionar = async () => {
@@ -88,7 +90,7 @@ function ProdSheet({ u, atividades, onClose }: { u: Unidade; atividades: Ativida
     setSalvando(true);
     try {
       const evidencia = arq ? await enviarEvidencia(u.id, arq) : null;
-      atividadesCol.put({ id: uid('rma'), unidade_id: u.id, data: hojeISO(), tarefa: tarefa.trim(), categoria: cat, obs: obs.trim(), status: levar ? 'Pendente' : 'Concluído', levar_proxima: levar, proxima_visita: u.proxima_visita, evidencia, concluido_em: levar ? null : new Date().toISOString() });
+      atividadesCol.put({ id: uid('rma'), unidade_id: u.id, data: hojeISO(), tarefa: tarefa.trim(), categoria: cat, obs: obs.trim(), status: levar ? 'Pendente' : 'Concluído', levar_proxima: levar, proxima_visita: u.proxima_visita, evidencia, concluido_em: levar ? null : new Date().toISOString(), criado_por_nome: usuario });
       setTarefa(''); setObs(''); setLevar(false); setArq(null);
     } catch (e) { notify('Atividade não salva', e instanceof Error ? e.message : ''); } finally { setSalvando(false); }
   };
@@ -119,7 +121,7 @@ export function ItemAtividade({ a }: { a: Atividade }) {
       <View style={[s.row, { flexWrap: 'wrap' }]}>
         <Etiqueta texto={pend ? 'Pendente' : 'Concluído'} cor={pend ? '#d93a3a' : '#16a36a'} />
         <Etiqueta texto={a.categoria} cor="#596173" />
-        <Text style={t.caption}>{dataBR(a.data)}</Text>
+        <Text style={t.caption}>{dataBR(a.data)}{a.criado_por_nome ? ` · por ${a.criado_por_nome}` : ''}</Text>
       </View>
       {a.obs ? <Text style={t.caption}>{a.obs}</Text> : null}
       {pend && a.proxima_visita ? <Text style={t.caption}><Text style={{ fontWeight: '800' }}>Verificar na próxima visita:</Text> {dataBR(a.proxima_visita)}</Text> : null}

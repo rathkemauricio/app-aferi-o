@@ -1,9 +1,12 @@
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { useContext, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../lib/auth';
+import { escolherLogo } from '../../lib/bandeiras';
 import { useFiliais } from '../../lib/data';
+import { salvarLogoDaRede, useIdentidade } from '../../lib/identidade';
 import { PADRAO, restaurarPadrao, setPreferencia, usePreferencias } from '../../lib/preferencias';
 import { tocar } from '../../lib/sons';
 import { rotuloFilial } from '../../lib/util';
@@ -25,6 +28,8 @@ export default function ConfiguracoesScreen() {
   const t = useMemo(() => createTypography(colors), [colors]);
   const pref = usePreferencias();
   const { filiais } = useFiliais();
+  const { isAdmin, empresa } = useAuth();
+  const marca = useIdentidade();
   const [escolherFilial, setEscolherFilial] = useState(false);
   const [procurando, setProcurando] = useState(false);
   const voltar = () => (router.canGoBack() ? router.back() : router.replace('/'));
@@ -103,7 +108,26 @@ export default function ConfiguracoesScreen() {
         <Text style={{ flex: 1, fontSize: 15.5, fontWeight: '800', color: colors.text }}>Configurações</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(640), alignSelf: 'center', paddingBottom: 56 }}>
-        <Text style={t.caption}>Valem só para {celular ? 'este celular' : 'este navegador'}. Cada aparelho pode ter as suas.</Text>
+        <Text style={t.caption}>As preferências abaixo valem só para {celular ? 'este celular' : 'este navegador'}: cada aparelho pode ter as suas.{isAdmin && empresa ? ' A identidade da rede vale para todos.' : ''}</Text>
+
+        {isAdmin && empresa ? <>
+          <SectionHeader title="Identidade da rede" />
+          <Card>
+            <Text style={t.caption}>Vale para a rede toda (só o administrador altera). O nome e o logotipo aparecem nos certificados do Filial Destaque, nos checklists impressos e nos relatórios de auditoria.</Text>
+            {linha('Nome da rede', `${empresa.nome} (vem do cadastro da empresa no EasyAudit)`, null)}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm }}>
+              <View style={{ width: 120, height: 56, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                {marca.logo ? <Image source={{ uri: marca.logo }} style={{ width: 112, height: 48 }} resizeMode="contain" accessibilityLabel={`Logotipo da ${empresa.nome}`} />
+                  : <Text style={[t.caption, { textAlign: 'center' }]}>Sem logotipo</Text>}
+              </View>
+              <View style={{ flex: 1, gap: space.sm }}>
+                <Button title={marca.logo ? 'Trocar logotipo' : 'Escolher logotipo'} size="sm" variant="secondary"
+                  onPress={() => void escolherLogo().then(l => { if (l) { salvarLogoDaRede(l); notify('Logotipo salvo', 'Os próximos impressos já saem com ele.'); } }).catch(e => notify('Logotipo não salvo', e instanceof Error ? e.message : ''))} />
+                {marca.logo ? <Button title="Remover" size="sm" variant="ghost" onPress={() => confirmAction('Remover o logotipo?', 'Os impressos passam a mostrar só o nome da rede.', 'Remover', () => salvarLogoDaRede(null))} /> : null}
+              </View>
+            </View>
+          </Card>
+        </> : null}
 
         <SectionHeader title="Ajuda" />
         <Card>

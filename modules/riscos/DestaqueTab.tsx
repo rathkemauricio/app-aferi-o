@@ -1,4 +1,5 @@
 import { type ReactNode, useMemo, useState } from 'react';
+import { useIdentidade } from '../../lib/identidade';
 import { FlatList, Platform, ScrollView, Text, View } from 'react-native';
 import { useTela } from '../../ui/zoom';
 import { imprimirHtml } from '../../lib/util';
@@ -17,6 +18,7 @@ const ROTULO_MODO = (m: string) => (m === 'current' ? 'Último lançamento' : /^
 
 export default function DestaqueTab({ d }: { d: DadosRiscos }) {
   const { s, t, colors } = useEstilos();
+  const marca = useIdentidade();
   const { width } = useTela();
   const desktop = Platform.OS === 'web' && width >= 1180;
   const [modo, setModo] = useState('current');
@@ -33,7 +35,7 @@ export default function DestaqueTab({ d }: { d: DadosRiscos }) {
   const evo = reais.filter(x => x.m.delta !== null && x.m.delta > 0).sort((a, b) => (b.m.delta ?? 0) - (a.m.delta ?? 0))[0];
   const nomeU = (id: string) => d.unidades.find(u => u.id === id)?.nome ?? 'Unidade removida';
   const lancadas = [...d.pontuacoes].sort((a, b) => b.periodo.localeCompare(a.periodo) || nomeU(a.unidade_id).localeCompare(nomeU(b.unidade_id), 'pt-BR', { numeric: true }));
-  const imprimir = async () => { try { await imprimirHtml(rankingHtml(dados), 'Ranking Filial Destaque'); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); } };
+  const imprimir = async () => { try { await imprimirHtml(rankingHtml(dados, marca), 'Ranking Filial Destaque'); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); } };
   const abrirCertificado = (x: LinhaRanking) => {
     const lv = nivelCertificado(x);
     if (!lv.ok) { notify('Certificado', lv.motivo); return; }
@@ -52,7 +54,7 @@ export default function DestaqueTab({ d }: { d: DadosRiscos }) {
         { label: 'Aguardando Lançamento', valor: dados.length - reais.length, cor: '#6250a4' },
       ]} />
       <Text style={t.captionBg}>A pontuação vai de 0 a 100 e usa os critérios das auditorias: <Text style={{ fontWeight: '800' }}>Auditoria 40%</Text> (nota 0–10 × 10), <Text style={{ fontWeight: '800' }}>Evolução 20%</Text> (Histórico Auditorias), <Text style={{ fontWeight: '800' }}>Controle de Perdas 15%</Text> (média de Produtos, Combustíveis e Caixa), <Text style={{ fontWeight: '800' }}>Planos de Ação 15%</Text> (% concluídos) e <Text style={{ fontWeight: '800' }}>Consistência 10%</Text> (Pessoas e Gestão). Nos critérios de risco, 1 vale 100 pontos e 5 vale 0. Unidades sem lançamento ou nota aparecem estimadas e não recebem selo nem certificado.</Text>
-      <ChoiceChips value={modo} options={modos} onChange={setModo} toneFor={() => 'accent'} />
+      <ChoiceChips value={modo} options={modos} onChange={setModo} toneFor={() => 'accent'} labelFor={ROTULO_MODO} />
       {modos.length > 1 ? <Text style={t.caption}>Período: {ROTULO_MODO(modo)}</Text> : null}
       <View style={s.wrap}>
         <Button title="Lançar pontuação" icon={PlusIcon} size="sm" disabled={!d.unidades.length} onPress={() => setLancar({})} />
@@ -316,6 +318,7 @@ function DetalheSheet({ x, onClose, onLancar }: { x: LinhaRanking; onClose: () =
 /* ---------- Certificado ---------- */
 function CertificadoSheet({ x, onClose }: { x: LinhaRanking; onClose: () => void }) {
   const { t } = useEstilos();
+  const marca = useIdentidade();
   const lv = nivelCertificado(x);
   const m = x.m;
   // O certificado segue o modelo impresso da rede, que usa ponto decimal.
@@ -335,7 +338,7 @@ function CertificadoSheet({ x, onClose }: { x: LinhaRanking; onClose: () => void
   });
   const emitir = async () => {
     setGerando(true);
-    try { await imprimirHtml(certificadoHtml(v), `Certificado ${v.unidade}`, true); onClose(); }
+    try { await imprimirHtml(certificadoHtml(v, marca), `Certificado ${v.unidade}`, true); onClose(); }
     catch (e) { notify('Não foi possível gerar o certificado', e instanceof Error ? e.message : ''); } finally { setGerando(false); }
   };
   return (

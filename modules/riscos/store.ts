@@ -3,10 +3,10 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useMemo } from 'react';
 import { Linking, Platform } from 'react-native';
-import { useFiliais } from '../../lib/data';
+import { type Filial, useFiliais } from '../../lib/data';
 import { supabase } from '../../lib/supabase';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
-import { hojeISO, numeroDe, uid } from '../../lib/util';
+import { filialPorNumero, hojeISO, numeroDe, rotuloFilial, uid } from '../../lib/util';
 import { type Atividade, calcProxima, CRITS, type Evidencia, type Notas, type Pontuacao, risco, riscoDe, type Tarefa, type Unidade, type Visita } from './model';
 
 /* ---------- Coleções (sincronizadas, funcionam sem internet) ---------- */
@@ -16,12 +16,45 @@ export const atividadesCol = new Collection<Atividade>({ table: 'rm_atividades',
 export const visitasCol = new Collection<Visita>({ table: 'rm_visitas', storageKey: 'nevoeiro.riscos.visitas.v1' });
 export const syncRiscos = () => Promise.all([unidadesCol.sync(), pontuacoesCol.sync(), atividadesCol.sync(), visitasCol.sync()]);
 
+/* ---------- Unidades = filiais do cadastro (com áreas opcionais) ---------- */
+/** Rótulo da unidade: a filial do cadastro e, se houver, a área avaliada à parte. */
+export const nomeUnidade = (f: Filial, area?: string | null) => `${rotuloFilial(f)}${area?.trim() ? ` · ${area.trim()}` : ''}`;
+/** Área no nome das unidades antigas: "2 Pista (Santa Cruz)" → "Pista"; "14 (Santa Cruz)" → "". */
+export const areaDoNomeAntigo = (nome: string) => (nome.match(/^\s*\d+\s*(.*?)\s*(\([^)]*\))?\s*$/)?.[1] ?? '').trim();
+/** Id da unidade da filial inteira (fixo: dois aparelhos que avaliam a mesma filial gravam a mesma unidade). */
+export const idUnidadeDaFilial = (filialId: string) => `rmu-${filialId}`;
+/** Filial ainda sem unidade gravada: aparece no mapa sem avaliação (é gravada quando alguém avalia). */
+const unidadeDaFilial = (f: Filial): Unidade => ({
+  id: idUnidadeDaFilial(f.id), nome: nomeUnidade(f), filial_id: f.id, area: '', p: 0, c: 0, cx: 0, pe: 0, h: 0,
+  ultima_revisao: null, proxima_visita: null, notas: {},
+});
+
+/**
+ * Unidades do mapa: as gravadas (ligadas à filial pelo id ou, nas antigas, pelo número do nome, e com o rótulo do
+ * cadastro) e uma para cada filial do cadastro que ainda não tem nenhuma. Unidades de filial excluída ficam com o
+ * nome gravado.
+ */
+export function montarUnidades(gravadas: Unidade[], filiais: Filial[]) {
+  const comUnidade = new Set<string>();
+  const lista = gravadas.map(x => {
+    const f = (x.filial_id && filiais.find(fl => fl.id === x.filial_id)) || (!x.filial_id ? filialPorNumero(filiais, numeroDe(x.nome)) : undefined);
+    if (!f) return x;
+    comUnidade.add(f.id);
+    const area = x.area?.trim() || (x.filial_id ? '' : areaDoNomeAntigo(x.nome));
+    return { ...x, filial_id: f.id, area, nome: nomeUnidade(f, area) };
+  });
+  const semRegistro = new Set<string>();
+  filiais.forEach(f => { if (!comUnidade.has(f.id)) { const nova = unidadeDaFilial(f); lista.push(nova); semRegistro.add(nova.id); } });
+  lista.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR', { numeric: true }));
+  return { unidades: lista, semRegistro };
+}
+
 export function useRiscos() {
   const f = useFiliais();
   const u = useCollection(unidadesCol), p = useCollection(pontuacoesCol), a = useCollection(atividadesCol), v = useCollection(visitasCol);
-  const unidades = useMemo(() => [...u.list].sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR', { numeric: true })), [u.list]);
+  const { unidades, semRegistro } = useMemo(() => montarUnidades(u.list, f.filiais), [u.list, f.filiais]);
   return {
-    filiais: f.filiais, unidades, pontuacoes: p.list, atividades: a.list, visitas: v.list,
+    filiais: f.filiais, unidades, semRegistro, pontuacoes: p.list, atividades: a.list, visitas: v.list,
     loaded: u.loaded && p.loaded && a.loaded && v.loaded && f.loaded,
     status: combinedStatus([u.status, p.status, a.status, v.status, f.status]),
   };
@@ -30,7 +63,7 @@ export type DadosRiscos = ReturnType<typeof useRiscos>;
 
 /** Grava a unidade recalculando a próxima visita pela última revisão e pela classe de risco. */
 export function salvarUnidade(u: Unidade) {
-  unidadesCol.put({ ...u, proxima_visita: calcProxima(u.ultima_revisao, riscoDe(u).cl) ?? (u.ultima_revisao ? null : u.proxima_visita) });
+  unidadesCol.put({ ...u, area: u.area?.trim() ?? '', proxima_visita: calcProxima(u.ultima_revisao, riscoDe(u).cl) ?? (u.ultima_revisao ? null : u.proxima_visita) });
 }
 
 /** Visita do planejamento (unidade + data): o id é fixo, então dois aparelhos caem na mesma visita. */

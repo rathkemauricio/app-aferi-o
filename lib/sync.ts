@@ -78,6 +78,8 @@ export class Collection<T extends SyncRow> {
     this.emit();
   }
   whenLoaded() { return this.loading; }
+  /** Chave do cache deste aparelho. */
+  get chave() { return this.opts.storageKey; }
   private save() {
     const p: Persisted<T> = { items: [...this.items.values()], cursor: this.cursor, cursorId: this.cursorId, outbox: [...this.outbox.values()] };
     void AsyncStorage.setItem(this.opts.storageKey, JSON.stringify(p)).catch(() => undefined);
@@ -204,8 +206,29 @@ export function useAtividadeSync() {
 export const isSyncEnabled = () => syncEnabled;
 export async function syncAll() { await Promise.all(registry.map(c => c.sync())); }
 export async function flushAll() { await Promise.all(registry.map(c => c.flush())); }
-/** Limpa o cache local de todas as coleções (troca de empresa no aparelho). */
-export async function resetAll() { await Promise.all(registry.map(c => c.whenLoaded())); registry.forEach(c => c.reset()); }
+/** Chaves "nevoeiro.*" do aparelho que não são dados de empresa (ficam quando outra empresa entra no aparelho). */
+const PREFERENCIAS_DO_APARELHO = new Set([
+  'nevoeiro.auth.ultimo-email', 'nevoeiro.preferencias.v1', 'nevoeiro.modulos.recentes.v1', 'nevoeiro.coleta.dispositivo',
+  'nevoeiro.display-escala.v1', 'nevoeiro.display-theme.v1',
+]);
+const ehPreferencia = (k: string) => PREFERENCIAS_DO_APARELHO.has(k) || k.startsWith('nevoeiro.perfil.');
+
+/**
+ * Limpa o cache local de todas as coleções (troca de empresa no aparelho).
+ * Os módulos são carregados sob demanda: a coleção de um módulo que ainda não foi aberto nesta sessão não está no
+ * registro, e o cache dela (da empresa anterior) apareceria quando o módulo abrisse. Por isso também são apagados
+ * do aparelho todos os outros dados "nevoeiro.*" (caches, rascunhos, produtos da contagem e telas abertas), menos
+ * as preferências do aparelho. A sessão de login e os tutoriais vistos usam outras chaves e não são tocados.
+ */
+export async function resetAll() {
+  await Promise.all(registry.map(c => c.whenLoaded()));
+  registry.forEach(c => c.reset());
+  try {
+    const registradas = new Set(registry.map(c => c.chave));
+    const sobras = (await AsyncStorage.getAllKeys()).filter(k => k.startsWith('nevoeiro.') && !ehPreferencia(k) && !registradas.has(k));
+    if (sobras.length) await AsyncStorage.multiRemove(sobras);
+  } catch { /* armazenamento indisponível: o registro acima já limpou o que estava em uso */ }
+}
 
 /** Hook: lista viva da coleção e seu estado. */
 export function useCollection<T extends SyncRow>(c: Collection<T>) {

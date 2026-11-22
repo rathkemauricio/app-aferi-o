@@ -9,8 +9,15 @@ export type Crit = 'p' | 'c' | 'cx' | 'pe' | 'h';
 export const CRITS: Crit[] = ['p', 'c', 'cx', 'pe', 'h'];
 export type Notas = Record<string, number>; // 'AAAA-MM' -> nota 0–10
 
+/**
+ * Unidade do mapa = filial do cadastro (toda filial aparece, mesmo sem registro gravado) ou uma área dela
+ * (ex.: Pista, Loja), quando a rede avalia as partes da filial separadamente. `nome` é o rótulo mostrado
+ * (filial + área); unidades antigas sem filial ligada são ligadas pelo número do nome ("2 Pista (Santa Cruz)").
+ */
 export type Unidade = SyncRow & {
   nome: string; filial_id: string | null;
+  /** Área da filial avaliada à parte (vazio = a filial inteira). */
+  area?: string;
   p: number; c: number; cx: number; pe: number; h: number;
   ultima_revisao: string | null; proxima_visita: string | null; notas: Notas;
 };
@@ -22,6 +29,8 @@ export type StatusAtiv = 'Pendente' | 'Concluído';
 export type Atividade = SyncRow & {
   unidade_id: string; data: string; tarefa: string; categoria: string; obs: string; status: StatusAtiv;
   levar_proxima: boolean; proxima_visita: string | null; evidencia: Evidencia | null; concluido_em: string | null;
+  /** Nome de quem registrou (conta logada). */
+  criado_por_nome?: string;
 };
 export type StatusTarefa = 'Pendente' | 'Concluída' | 'Não concluída';
 export type Tarefa = {

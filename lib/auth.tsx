@@ -10,6 +10,8 @@ const JA_ENTROU = new Set<string>();
 const PERFIL_KEY = (id: string) => `nevoeiro.perfil.${id}`;
 /** Empresa cujos dados estão guardados neste aparelho (se entrar conta de outra empresa, o cache local é limpo). */
 const EMPRESA_DO_APARELHO = 'easyaudit.empresa-do-aparelho';
+/** Empresa dos dados guardados antes do registro acima existir (migração 20261119000100_multiempresa). */
+const EMPRESA_ANTES_DO_REGISTRO = '0e7e0e10-0000-4000-8000-000000000001';
 export type EmpresaStatus = 'aguardando' | 'ativa' | 'suspensa';
 export type Empresa = { id: string; nome: string; status: EmpresaStatus; modulos: string[]; limite_contas: number; plano_id: string };
 type PerfilCache = { papel: Papel; ativo: boolean; modulos: string[]; nome?: string; avatar?: string | null; empresa?: Empresa | null; filial?: string | null };
@@ -46,7 +48,7 @@ type AuthState = {
   signOut: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthState>({
+export const AuthContext = createContext<AuthState>({
   ready: false, userEmail: null, userId: null, papel: null, ativo: false, empresa: null, dono: false, isAdmin: false, filialConta: null, modulos: [], nome: '', avatar: null, podeAcessar: () => false, perfilPronto: false,
   recarregarPerfil: async () => undefined, signOut: async () => undefined,
 });
@@ -98,11 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     // Outra empresa (ou outra filial / auditoria) neste aparelho: limpa o cache local antes de ligar a sincronização
     // (dados de uma empresa nunca vão para a outra, e as contagens da auditoria não ficam no aparelho da filial).
-    // Na primeira vez (aparelho sem registro), só anota o escopo atual.
+    // Aparelho sem registro: o que estiver guardado é de antes das empresas, ou seja, da Rede Nevoeiro.
     const empId = perfil?.empresa?.id ? (perfil.filial ? `${perfil.empresa.id}|${perfil.filial}` : perfil.empresa.id) : null;
     if (empId) {
       const anterior = await AsyncStorage.getItem(EMPRESA_DO_APARELHO).catch(() => null);
-      if (anterior && anterior !== empId) await resetAll();
+      if ((anterior ?? EMPRESA_ANTES_DO_REGISTRO) !== empId) await resetAll();
       if (anterior !== empId) await AsyncStorage.setItem(EMPRESA_DO_APARELHO, empId).catch(() => undefined);
     }
     setPapel(perfil?.papel ?? null);

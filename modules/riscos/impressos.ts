@@ -1,10 +1,12 @@
+import type { Identidade } from '../../lib/identidade';
 import { esc } from '../../lib/util';
-import { CSS_CERT, LOGO_CERT } from './certificado-assets';
+import { CSS_CERT } from './certificado-assets';
 import { fmt1, fmtNota, type LinhaRanking, notaFaixa } from './model';
 
 /* ---------- Checklist de visita / planejamento do dia ---------- */
 export type LinhaChecklist = { unidade: string; titulo: string; desc: string; obs: string };
-export function checklistHtml(titulo: string, subtitulo: string, linhas: LinhaChecklist[], mostrarUnidade: boolean) {
+export function checklistHtml(titulo: string, subtitulo: string, linhas: LinhaChecklist[], mostrarUnidade: boolean, marca: Identidade) {
+  const rede = esc(marca.nome.toUpperCase());
   const cols = mostrarUnidade ? 4 : 3;
   const corpo = linhas.map(r => `
     <tr class="item-row"><td class="check-cell"><span class="print-check"></span></td>${mostrarUnidade ? `<td class="filial-cell">${esc(r.unidade)}</td>` : ''}
@@ -24,17 +26,17 @@ th{background:#e7b923;color:#111;font-weight:800;text-transform:uppercase;font-s
 .footer{display:flex;justify-content:space-between;gap:12px;margin-top:9px;padding-top:6px;border-top:1px solid #ccc;color:#777;font-size:7px}.footer-brand{font-weight:800;color:#222;font-size:9px}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
-<div class="print-header"><div class="brand">REDE DE POSTOS NEVOEIRO • PREVENÇÃO DE PERDAS</div><h1>Checklist de Auditoria</h1></div>
+<div class="print-header"><div class="brand">${rede} • PREVENÇÃO DE PERDAS</div><h1>Checklist de Auditoria</h1></div>
 <div class="sub">${esc(subtitulo)}</div>
 <p class="intro">Utilize este checklist durante a visita à filial. Marque cada atividade conforme a execução e utilize o campo de observações para registrar evidências, pendências ou informações relevantes.</p>
 <table><thead><tr><th class="check-cell">OK</th>${mostrarUnidade ? '<th class="filial-cell">Filial</th>' : ''}<th class="activity-cell">Atividade</th><th>Descrição</th></tr></thead>
 <tbody>${corpo || `<tr><td colspan="${cols}" style="text-align:center;color:#888">Nenhuma demanda cadastrada.</td></tr>`}</tbody></table>
-<div class="footer"><span>Documento de acompanhamento de visita • ${esc(subtitulo)}</span><span class="footer-brand">NEVOEIRO | PREVENÇÃO DE PERDAS</span></div>
+<div class="footer"><span>Documento de acompanhamento de visita • ${esc(subtitulo)}</span><span class="footer-brand">${rede} | PREVENÇÃO DE PERDAS</span></div>
 </body></html>`;
 }
 
 /* ---------- Ranking do Programa Filial Destaque ---------- */
-export function rankingHtml(dados: LinhaRanking[]) {
+export function rankingHtml(dados: LinhaRanking[], marca: Identidade) {
   const f = (v: number | null) => (v === null ? '—' : fmt1(v));
   const rows = dados.map(({ u, m, pos }) => `<tr><td>${m.real ? pos : '—'}</td><td>${esc(u.nome)}</td><td>${f(m.total)}</td>
     <td>${m.nota === null ? '—' : `${m.fonte === 'estimado' ? '~' : ''}${fmtNota(m.nota)} · ${notaFaixa(m.nota).label}`}</td>
@@ -43,7 +45,7 @@ export function rankingHtml(dados: LinhaRanking[]) {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ranking Filial Destaque</title><style>@page{size:A4 portrait;margin:12mm}body{font-family:Arial;color:#222}h1{color:#07345a;text-align:center}p{font-size:11px;color:#666}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #bbb;padding:5px}th{background:#e7b923}footer{margin-top:12px;border-top:1px solid #ccc;padding-top:5px;font-size:8px;color:#777}</style></head><body>
 <h1>🏆 Programa Filial Destaque</h1><p>Ranking de desempenho das filiais — ${new Date().toLocaleDateString('pt-BR')}. Filiais sem lançamento aparecem com valores estimados e não recebem posição, selo ou certificado.</p>
 <table><thead><tr><th>#</th><th>Filial</th><th>Total</th><th>Nota</th><th>Auditoria</th><th>Evolução</th><th>Perdas</th><th>Planos</th><th>Consist.</th><th>Nível</th></tr></thead><tbody>${rows}</tbody></table>
-<footer>REDE DE POSTOS NEVOEIRO • PREVENÇÃO DE PERDAS</footer></body></html>`;
+<footer>${esc(marca.nome.toUpperCase())} • PREVENÇÃO DE PERDAS</footer></body></html>`;
 }
 
 /* ---------- Certificado (A4 paisagem, com selo metálico) ---------- */
@@ -75,7 +77,7 @@ function seloSvg(nivel: 'ouro' | 'prata' | 'bronze' | 'destaque') {
 }
 
 export type DadosCertificado = { unidade: string; periodo: string; premio: string; pontuacao: string; mensagem: string };
-export function certificadoHtml(d: DadosCertificado) {
+export function certificadoHtml(d: DadosCertificado, marca: Identidade) {
   const nivel = /ouro/i.test(d.premio) ? 'ouro' : /prata/i.test(d.premio) ? 'prata' : /bronze/i.test(d.premio) ? 'bronze' : 'destaque';
   const tem = (v: string) => v.trim().length > 0;
   const corpo = [
@@ -88,9 +90,9 @@ export function certificadoHtml(d: DadosCertificado) {
   ].join('');
   const hoje = new Date();
   const dataLonga = `${hoje.getDate()} de ${['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'][hoje.getMonth()]} de ${hoje.getFullYear()}`;
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Certificado - ${esc(d.unidade)}</title><style>${CSS_CERT}</style></head><body>
-<div class="page"><div class="cert"><div class="top"><img class="logo" src="${LOGO_CERT}" alt="Rede de Postos Nevoeiro"><div class="ref">Programa Filial Destaque<br>Certificado de Reconhecimento</div></div>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Certificado - ${esc(d.unidade)}</title><style>${CSS_CERT}.logo-texto{font-family:Georgia,'Times New Roman',serif;font-size:20pt;font-weight:700;color:#07345a;max-width:64mm;line-height:1.1}</style></head><body>
+<div class="page"><div class="cert"><div class="top">${marca.logo ? `<img class="logo" src="${marca.logo}" alt="${esc(marca.nome)}">` : `<div class="logo-texto">${esc(marca.nome)}</div>`}<div class="ref">Programa Filial Destaque<br>Certificado de Reconhecimento</div></div>
 <div class="body">${corpo}</div>${seloSvg(nivel)}
 <div class="footer"><div class="sig">Gestão / Diretoria</div><div class="sig">Prevenção de Perdas / Auditoria</div></div>
-<div class="cert-date">Rede de Postos Nevoeiro • ${dataLonga}</div></div></div></body></html>`;
+<div class="cert-date">${esc(marca.nome)} • ${dataLonga}</div></div></div></body></html>`;
 }
