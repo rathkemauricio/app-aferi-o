@@ -16,7 +16,13 @@ type Empresa = {
   contas_ativas: number; administradores: { email: string; nome: string | null }[];
   /** Quem pediu para entrar nesta rede e ainda espera resposta. */
   pedidos: PedidoAcesso[];
+  /** Todas as contas da rede. */
+  contas: Conta[];
 };
+/** Conta de usuário (de uma rede ou sem rede). `filial`: conta de acesso de filial (só Contagens). */
+type Conta = { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; filial: boolean; created_at: string };
+/** Mudar conta de rede: destino null = sem rede (a conta volta a escolher entre cadastrar o posto ou pedir acesso). */
+type Mudanca = { c: Conta; origem: Empresa | null; destino: string | null | undefined; papel: 'usuario' | 'admin'; modulos: string[] };
 type PedidoAcesso = { id: string; email: string; nome: string; created_at: string };
 type Aprovacao = { e: Empresa; pd: PedidoAcesso; papel: 'usuario' | 'admin'; modulos: string[] };
 type Plano = { id: string; nome: string; descricao: string; preco_mensal: number | null; limite_contas: number; modulos: string[]; ordem: number; ativo: boolean };
@@ -51,12 +57,15 @@ export default function PlataformaScreen() {
   const [edPlano, setEdPlano] = useState<EdicaoPlano | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [aprovacao, setAprovacao] = useState<Aprovacao | null>(null);
+  const [semRede, setSemRede] = useState<Conta[]>([]);
+  const [contasAbertas, setContasAbertas] = useState<Record<string, boolean>>({});
+  const [mudanca, setMudanca] = useState<Mudanca | null>(null);
 
   const carregar = useCallback(async () => {
     const r = await chamar({ acao: 'listar' });
     if (!r.ok) { setErro(r.erro); return; }
-    const d = r.data as { empresas: Empresa[]; planos: Plano[] };
-    setErro(''); setEmpresas(d.empresas); setPlanos(d.planos);
+    const d = r.data as { empresas: Empresa[]; planos: Plano[]; sem_rede?: Conta[] };
+    setErro(''); setEmpresas(d.empresas); setPlanos(d.planos); setSemRede(d.sem_rede ?? []);
   }, []);
   useEffect(() => { if (dono) void carregar(); }, [dono, carregar]);
 
@@ -78,6 +87,23 @@ export default function PlataformaScreen() {
     if (!r.ok) { notify('Pedido não respondido', r.erro); return false; }
     notify(ok); void carregar(); return true;
   };
+  /** Uma linha de conta (nas contas de uma rede ou nas contas sem rede), com o botão de mudar de rede. */
+  const linhaConta = (c: Conta, origem: Empresa | null) => (
+    <View key={c.user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border }}>
+      <View style={{ flex: 1 }}>
+        <Text style={t.bodyStrong} numberOfLines={1}>{c.nome || c.email}</Text>
+        <Text style={t.caption} numberOfLines={1}>{c.nome ? `${c.email} · ` : ''}{c.filial ? 'acesso de filial' : origem ? (c.papel === 'admin' ? 'administrador' : `${c.modulos.length} módulo(s)`) : `conta criada em ${new Date(c.created_at).toLocaleDateString('pt-BR')}`}</Text>
+      </View>
+      {origem ? <StatusPill label={!c.ativo ? 'Inativa' : c.papel === 'admin' ? 'Admin' : 'Ativa'} tone={!c.ativo ? 'danger' : c.papel === 'admin' ? 'accent' : 'success'} /> : null}
+      {c.filial ? null : (
+        <Button title={origem ? 'Mudar de rede' : 'Colocar numa rede'} variant="secondary" size="sm" disabled={salvando}
+          onPress={() => setMudanca({ c, origem, destino: undefined, papel: c.papel === 'admin' && origem ? 'admin' : 'usuario', modulos: [...c.modulos] })} />
+      )}
+    </View>
+  );
+  /** Administradores ativos da rede (para avisar quando a mudança deixa a rede sem nenhum). */
+  const adminsAtivos = (e: Empresa) => e.contas.filter(c => c.ativo && c.papel === 'admin' && !c.filial).length;
+
   const recusar = (e: Empresa, pd: PedidoAcesso) => confirmAction('Recusar o pedido?', `${pd.nome || pd.email} continua sem acesso à ${e.nome} e recebe um e-mail avisando.`, 'Recusar',
     () => void responderPedido({ acao: 'recusar_pedido', pedido_id: pd.id }, 'Pedido recusado.'));
 
@@ -139,7 +165,14 @@ export default function PlataformaScreen() {
         )}
         <Button title="Plano, limite e módulos" icon={PencilSimpleIcon} variant="secondary" size="sm"
           onPress={() => setEdEmp({ e, plano_id: e.plano_id, limite: String(e.limite_contas), modulos: [...e.modulos] })} />
+        <Button title={`${contasAbertas[e.id] ? 'Esconder contas' : 'Contas'} (${e.contas.length})`} icon={UserCircleIcon} variant="ghost" size="sm"
+          onPress={() => setContasAbertas(a => ({ ...a, [e.id]: !a[e.id] }))} />
       </View>
+      {contasAbertas[e.id] ? (
+        <View>
+          {e.contas.length ? e.contas.map(c => linhaConta(c, e)) : <Text style={t.caption}>Nenhuma conta nesta rede.</Text>}
+        </View>
+      ) : null}
     </Card>
   );
 
@@ -180,7 +213,17 @@ export default function PlataformaScreen() {
                 <SectionHeader title={`${g.titulo} (${g.lista.length})`} />
                 {g.lista.length ? g.lista.map(cartao) : <Text style={t.caption}>Nenhuma empresa esperando. Quem se cadastra pelo site aparece aqui, e você recebe um e-mail.</Text>}
               </View>
-            ) : null)) : <>
+            ) : null)) : null}
+            {aba === 'Empresas' && semRede.length ? (
+              <View style={{ gap: space.md }}>
+                <SectionHeader title={`Contas sem rede (${semRede.length})`} />
+                <Card>
+                  <Text style={t.caption}>Criaram a conta e ainda não cadastraram um posto nem entraram numa rede (ou foram tiradas de uma rede).</Text>
+                  {semRede.map(c => linhaConta(c, null))}
+                </Card>
+              </View>
+            ) : null}
+            {aba === 'Planos' ? <>
               <Text style={t.caption}>Os planos aparecem no site para quem vai criar a empresa. Mudar um plano não muda as empresas que já estão nele (ajuste cada uma em Empresas).</Text>
               {planos.map(p => (
                 <Card key={p.id}>
@@ -196,7 +239,7 @@ export default function PlataformaScreen() {
                     onPress={() => setEdPlano({ p, nome: p.nome, descricao: p.descricao, preco: p.preco_mensal === null ? '' : String(p.preco_mensal).replace('.', ','), limite: String(p.limite_contas), modulos: [...p.modulos], ativo: p.ativo })} />
                 </Card>
               ))}
-            </>}
+            </> : null}
           </>}
       </ScrollView>
 
@@ -221,6 +264,61 @@ export default function PlataformaScreen() {
           {modChips(edEmp.modulos, id => setEdEmp({ ...edEmp, modulos: alternar(edEmp.modulos, id) }))}
         </Sheet>
       )}
+
+      {mudanca && (() => {
+        const { c, origem, destino } = mudanca;
+        const alvo = destino ? (empresas ?? []).find(e => e.id === destino) ?? null : null;
+        const opcoes = (empresas ?? []).filter(e => e.id !== origem?.id);
+        const deixaSemAdmin = !!origem && c.papel === 'admin' && c.ativo && adminsAtivos(origem) <= 1;
+        const pronto = destino === null || (!!alvo && (mudanca.papel === 'admin' || mudanca.modulos.length > 0));
+        const confirmar = () => void (async () => {
+          setSalvando(true);
+          const r = await chamar({ acao: 'mover_conta', user_id: c.user_id, empresa_id: destino ?? null, papel: mudanca.papel, modulos: mudanca.modulos });
+          setSalvando(false);
+          if (!r.ok) { notify('Conta não mudou de rede', r.erro); return; }
+          setMudanca(null); void carregar();
+          notify(alvo ? `${c.nome || c.email} agora é da ${alvo.nome}.` : `${c.nome || c.email} ficou sem rede.`);
+        })();
+        return (
+          <Sheet title={origem ? 'Mudar de rede' : 'Colocar numa rede'} onClose={() => !salvando && setMudanca(null)}
+            footer={<Button title={salvando ? 'Salvando…' : alvo ? `Mudar para ${alvo.nome}` : destino === null ? 'Tirar da rede' : 'Escolha o destino'} icon={CheckIcon}
+              disabled={salvando || !pronto}
+              onPress={() => (deixaSemAdmin
+                ? confirmAction('A rede ficará sem administrador', `${c.nome || c.email} é o único administrador ativo da ${origem?.nome}. Depois da mudança, ninguém administra essa rede (você ainda a gerencia por aqui). Continuar?`, 'Continuar', confirmar)
+                : confirmar())} />}>
+            <Text style={t.body}><Text style={t.bodyStrong}>{c.nome || c.email}</Text>{c.nome ? ` (${c.email})` : ''} · hoje: {origem ? origem.nome : 'sem rede'}</Text>
+            <Text style={t.label}>Para onde</Text>
+            <View style={{ gap: 6 }}>
+              {[...opcoes.map(e => ({ id: e.id as string | null, nome: e.nome, info: `${e.contas_ativas} de ${e.limite_contas} contas${e.status !== 'ativa' ? ` · ${ROTULO[e.status].toLowerCase()}` : ''}` })),
+                ...(origem ? [{ id: null as string | null, nome: 'Sem rede', info: 'a conta volta a escolher entre cadastrar o posto ou pedir acesso' }] : [])].map(o => {
+                const on = destino === o.id;
+                return (
+                  <Pressable key={o.id ?? 'sem-rede'} accessibilityRole="radio" accessibilityState={{ selected: on }}
+                    onPress={() => setMudanca({ ...mudanca, destino: o.id, modulos: o.id ? mudanca.modulos.filter(m => (empresas ?? []).find(e => e.id === o.id)?.modulos.includes(m)) : [] })}
+                    style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44, paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.control, borderWidth: 1, borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.accentSoft : colors.surface }, pressed && { opacity: 0.8 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[t.bodyStrong, on && { color: colors.accentText }]} numberOfLines={1}>{o.nome}</Text>
+                      <Text style={t.caption} numberOfLines={1}>{o.info}</Text>
+                    </View>
+                    {on ? <CheckIcon size={16} color={colors.accentText} weight="bold" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+            {alvo ? <>
+              <Text style={t.label}>Papel na {alvo.nome}</Text>
+              <ChoiceChips value={mudanca.papel === 'admin' ? 'Administrador' : 'Usuário'} options={['Usuário', 'Administrador']}
+                onChange={v => setMudanca({ ...mudanca, papel: v === 'Administrador' ? 'admin' : 'usuario' })} />
+              {mudanca.papel === 'admin' ? <Text style={t.caption}>Administrador usa todos os módulos da rede e gerencia as contas dela.</Text> : <>
+                <Text style={t.label}>Módulos que a conta vai usar</Text>
+                {modChips(mudanca.modulos, id => setMudanca({ ...mudanca, modulos: alternar(mudanca.modulos, id) }), alvo.modulos)}
+              </>}
+            </> : null}
+            {deixaSemAdmin ? <Text style={[t.caption, { color: colors.warning }]}>Atenção: é o único administrador ativo da {origem?.nome}.</Text> : null}
+            <Text style={t.caption}>{origem ? `Os registros que a conta já fez continuam na ${origem.nome}. ` : ''}A pessoa recebe um e-mail avisando e, ao entrar de novo, vê só os dados da rede nova.</Text>
+          </Sheet>
+        );
+      })()}
 
       {aprovacao && (
         <Sheet title="Aprovar acesso" onClose={() => !salvando && setAprovacao(null)}

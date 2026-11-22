@@ -11,7 +11,9 @@
 //   { acao: 'pedir_acesso', empresa_id } → { ok }   (um pedido aberto por conta: pedir outra rede cancela o anterior)
 //   { acao: 'cancelar_pedido' }        → { ok }
 //   Dono da plataforma:
-//   { acao: 'listar' }                               → { ok, empresas: [...com contas ativas, administradores e pedidos de acesso pendentes], planos }
+//   { acao: 'listar' }  → { ok, empresas: [...com contas, administradores e pedidos de acesso pendentes], planos, sem_rede: [contas sem rede] }
+//   { acao: 'mover_conta', user_id, empresa_id | null, papel, modulos }
+//        muda a conta de rede (ou a tira de qualquer rede); a pessoa recebe um e-mail → { ok }
 //   { acao: 'aceitar_pedido', pedido_id, papel, modulos } / { acao: 'recusar_pedido', pedido_id }
 //        responde o pedido de quem quer entrar numa rede (no lugar do administrador dela) → { ok }
 //   { acao: 'atualizar', id, status?, plano_id?, limite_contas?, modulos?, nome? }  → { ok }
@@ -213,21 +215,82 @@ async function listar() {
   const [{ data: empresas, error }, { data: planos }, { data: perfis }, { data: pedidos }] = await Promise.all([
     admin.from('empresas').select('*').order('created_at', { ascending: false }),
     admin.from('planos').select('*').order('ordem'),
-    admin.from('profiles').select('empresa_id,email,nome,papel,ativo').not('empresa_id', 'is', null),
+    admin.from('profiles').select('user_id,empresa_id,email,nome,papel,ativo,modulos,filial_id,created_at').order('created_at'),
     admin.from('pedidos_acesso').select('id,empresa_id,email,nome,created_at').eq('status', 'pendente').order('created_at'),
   ]);
   if (error) throw new Error(error.message);
+  const conta = (p: NonNullable<typeof perfis>[number]) => ({
+    user_id: p.user_id, email: p.email, nome: p.nome, papel: p.papel, ativo: p.ativo, modulos: p.modulos ?? [], filial: !!p.filial_id, created_at: p.created_at,
+  });
   const lista = (empresas ?? []).map(e => {
     const contas = (perfis ?? []).filter(p => p.empresa_id === e.id);
     return {
       ...e,
-      contas_ativas: contas.filter(p => p.ativo).length,
+      contas_ativas: contas.filter(p => p.ativo && !p.filial_id).length,
       administradores: contas.filter(p => p.papel === 'admin').map(p => ({ email: p.email, nome: p.nome })),
+      // Todas as contas da rede (o dono pode mudar uma conta de rede).
+      contas: contas.map(conta),
       // Quem pediu para entrar nesta rede e ainda espera resposta.
       pedidos: (pedidos ?? []).filter(p => p.empresa_id === e.id).map(({ empresa_id: _e, ...p }) => p),
     };
   });
-  return json(200, { ok: true, empresas: lista, planos: planos ?? [] });
+  // Contas que ainda não fazem parte de nenhuma rede (criaram a conta e não escolheram, ou foram tiradas de uma rede).
+  const semRede = (perfis ?? []).filter(p => !p.empresa_id).map(conta);
+  return json(200, { ok: true, empresas: lista, planos: planos ?? [], sem_rede: semRede });
+}
+
+/**
+ * Dono da plataforma: muda uma conta de rede (ou a tira de qualquer rede, com empresa_id nulo). A conta entra na
+ * rede de destino com o papel e os módulos escolhidos; os registros que ela já fez continuam na rede de origem.
+ */
+async function moverConta(body: Record<string, unknown>, conta: Conta) {
+  const userId = texto(body.user_id, 60);
+  const destino = body.empresa_id ? texto(body.empresa_id, 60) : null;
+  const { data: p } = await admin.from('profiles').select('user_id,email,nome,empresa_id,filial_id,empresas(nome)').eq('user_id', userId).maybeSingle();
+  if (!p) return json(404, { erro: 'Conta não encontrada.' });
+  if (p.filial_id) return json(400, { erro: 'Conta de filial fica presa à filial dela. Bloqueie o acesso da filial e crie outro na rede de destino.' });
+  if ((p.empresa_id ?? null) === destino) return json(400, { erro: destino ? 'A conta já está nessa rede.' : 'A conta já está sem rede.' });
+  // deno-lint-ignore no-explicit-any
+  const origem = ((p as any).empresas?.nome as string) ?? '';
+
+  let mudar: Record<string, unknown>;
+  let nomeDestino = '';
+  if (destino) {
+    const { data: emp } = await admin.from('empresas').select('id,nome,modulos,limite_contas').eq('id', destino).maybeSingle();
+    if (!emp) return json(404, { erro: 'Rede de destino não encontrada.' });
+    nomeDestino = emp.nome;
+    const papel = body.papel === 'admin' ? 'admin' : 'usuario';
+    const modulos = Array.isArray(body.modulos) ? [...new Set(body.modulos.map(String).filter(m => (emp.modulos ?? []).includes(m)))] : [];
+    if (papel === 'usuario' && !modulos.length) return json(400, { erro: 'Marque ao menos um módulo para a conta na rede de destino.' });
+    const { count } = await admin.from('profiles').select('user_id', { count: 'exact', head: true }).eq('empresa_id', emp.id).eq('ativo', true).is('filial_id', null);
+    if ((count ?? 0) >= emp.limite_contas) return json(409, { erro: `A ${emp.nome} já usa todas as ${emp.limite_contas} contas do plano. Aumente o limite dela antes.` });
+    mudar = { empresa_id: emp.id, papel, modulos: papel === 'admin' ? [] : modulos, ativo: true };
+  } else {
+    // Sem rede: volta para a tela de escolher entre cadastrar o posto ou pedir acesso a uma rede.
+    mudar = { empresa_id: null, papel: 'usuario', modulos: [], ativo: false };
+  }
+  const { error } = await admin.from('profiles').update(mudar).eq('user_id', p.user_id);
+  if (error) return json(/limite de contas/i.test(error.message) ? 409 : 500, { erro: `Não foi possível mudar a conta de rede: ${error.message}` });
+  await admin.from('pedidos_acesso').update({ status: 'cancelado', decidido_em: new Date().toISOString(), decidido_por: conta.user.id }).eq('user_id', p.user_id).eq('status', 'pendente');
+  if (destino) await admin.auth.admin.updateUserById(p.user_id, { ban_duration: 'none' });
+
+  await enviar({
+    para: p.email,
+    assunto: destino ? `Sua conta agora é da ${nomeDestino}` : 'Sua conta saiu da rede no EasyAudit',
+    html: layout({
+      etiqueta: 'Sua conta',
+      titulo: destino ? 'Sua conta mudou de rede' : 'Sua conta saiu da rede',
+      paragrafos: destino
+        ? [`Olá${p.nome ? `, ${esc(p.nome)}` : ''}! A sua conta no EasyAudit agora faz parte da <b style="color:#0f1f3d">${esc(nomeDestino)}</b>${origem ? ` (antes: ${esc(origem)})` : ''}.`,
+          'Entre com o mesmo e-mail e senha: você passa a ver os dados e os módulos da nova rede.']
+        : [`Olá${p.nome ? `, ${esc(p.nome)}` : ''}! A sua conta no EasyAudit não faz mais parte da ${esc(origem || 'rede')}.`,
+          'Ao entrar, você pode cadastrar o seu posto ou pedir acesso a outra rede.'],
+      botao: APP_URL ? { texto: 'Entrar no EasyAudit', url: `${APP_URL}/login` } : undefined,
+    }),
+  }).catch(e => console.error('empresas: aviso de mudança de rede', e));
+  await registrarAcao({ userId: conta.user.id, empresaId: (p.empresa_id as string | null) ?? null, acao: destino ? `mudou a conta para a rede ${nomeDestino}` : 'tirou a conta da rede', tabela: 'funcao:empresas', alvo: p.email });
+  if (destino) await registrarAcao({ userId: conta.user.id, empresaId: destino, acao: `recebeu a conta vinda de ${origem || 'nenhuma rede'}`, tabela: 'funcao:empresas', alvo: p.email });
+  return json(200, { ok: true });
 }
 
 async function atualizar(body: Record<string, unknown>, origem: string) {
@@ -318,6 +381,7 @@ Deno.serve(async req => {
       case 'atualizar': return await atualizar(body, origem);
       case 'salvar_plano': return await salvarPlano(body);
       case 'criar_para': return await criarPara(body, conta);
+      case 'mover_conta': return await moverConta(body, conta);
       case 'aceitar_pedido':
       case 'recusar_pedido': {
         const res = await responderPedido({

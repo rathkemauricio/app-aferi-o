@@ -45,6 +45,8 @@ export default function AguardandoRoute() {
   const [busca, setBusca] = useState('');
   const [redeEscolhida, setRedeEscolhida] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  /** Com pedido aberto, a pessoa está escolhendo outra rede (o pedido atual é cancelado quando ela pedir a nova). */
+  const [trocando, setTrocando] = useState(false);
 
   // Conta de uma empresa: avisa os administradores dela por e-mail (o servidor só envia uma vez por conta).
   useEffect(() => { if (empresa?.status === 'ativa') void enviarEmail({ acao: 'conta_pendente' }); }, [empresa?.status]);
@@ -86,7 +88,8 @@ export default function AguardandoRoute() {
     const r = await chamarEmpresas({ acao: 'pedir_acesso', empresa_id: rede.id });
     setEnviando(false);
     if (r.erro) { setErro(r.erro); return; }
-    notify('Pedido enviado', `Os administradores da ${rede.nome} foram avisados. Você recebe um e-mail quando o pedido for respondido.`, { tom: 'sucesso' });
+    notify(trocando ? 'Pedido trocado' : 'Pedido enviado', `${trocando ? `O pedido anterior foi cancelado. ` : ''}Os administradores da ${rede.nome} foram avisados. Você recebe um e-mail quando o pedido for respondido.`, { tom: 'sucesso' });
+    setTrocando(false); setRedeEscolhida(null);
     void carregarRedes();
   };
 
@@ -139,14 +142,19 @@ export default function AguardandoRoute() {
   }
 
   /* ----- Sem empresa, com pedido aberto: aguardando o administrador da rede ----- */
-  if (pedido?.status === 'pendente') {
+  const aguardando = pedido?.status === 'pendente' ? pedido : null;
+  if (aguardando && !trocando) {
     return tela(<>
       <IconTile icon={EnvelopeIcon} tint="amber" size={56} />
       <Text style={[t.title, { textAlign: 'center' }]}>Pedido enviado</Text>
       <Text style={[t.caption, { textAlign: 'center', maxWidth: 420 }]}>
-        Você pediu acesso à {pedido.empresa_nome} em {new Date(pedido.created_at).toLocaleDateString('pt-BR')}. O administrador dela precisa aprovar: até lá, a conta {userEmail} não vê nenhum dado da rede. Você recebe um e-mail quando o pedido for respondido.
+        Você pediu acesso à {aguardando.empresa_nome} em {new Date(aguardando.created_at).toLocaleDateString('pt-BR')}. O administrador dela precisa aprovar: até lá, a conta {userEmail} não vê nenhum dado da rede. Você recebe um e-mail quando o pedido for respondido.
       </Text>
-      <Button title="Cancelar pedido" variant="ghost" size="sm" onPress={cancelarPedido} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.sm }}>
+        <Button title="Trocar de rede" icon={BuildingsIcon} variant="secondary" size="sm"
+          onPress={() => { setTrocando(true); setOpcao('rede'); setRedeEscolhida(null); setBusca(''); setErro(''); }} />
+        <Button title="Cancelar pedido" variant="ghost" size="sm" onPress={cancelarPedido} />
+      </View>
     </>);
   }
 
@@ -164,13 +172,19 @@ export default function AguardandoRoute() {
       </Pressable>
     );
   };
-  const filtradas = redes.filter(r => r.nome.toLowerCase().includes(busca.trim().toLowerCase()));
+  // Trocando de rede: a rede do pedido atual sai da lista.
+  const filtradas = redes.filter(r => r.id !== aguardando?.empresa_id && r.nome.toLowerCase().includes(busca.trim().toLowerCase()));
 
   return tela(<View style={{ width: '100%', maxWidth: 440, gap: space.md }}>
     <View style={{ alignItems: 'center', gap: 6 }}>
-      <IconTile icon={StorefrontIcon} tint="indigo" size={56} />
-      <Text style={[t.title, { textAlign: 'center' }]}>Como você quer usar o EasyAudit?</Text>
-      <Text style={[t.caption, { textAlign: 'center' }]}>A conta {userEmail} ainda não faz parte de nenhum posto ou rede.</Text>
+      <IconTile icon={aguardando ? BuildingsIcon : StorefrontIcon} tint="indigo" size={56} />
+      <Text style={[t.title, { textAlign: 'center' }]}>{aguardando ? 'Trocar a rede do pedido' : 'Como você quer usar o EasyAudit?'}</Text>
+      <Text style={[t.caption, { textAlign: 'center' }]}>
+        {aguardando
+          ? `Você aguarda acesso à ${aguardando.empresa_nome}. Ao pedir outra rede, o pedido atual é cancelado e o novo vai para os administradores da rede escolhida.`
+          : `A conta ${userEmail} ainda não faz parte de nenhum posto ou rede.`}
+      </Text>
+      {aguardando ? <Button title={`Voltar ao pedido da ${aguardando.empresa_nome}`} variant="ghost" size="sm" onPress={() => { setTrocando(false); setErro(''); }} /> : null}
     </View>
     {pedido?.status === 'recusado' ? (
       <Text style={[t.caption, { color: colors.warning, textAlign: 'center' }]}>O administrador da {pedido.empresa_nome} não aprovou o seu pedido de acesso. Escolha outra opção abaixo.</Text>
@@ -206,10 +220,10 @@ export default function AguardandoRoute() {
                   </Pressable>
                 );
               })}
-              {!filtradas.length ? <Text style={t.caption}>Nenhuma rede com esse nome.</Text> : null}
+              {!filtradas.length ? <Text style={t.caption}>{busca.trim() ? 'Nenhuma rede com esse nome.' : 'Não há outra rede disponível.'}</Text> : null}
             </ScrollView>
           </View>
-          <Button title={enviando ? 'Enviando…' : 'Pedir acesso'} icon={EnvelopeIcon} disabled={!redeEscolhida || enviando} onPress={() => void pedirAcesso()} />
+          <Button title={enviando ? 'Enviando…' : aguardando ? 'Trocar o pedido para esta rede' : 'Pedir acesso'} icon={EnvelopeIcon} disabled={!redeEscolhida || enviando} onPress={() => void pedirAcesso()} />
           <Text style={t.caption}>O pedido vai para os administradores da rede. A conta só passa a ver os dados quando um deles aprovar.</Text>
         </> : <Text style={t.caption}>Ainda não há redes disponíveis. Cadastre o seu posto para começar.</Text>}
       </Card>
