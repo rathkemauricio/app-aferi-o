@@ -11,6 +11,9 @@
 //   { acao: 'acesso_filial', filial_id, email }  e-mail de acesso da filial: cria (ou troca o e-mail de) a conta da
 //        filial, que só usa Contagens e só vê as contagens da própria filial, e envia o link para criar a senha → { ok }
 //   { acao: 'bloquear_filial', filial_id }       tira o acesso da filial (a conta é inativada; o e-mail fica) → { ok }
+//   { acao: 'aceitar_pedido', pedido_id, papel, modulos }  aprova o pedido de quem pediu para entrar na rede: a conta
+//        passa a ser da empresa, com o papel e os módulos escolhidos, e a pessoa recebe um e-mail → { ok }
+//   { acao: 'recusar_pedido', pedido_id }        recusa o pedido (a conta continua sem empresa) → { ok }
 //
 // Regras: só administrador ativo de empresa ativa; só contas da própria empresa; módulos limitados aos do plano;
 // contas ativas limitadas ao plano (o banco também confere, pelo gatilho profiles_limite_contas).
@@ -21,6 +24,7 @@
 import { admin, entrarComoAtor, registrarAcao } from '../_shared/ator.ts';
 import { contaDe, type Empresa } from '../_shared/conta.ts';
 import { APP_URL, EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
+import { responderPedido } from '../_shared/pedidos.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -311,6 +315,12 @@ async function bloquearFilial(body: { filial_id?: string }, ctx: Ctx) {
   return json(200, { ok: true });
 }
 
+/* ---------- Pedidos de acesso (conta sem empresa que pediu para entrar na rede) ---------- */
+async function responder(body: { pedido_id?: string; papel?: unknown; modulos?: unknown }, ctx: Ctx, aceitar: boolean) {
+  const res = await responderPedido({ pedidoId: String(body.pedido_id ?? ''), aceitar, papel: body.papel, modulos: body.modulos, quem: { id: ctx.eu, nome: ctx.euNome }, somenteEmpresa: ctx.empresa.id });
+  return json(res.status, res.body);
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -342,6 +352,8 @@ Deno.serve(async req => {
       case 'status': return await status(body, ctx);
       case 'acesso_filial': return await acessoFilial(body, ctx);
       case 'bloquear_filial': return await bloquearFilial(body, ctx);
+      case 'aceitar_pedido': return await responder(body, ctx, true);
+      case 'recusar_pedido': return await responder(body, ctx, false);
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {

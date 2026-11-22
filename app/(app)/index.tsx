@@ -24,11 +24,14 @@ export default function ModuleLauncher() {
   const desktop = Platform.OS === 'web' && width >= 980;
   const { filiais, loaded: filiaisLoaded } = useFiliais();
   const [pendentes, setPendentes] = useState(0);
-  // Administrador: quantas contas novas esperam aprovação.
+  // Administrador: quantas contas novas esperam aprovação (contas da empresa sem acesso e pedidos de quem quer entrar).
   useEffect(() => {
     if (!isAdmin || !supabase) return;
-    void supabase.from('profiles').select('user_id', { count: 'exact', head: true }).eq('ativo', false).eq('papel', 'usuario').eq('modulos', '{}')
-      .then(({ count }) => setPendentes(count ?? 0));
+    const sb = supabase;
+    void Promise.all([
+      sb.from('profiles').select('user_id', { count: 'exact', head: true }).eq('ativo', false).eq('papel', 'usuario').eq('modulos', '{}'),
+      sb.from('pedidos_acesso').select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
+    ]).then(([a, b]) => setPendentes((a.count ?? 0) + (b.count ?? 0)));
   }, [isAdmin]);
   // No app, o módulo aberto por último fica em cima (na web, a ordem do catálogo).
   const modulos = useOrdemRecentes(MODULES.filter(m => podeAcessar(m.id)));

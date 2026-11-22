@@ -1,11 +1,19 @@
 // Empresas (clientes do EasyAudit): cadastro pelo site e painel do dono da plataforma.
 //
 // Chamada do app (supabase.functions.invoke('empresas', { body })), com o JWT de quem está logado:
-//   { acao: 'criar', nome?, documento?, telefone?, plano_id? }
-//        conta sem empresa cria a própria empresa (aguardando liberação) e vira administradora dela.
-//        Sem os campos, usa os dados guardados no cadastro do site (user_metadata.empresa_pendente). → { ok, empresa_id }
+//   { acao: 'criar', nome?, documento?, telefone?, plano_id?, tipo? }
+//        conta sem empresa cria a própria empresa e vira administradora dela. tipo 'posto' (cadastro do próprio
+//        posto pelo app): a empresa já nasce ativa, com os módulos vazios. Sem tipo (cadastro da rede pelo site):
+//        fica aguardando a liberação do dono. Sem os campos, usa os dados guardados no cadastro do site
+//        (user_metadata.empresa_pendente). → { ok, empresa_id }
+//   Conta sem empresa, para entrar numa rede que já usa o EasyAudit (só pede; quem libera é o administrador dela):
+//   { acao: 'redes' }                  → { ok, redes: [{ id, nome }], pedido: { id, empresa_id, empresa_nome, status, created_at } | null }
+//   { acao: 'pedir_acesso', empresa_id } → { ok }   (um pedido aberto por conta: pedir outra rede cancela o anterior)
+//   { acao: 'cancelar_pedido' }        → { ok }
 //   Dono da plataforma:
-//   { acao: 'listar' }                               → { ok, empresas: [...com contas ativas e administradores], planos }
+//   { acao: 'listar' }                               → { ok, empresas: [...com contas ativas, administradores e pedidos de acesso pendentes], planos }
+//   { acao: 'aceitar_pedido', pedido_id, papel, modulos } / { acao: 'recusar_pedido', pedido_id }
+//        responde o pedido de quem quer entrar numa rede (no lugar do administrador dela) → { ok }
 //   { acao: 'atualizar', id, status?, plano_id?, limite_contas?, modulos?, nome? }  → { ok }
 //        ao liberar uma empresa (status 'ativa'), os administradores dela recebem um e-mail.
 //   { acao: 'salvar_plano', id, nome?, descricao?, preco_mensal?, limite_contas?, modulos?, ativo? } → { ok }
@@ -17,6 +25,7 @@
 import { admin, entrarComoAtor, registrarAcao } from '../_shared/ator.ts';
 import { contaDe, DONO_EMAIL, ehDono } from '../_shared/conta.ts';
 import { APP_URL, EMAIL_RE, enviar, esc, layout } from '../_shared/mailer.ts';
+import { responderPedido } from '../_shared/pedidos.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -30,9 +39,10 @@ const MODULOS = ['afericoes', 'tempos', 'croqui', 'auditoria', 'riscos', 'invent
 const texto = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const soModulos = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map(String).filter(m => MODULOS.includes(m)))] : null);
 
-type Pedido = { nome?: unknown; documento?: unknown; telefone?: unknown; plano_id?: unknown };
+type Pedido = { nome?: unknown; documento?: unknown; telefone?: unknown; plano_id?: unknown; tipo?: unknown };
+type Conta = NonNullable<Awaited<ReturnType<typeof contaDe>>>;
 
-async function criar(body: Pedido, conta: NonNullable<Awaited<ReturnType<typeof contaDe>>>, origem: string) {
+async function criar(body: Pedido, conta: Conta, origem: string) {
   if (conta.perfil?.empresa_id) return json(409, { erro: 'Esta conta já faz parte de uma empresa.' });
   const meta = (conta.user.user_metadata ?? {}) as Record<string, unknown>;
   const pendente = (meta.empresa_pendente ?? {}) as Pedido;
@@ -41,10 +51,12 @@ async function criar(body: Pedido, conta: NonNullable<Awaited<ReturnType<typeof 
   if (nome.length < 2) return json(400, { erro: 'Informe o nome da empresa.' });
   const { data: plano } = await admin.from('planos').select('id,nome,limite_contas,modulos,ativo').eq('id', texto(dados.plano_id, 40) || 'essencial').maybeSingle();
   if (!plano?.ativo) return json(400, { erro: 'Escolha um dos planos disponíveis.' });
+  // Cadastro do próprio posto pelo app: a pessoa já entra como dona, com os módulos vazios.
+  const posto = body.tipo === 'posto';
 
   const { data: emp, error } = await admin.from('empresas').insert({
     nome, documento: texto(dados.documento, 30), telefone: texto(dados.telefone, 30), plano_id: plano.id,
-    limite_contas: plano.limite_contas, modulos: plano.modulos, status: 'aguardando', criado_por: conta.user.id,
+    limite_contas: plano.limite_contas, modulos: plano.modulos, status: posto ? 'ativa' : 'aguardando', criado_por: conta.user.id,
   }).select('id').single();
   if (error || !emp) throw new Error(`Não foi possível cadastrar a empresa: ${error?.message ?? ''}`);
   const nomePessoa = texto(meta.nome, 80) || conta.perfil?.nome || '';
@@ -54,23 +66,86 @@ async function criar(body: Pedido, conta: NonNullable<Awaited<ReturnType<typeof 
     throw new Error(`Não foi possível ligar a sua conta à empresa: ${e2.message}`);
   }
   if (meta.empresa_pendente) await admin.auth.admin.updateUserById(conta.user.id, { user_metadata: { ...meta, empresa_pendente: null } });
+  // Quem cadastra o próprio posto desiste de entrar numa rede: o pedido aberto, se houver, é cancelado.
+  await admin.from('pedidos_acesso').update({ status: 'cancelado', decidido_em: new Date().toISOString() }).eq('user_id', conta.user.id).eq('status', 'pendente');
 
   // Aviso ao dono da plataforma (falha no e-mail não desfaz o cadastro).
   const base = APP_URL;
   await enviar({
     para: DONO_EMAIL,
-    assunto: `Nova empresa aguardando liberação: ${nome}`,
+    assunto: posto ? `Novo posto cadastrado: ${nome}` : `Nova empresa aguardando liberação: ${nome}`,
     html: layout({
-      titulo: 'Nova empresa no EasyAudit',
+      titulo: posto ? 'Novo posto no EasyAudit' : 'Nova empresa no EasyAudit',
       paragrafos: [
         `<b>${esc(nome)}</b> se cadastrou no plano <b>${esc(plano.nome)}</b> (até ${plano.limite_contas} contas).`,
         `Administrador: ${esc(nomePessoa || conta.user.email)} (${esc(conta.user.email)})${texto(dados.telefone, 30) ? `, telefone ${esc(texto(dados.telefone, 30))}` : ''}${texto(dados.documento, 30) ? `, CNPJ ${esc(texto(dados.documento, 30))}` : ''}.`,
-        'A empresa só vê o sistema depois que você liberar em Empresas e planos.',
+        posto ? 'O posto já está usando o sistema (com os módulos vazios). Plano, contas e módulos se ajustam em Empresas e planos.'
+          : 'A empresa só vê o sistema depois que você liberar em Empresas e planos.',
       ],
       botao: base ? { texto: 'Abrir Empresas e planos', url: `${base}/plataforma` } : undefined,
     }),
   }).catch(e => console.error('empresas: aviso ao dono', e));
   return json(200, { ok: true, empresa_id: emp.id });
+}
+
+/* ---------- Conta sem empresa pedindo para entrar numa rede ---------- */
+async function pedidoAberto(userId: string) {
+  const { data } = await admin.from('pedidos_acesso').select('id,empresa_id,status,created_at,empresas(nome)')
+    .eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (!data) return null;
+  // deno-lint-ignore no-explicit-any
+  return { id: data.id, empresa_id: data.empresa_id, empresa_nome: ((data as any).empresas?.nome as string) ?? '', status: data.status, created_at: data.created_at };
+}
+
+/** Redes que já usam o EasyAudit (só o nome) e o último pedido da conta. Só para conta sem empresa. */
+async function redes(conta: Conta) {
+  if (conta.perfil?.empresa_id) return json(409, { erro: 'Esta conta já faz parte de uma empresa.' });
+  const { data, error } = await admin.from('empresas').select('id,nome').eq('status', 'ativa').order('nome');
+  if (error) throw new Error(error.message);
+  return json(200, { ok: true, redes: data ?? [], pedido: await pedidoAberto(conta.user.id) });
+}
+
+async function pedirAcesso(body: Record<string, unknown>, conta: Conta) {
+  if (conta.perfil?.empresa_id) return json(409, { erro: 'Esta conta já faz parte de uma empresa.' });
+  if (conta.perfil?.filial_id) return json(403, { erro: 'Conta de filial não pede acesso a outra rede.' });
+  const empresaId = texto(body.empresa_id, 60);
+  const { data: emp } = await admin.from('empresas').select('id,nome,status').eq('id', empresaId).maybeSingle();
+  if (!emp || emp.status !== 'ativa') return json(404, { erro: 'Rede não encontrada. Atualize a lista e escolha de novo.' });
+  const email = (conta.user.email ?? '').toLowerCase();
+  const nome = conta.perfil?.nome?.trim() || texto((conta.user.user_metadata ?? {}).nome, 80);
+
+  // Um pedido aberto por conta: pedir outra rede cancela o anterior; pedir a mesma de novo não duplica.
+  const atual = await pedidoAberto(conta.user.id);
+  if (atual?.status === 'pendente' && atual.empresa_id === emp.id) return json(200, { ok: true });
+  await admin.from('pedidos_acesso').update({ status: 'cancelado', decidido_em: new Date().toISOString() }).eq('user_id', conta.user.id).eq('status', 'pendente');
+  const { error } = await admin.from('pedidos_acesso').insert({ empresa_id: emp.id, user_id: conta.user.id, email, nome });
+  if (error) throw new Error(`Não foi possível registrar o pedido: ${error.message}`);
+
+  // Avisa os administradores da rede (falha no e-mail não desfaz o pedido).
+  const { data: adms } = await admin.from('profiles').select('email,nome').eq('empresa_id', emp.id).eq('papel', 'admin').eq('ativo', true).is('filial_id', null);
+  for (const a of adms ?? []) {
+    await enviar({
+      para: a.email,
+      assunto: `Pedido de acesso à ${emp.nome}`,
+      html: layout({
+        etiqueta: 'Pedido de acesso',
+        titulo: 'Alguém pediu para entrar na sua rede',
+        paragrafos: [
+          `Olá${a.nome ? `, ${esc(a.nome)}` : ''}! <b style="color:#0f1f3d">${esc(nome || email)}</b> (${esc(email)}) pediu acesso à <b style="color:#0f1f3d">${esc(emp.nome)}</b> no EasyAudit.`,
+          'A conta ainda não vê nenhum dado da rede. Para liberar, abra Usuários e permissões, escolha os módulos e aprove. Se não conhece a pessoa, recuse.',
+        ],
+        botao: APP_URL ? { texto: 'Abrir Usuários e permissões', url: `${APP_URL}/usuarios` } : undefined,
+      }),
+    }).catch(e => console.error('empresas: aviso de pedido', e));
+  }
+  await registrarAcao({ userId: conta.user.id, empresaId: emp.id, acao: 'pediu acesso à rede', tabela: 'funcao:empresas', alvo: email });
+  return json(200, { ok: true });
+}
+
+async function cancelarPedido(conta: Conta) {
+  const { error } = await admin.from('pedidos_acesso').update({ status: 'cancelado', decidido_em: new Date().toISOString() }).eq('user_id', conta.user.id).eq('status', 'pendente');
+  if (error) throw new Error(error.message);
+  return json(200, { ok: true });
 }
 
 /** Dono da plataforma: cria uma empresa já liberada para outra pessoa, que vira a administradora dela. */
@@ -137,10 +212,11 @@ async function criarPara(body: Record<string, unknown>, conta: NonNullable<Await
 }
 
 async function listar() {
-  const [{ data: empresas, error }, { data: planos }, { data: perfis }] = await Promise.all([
+  const [{ data: empresas, error }, { data: planos }, { data: perfis }, { data: pedidos }] = await Promise.all([
     admin.from('empresas').select('*').order('created_at', { ascending: false }),
     admin.from('planos').select('*').order('ordem'),
     admin.from('profiles').select('empresa_id,email,nome,papel,ativo').not('empresa_id', 'is', null),
+    admin.from('pedidos_acesso').select('id,empresa_id,email,nome,created_at').eq('status', 'pendente').order('created_at'),
   ]);
   if (error) throw new Error(error.message);
   const lista = (empresas ?? []).map(e => {
@@ -149,6 +225,8 @@ async function listar() {
       ...e,
       contas_ativas: contas.filter(p => p.ativo).length,
       administradores: contas.filter(p => p.papel === 'admin').map(p => ({ email: p.email, nome: p.nome })),
+      // Quem pediu para entrar nesta rede e ainda espera resposta.
+      pedidos: (pedidos ?? []).filter(p => p.empresa_id === e.id).map(({ empresa_id: _e, ...p }) => p),
     };
   });
   return json(200, { ok: true, empresas: lista, planos: planos ?? [] });
@@ -233,12 +311,23 @@ Deno.serve(async req => {
     const body = await req.json().catch(() => ({}));
     const origem = (req.headers.get('Origin') ?? '').replace(/\/$/, '');
     if (body.acao === 'criar') return await criar(body, conta, origem);
+    if (body.acao === 'redes') return await redes(conta);
+    if (body.acao === 'pedir_acesso') return await pedirAcesso(body, conta);
+    if (body.acao === 'cancelar_pedido') return await cancelarPedido(conta);
     if (!ehDono(conta.user)) return json(403, { erro: 'Somente o dono do EasyAudit administra as empresas.' });
     switch (body.acao) {
       case 'listar': return await listar();
       case 'atualizar': return await atualizar(body, origem);
       case 'salvar_plano': return await salvarPlano(body);
       case 'criar_para': return await criarPara(body, conta);
+      case 'aceitar_pedido':
+      case 'recusar_pedido': {
+        const res = await responderPedido({
+          pedidoId: texto(body.pedido_id, 60), aceitar: body.acao === 'aceitar_pedido', papel: body.papel, modulos: body.modulos,
+          quem: { id: conta.user.id, nome: 'O EasyAudit' },
+        });
+        return json(res.status, res.body);
+      }
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {

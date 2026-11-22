@@ -15,6 +15,8 @@ import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../
 import { BotaoVoltar } from '../../ui/voltar';
 
 type Perfil = { user_id: string; email: string; nome: string; avatar: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; created_at: string };
+/** Conta sem empresa que pediu para entrar na rede (ainda não vê nenhum dado). */
+type PedidoAcesso = { id: string; user_id: string; email: string; nome: string; created_at: string };
 
 /** Contas da empresa (somente administrador da empresa): convidar por e-mail, bloquear, definir papel e módulos. */
 export default function UsuariosScreen() {
@@ -26,6 +28,8 @@ export default function UsuariosScreen() {
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const [perfis, setPerfis] = useState<Perfil[] | null>(null);
+  const [pedidos, setPedidos] = useState<PedidoAcesso[]>([]);
+  const [respondendo, setRespondendo] = useState<string | null>(null);
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
   const [atualizando, setAtualizando] = useState(false);
@@ -46,6 +50,9 @@ export default function UsuariosScreen() {
     if (!supabase) return;
     const { data, error } = await supabase.from('profiles').select('user_id,email,nome,avatar,papel,ativo,modulos,created_at').is('filial_id', null).order('created_at'); // contas de filial: lista própria
     void supabase.from('profiles').select('user_id,email,ativo,filial_id').not('filial_id', 'is', null).then(({ data: f }) => setContasFilial((f ?? []) as typeof contasFilial));
+    // Pedidos de quem quer entrar na rede (o banco só mostra os da própria empresa ao administrador).
+    void supabase.from('pedidos_acesso').select('id,user_id,email,nome,created_at').eq('status', 'pendente').order('created_at')
+      .then(({ data: pd }) => setPedidos((pd ?? []) as PedidoAcesso[]));
     if (error) { setErro('Não foi possível carregar os usuários. Verifique a conexão.'); return; }
     setErro(''); setPerfis(data as Perfil[]);
   }, []);
@@ -169,6 +176,23 @@ export default function UsuariosScreen() {
       ? `${email} já tinha conta no EasyAudit e agora faz parte da sua empresa. Ela recebeu um e-mail com o link para entrar.`
       : `${novo.nome.trim()} recebeu um e-mail em ${email} com o link para criar a senha. A conta já aparece na lista e ocupa uma das contas do plano.`);
   };
+  /** Pedido de acesso: aprovar liga a conta à empresa com os módulos marcados; recusar mantém a conta fora. */
+  const aprovarPedido = async (pd: PedidoAcesso, modulos: string[]) => {
+    setRespondendo(pd.id);
+    const r = await chamarUsuarios({ acao: 'aceitar_pedido', pedido_id: pd.id, papel: 'usuario', modulos });
+    setRespondendo(null);
+    if (!r.ok) { notify('Pedido não aprovado', r.erro); return; }
+    void carregar();
+    notify('Acesso liberado', `${pd.nome || pd.email} agora faz parte da sua empresa e recebeu um e-mail avisando. Ela vê só os módulos marcados.`, { tom: 'sucesso' });
+  };
+  const recusarPedido = (pd: PedidoAcesso) => confirmAction('Recusar o pedido?', `${pd.nome || pd.email} continua sem acesso à sua empresa e recebe um e-mail avisando.`, 'Recusar', async () => {
+    setRespondendo(pd.id);
+    const r = await chamarUsuarios({ acao: 'recusar_pedido', pedido_id: pd.id });
+    setRespondendo(null);
+    if (!r.ok) { notify('Pedido não recusado', r.erro); return; }
+    void carregar();
+  });
+
   const reenviar = async (p: Perfil) => {
     const r = await chamarUsuarios({ acao: 'reenviar', user_id: p.user_id });
     notify(r.ok ? 'Link enviado' : 'Link não enviado', r.ok ? `${p.email} recebeu um e-mail com o link para definir a senha e entrar.` : r.erro);
@@ -177,6 +201,7 @@ export default function UsuariosScreen() {
   const lista = (perfis ?? []).filter(p => `${p.email} ${p.nome}`.toLowerCase().includes(busca.toLowerCase()));
   // Pendente: nunca aprovada (inativa e sem módulos). Bloqueada: inativa depois de já ter tido acesso.
   const pendentes = lista.filter(p => !p.ativo && p.papel !== 'admin' && !(p.modulos ?? []).length);
+  const pedidosVistos = pedidos.filter(pd => `${pd.email} ${pd.nome}`.toLowerCase().includes(busca.toLowerCase()));
   const ativos = lista.filter(p => p.ativo);
   const bloqueados = lista.filter(p => !p.ativo && !pendentes.includes(p));
   const voltar = () => (router.canGoBack() ? router.back() : router.replace('/'));
@@ -270,7 +295,30 @@ export default function UsuariosScreen() {
             <Alvo id="usuarios-criar"><Button title="Criar conta" icon={PlusIcon} onPress={() => setNovo({ ...NOVO_VAZIO })} /></Alvo>
             <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar por nome ou e-mail" />
 
-            <SectionHeader title={`Aguardando aprovação (${pendentes.length})`} />
+            <SectionHeader title={`Aguardando aprovação (${pendentes.length + pedidosVistos.length})`} />
+            {pedidosVistos.map(pd => {
+              const sel = escolha[pd.id] ?? [];
+              const ocupado = respondendo === pd.id;
+              return (
+                <Card key={pd.id} style={{ borderColor: colors.warning }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                    <Avatar uri={null} nome={pd.nome || pd.email} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={t.bodyStrong} numberOfLines={1}>{pd.nome || pd.email}</Text>
+                      <Text style={t.caption} numberOfLines={1}>{pd.nome ? `${pd.email} · ` : ''}pediu acesso em {new Date(pd.created_at).toLocaleDateString('pt-BR')}</Text>
+                    </View>
+                    <StatusPill label="Pedido de acesso" tone="warning" />
+                  </View>
+                  <Text style={t.caption}>Esta conta pediu para entrar na sua empresa e ainda não vê nenhum dado. Se não conhece a pessoa, recuse.</Text>
+                  <Text style={t.label}>Módulos que esta conta vai usar</Text>
+                  {modChips(sel, id => setEscolha(e => ({ ...e, [pd.id]: sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id] })))}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+                    <Button title={ocupado ? 'Enviando…' : 'Aprovar acesso'} icon={CheckIcon} size="sm" disabled={!sel.length || ocupado} onPress={() => void aprovarPedido(pd, sel)} />
+                    <Button title="Recusar" variant="danger" size="sm" disabled={ocupado} onPress={() => recusarPedido(pd)} />
+                  </View>
+                </Card>
+              );
+            })}
             {pendentes.length ? pendentes.map(p => {
               const sel = escolha[p.user_id] ?? [];
               return (
@@ -282,7 +330,7 @@ export default function UsuariosScreen() {
                   <Text style={t.caption}>{sel.length ? 'A conta passa a ver apenas os módulos marcados.' : 'Marque ao menos um módulo para aprovar. Sem aprovação, a conta continua sem acesso a nenhum dado.'}</Text>
                 </Card>
               );
-            }) : <Text style={t.caption}>Nenhuma conta esperando. Para incluir alguém, use "Criar conta".</Text>}
+            }) : !pedidosVistos.length ? <Text style={t.caption}>Nenhuma conta esperando. Para incluir alguém, use "Criar conta".</Text> : null}
 
             <SectionHeader title={`Com acesso (${ativos.length})`} />
             {ativos.map(cartaoConta)}

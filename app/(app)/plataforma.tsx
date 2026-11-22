@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
-import { ArrowLeftIcon, CheckIcon, LockSimpleIcon, PencilSimpleIcon, StorefrontIcon } from '../../ui/icons';
+import { ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, PencilSimpleIcon, StorefrontIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, Skeleton, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 import { BotaoVoltar } from '../../ui/voltar';
@@ -14,7 +14,11 @@ type Status = 'aguardando' | 'ativa' | 'suspensa';
 type Empresa = {
   id: string; nome: string; documento: string; telefone: string; plano_id: string; limite_contas: number; modulos: string[]; status: Status; created_at: string;
   contas_ativas: number; administradores: { email: string; nome: string | null }[];
+  /** Quem pediu para entrar nesta rede e ainda espera resposta. */
+  pedidos: PedidoAcesso[];
 };
+type PedidoAcesso = { id: string; email: string; nome: string; created_at: string };
+type Aprovacao = { e: Empresa; pd: PedidoAcesso; papel: 'usuario' | 'admin'; modulos: string[] };
 type Plano = { id: string; nome: string; descricao: string; preco_mensal: number | null; limite_contas: number; modulos: string[]; ordem: number; ativo: boolean };
 type EdicaoEmpresa = { e: Empresa; plano_id: string; limite: string; modulos: string[] };
 type EdicaoPlano = { p: Plano; nome: string; descricao: string; preco: string; limite: string; modulos: string[]; ativo: boolean };
@@ -46,6 +50,7 @@ export default function PlataformaScreen() {
   const [edEmp, setEdEmp] = useState<EdicaoEmpresa | null>(null);
   const [edPlano, setEdPlano] = useState<EdicaoPlano | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [aprovacao, setAprovacao] = useState<Aprovacao | null>(null);
 
   const carregar = useCallback(async () => {
     const r = await chamar({ acao: 'listar' });
@@ -65,9 +70,20 @@ export default function PlataformaScreen() {
   const nomePlano = (id: string) => planos.find(p => p.id === id)?.nome ?? id;
   const voltar = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
-  const modChips = (sel: string[], onToggle: (id: string) => void) => (
+  /** Pedido de acesso a uma rede: aprovar (com o papel e os módulos) ou recusar, no lugar do administrador dela. */
+  const responderPedido = async (body: Record<string, unknown>, ok: string) => {
+    setSalvando(true);
+    const r = await chamar(body);
+    setSalvando(false);
+    if (!r.ok) { notify('Pedido não respondido', r.erro); return false; }
+    notify(ok); void carregar(); return true;
+  };
+  const recusar = (e: Empresa, pd: PedidoAcesso) => confirmAction('Recusar o pedido?', `${pd.nome || pd.email} continua sem acesso à ${e.nome} e recebe um e-mail avisando.`, 'Recusar',
+    () => void responderPedido({ acao: 'recusar_pedido', pedido_id: pd.id }, 'Pedido recusado.'));
+
+  const modChips = (sel: string[], onToggle: (id: string) => void, so?: string[]) => (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-      {MODULES.map(m => {
+      {MODULES.filter(m => !so || so.includes(m.id)).map(m => {
         const on = sel.includes(m.id);
         return (
           <Pressable key={m.id} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => onToggle(m.id)}
@@ -97,6 +113,22 @@ export default function PlataformaScreen() {
         {e.documento ? `\nCNPJ ${e.documento}` : ''}{e.telefone ? `\nTelefone ${e.telefone}` : ''}
       </Text>
       <Text style={t.caption}>Módulos: {e.modulos.map(id => MODULES.find(m => m.id === id)?.name ?? id).join(', ')}</Text>
+      {e.pedidos.length ? (
+        <View style={{ gap: space.sm, padding: space.sm, borderRadius: radius.control, borderWidth: 1, borderColor: colors.warning, backgroundColor: colors.surfaceMuted }}>
+          <StatusPill label={`${e.pedidos.length} ${e.pedidos.length === 1 ? 'usuário aguardando' : 'usuários aguardando'} acesso a esta rede`} tone="warning" icon={UserCircleIcon} />
+          {e.pedidos.map(pd => (
+            <View key={pd.id} style={{ gap: 6 }}>
+              <Text style={t.bodyStrong} numberOfLines={1}>{pd.nome || pd.email}</Text>
+              <Text style={t.caption} numberOfLines={1}>{pd.nome ? `${pd.email} · ` : ''}pediu acesso em {new Date(pd.created_at).toLocaleDateString('pt-BR')}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+                <Button title="Aprovar" icon={CheckIcon} size="sm" disabled={salvando || e.status !== 'ativa'} onPress={() => setAprovacao({ e, pd, papel: 'usuario', modulos: [] })} />
+                <Button title="Recusar" variant="danger" size="sm" disabled={salvando} onPress={() => recusar(e, pd)} />
+              </View>
+            </View>
+          ))}
+          <Text style={t.caption}>O administrador da rede também vê e responde estes pedidos em Usuários e permissões.</Text>
+        </View>
+      ) : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
         {e.status !== 'ativa' ? (
           <Button title={e.status === 'aguardando' ? 'Liberar empresa' : 'Reativar'} icon={CheckIcon} size="sm" disabled={salvando}
@@ -111,9 +143,11 @@ export default function PlataformaScreen() {
     </Card>
   );
 
+  const totalPedidos = (empresas ?? []).reduce((n, e) => n + e.pedidos.length, 0);
   const grupos: { titulo: string; lista: Empresa[] }[] = [
     { titulo: 'Aguardando liberação', lista: (empresas ?? []).filter(e => e.status === 'aguardando') },
-    { titulo: 'Ativas', lista: (empresas ?? []).filter(e => e.status === 'ativa') },
+    // Redes com pedidos de acesso esperando vêm primeiro.
+    { titulo: 'Ativas', lista: (empresas ?? []).filter(e => e.status === 'ativa').sort((a, b) => b.pedidos.length - a.pedidos.length) },
     { titulo: 'Suspensas', lista: (empresas ?? []).filter(e => e.status === 'suspensa') },
   ];
 
@@ -133,6 +167,14 @@ export default function PlataformaScreen() {
           : !empresas ? <><Skeleton height={120} /><Skeleton height={120} /></>
           : <>
             <ChoiceChips value={aba} options={['Empresas', 'Planos']} onChange={v => setAba(v as typeof aba)} />
+            {aba === 'Empresas' && totalPedidos ? (
+              <Card style={{ borderColor: colors.warning, flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                <EnvelopeIcon size={22} color={colors.warning} weight="duotone" />
+                <Text style={[t.body, { flex: 1 }]}>
+                  {totalPedidos} {totalPedidos === 1 ? 'pedido de acesso aguardando' : 'pedidos de acesso aguardando'} resposta em: {(empresas ?? []).filter(e => e.pedidos.length).map(e => `${e.nome} (${e.pedidos.length})`).join(', ')}.
+                </Text>
+              </Card>
+            ) : null}
             {aba === 'Empresas' ? grupos.map(g => (g.lista.length || g.titulo === 'Aguardando liberação' ? (
               <View key={g.titulo} style={{ gap: space.md }}>
                 <SectionHeader title={`${g.titulo} (${g.lista.length})`} />
@@ -177,6 +219,25 @@ export default function PlataformaScreen() {
           <Text style={t.caption}>Hoje: {edEmp.e.contas_ativas} conta(s) ativa(s).</Text>
           <Text style={t.label}>Módulos da empresa</Text>
           {modChips(edEmp.modulos, id => setEdEmp({ ...edEmp, modulos: alternar(edEmp.modulos, id) }))}
+        </Sheet>
+      )}
+
+      {aprovacao && (
+        <Sheet title="Aprovar acesso" onClose={() => !salvando && setAprovacao(null)}
+          footer={<Button title={salvando ? 'Salvando…' : 'Aprovar acesso'} icon={CheckIcon} disabled={salvando || (aprovacao.papel === 'usuario' && !aprovacao.modulos.length)}
+            onPress={() => void (async () => {
+              const { e, pd, papel, modulos } = aprovacao;
+              if (await responderPedido({ acao: 'aceitar_pedido', pedido_id: pd.id, papel, modulos }, `${pd.nome || pd.email} agora faz parte da ${e.nome}.`)) setAprovacao(null);
+            })()} />}>
+          <Text style={t.body}><Text style={t.bodyStrong}>{aprovacao.pd.nome || aprovacao.pd.email}</Text> pediu acesso à <Text style={t.bodyStrong}>{aprovacao.e.nome}</Text>.</Text>
+          <Text style={t.label}>Papel na rede</Text>
+          <ChoiceChips value={aprovacao.papel === 'admin' ? 'Administrador' : 'Usuário'} options={['Usuário', 'Administrador']}
+            onChange={v => setAprovacao({ ...aprovacao, papel: v === 'Administrador' ? 'admin' : 'usuario' })} />
+          {aprovacao.papel === 'admin' ? <Text style={t.caption}>Administrador usa todos os módulos da rede e gerencia as contas dela.</Text> : <>
+            <Text style={t.label}>Módulos que a conta vai usar</Text>
+            {modChips(aprovacao.modulos, id => setAprovacao({ ...aprovacao, modulos: alternar(aprovacao.modulos, id) }), aprovacao.e.modulos)}
+          </>}
+          <Text style={t.caption}>A pessoa recebe um e-mail avisando. A conta ocupa uma das {aprovacao.e.limite_contas} contas da rede ({aprovacao.e.contas_ativas} em uso).</Text>
         </Sheet>
       )}
 
