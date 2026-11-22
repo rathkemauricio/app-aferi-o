@@ -155,7 +155,9 @@ export class Collection<T extends SyncRow> {
       for (;;) {
         // Ordem (updated_at, id) com cursor composto: nenhuma linha se perde entre páginas, mesmo com horários iguais.
         let q = supabase.from(this.opts.table).select('*').order('updated_at', { ascending: true }).order('id', { ascending: true }).limit(PAGE);
-        if (this.cursor && this.cursorId) q = q.or(`updated_at.gt."${this.cursor}",and(updated_at.eq."${this.cursor}",id.gt."${this.cursorId}")`);
+        // Valores entre aspas no filtro, com aspas e barras escapadas (o id é texto livre).
+        const aspas = (v: string) => `"${v.replace(/[\\"]/g, m => '\\' + m)}"`;
+        if (this.cursor && this.cursorId) q = q.or(`updated_at.gt.${aspas(this.cursor)},and(updated_at.eq.${aspas(this.cursor)},id.gt.${aspas(this.cursorId)})`);
         else if (this.cursor) q = q.gt('updated_at', this.cursor);
         if (this.opts.filter) q = this.opts.filter(q);
         const { data, error } = await q;

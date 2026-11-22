@@ -7,6 +7,9 @@ import { resetAll } from './sync';
 
 /** Contas que já registraram a entrada nesta abertura do app. */
 const JA_ENTROU = new Set<string>();
+/** Empresa da conta logada, para quem não é componente (ex.: caminho dos arquivos enviados ao servidor). */
+let empresaAtualId: string | null = null;
+export const empresaAtual = () => empresaAtualId;
 const PERFIL_KEY = (id: string) => `nevoeiro.perfil.${id}`;
 /** Empresa cujos dados estão guardados neste aparelho (se entrar conta de outra empresa, o cache local é limpo). */
 const EMPRESA_DO_APARELHO = 'easyaudit.empresa-do-aparelho';
@@ -115,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (anterior !== empId) await AsyncStorage.setItem(EMPRESA_DO_APARELHO, empId).catch(() => undefined);
     }
+    empresaAtualId = perfil?.empresa?.id ?? null;
     setPapel(perfil?.papel ?? null);
     setFilialConta(perfil?.filial ?? null);
     // Perfil guardado antes da versão com empresas (sem o campo): vale só a liberação da conta (uso offline continua).

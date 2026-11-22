@@ -25,6 +25,31 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 const SITE = APP_URL.replace(/^https?:\/\//, '');
 const linkSite = (caminho = '') => `<a href="${APP_URL}${caminho}" style="color:#0f1f3d;font-weight:700">${esc(SITE)}${esc(caminho)}</a>`;
 
+/* ---------- Proteção contra abuso (função pública) ---------- */
+/** IP de quem chamou (o primeiro do x-forwarded-for, que o Supabase preenche). */
+const ipDe = (req: Request) => (req.headers.get('x-forwarded-for') ?? req.headers.get('cf-connecting-ip') ?? '').split(',')[0].trim() || 'sem-ip';
+/** Conta o uso da chave na janela (contador no banco) e diz se ainda está dentro do limite. Se o contador falhar, deixa passar. */
+async function dentroDoLimite(chave: string, max: number, minutos: number) {
+  const { data, error } = await admin.rpc('contar_uso', { p_chave: chave, p_minutos: minutos, p_inc: 1 });
+  if (error) { console.error('acesso: limite', error.message); return true; }
+  return Number(data) <= max;
+}
+const muitoUso = () => json(429, { erro: 'Muitas tentativas a partir desta conexão. Aguarde alguns minutos e tente de novo.' });
+
+/** Mesmas regras da tela de cadastro (components/AuthScreen.tsx, PASSWORD_RULES): o servidor confere também. */
+const senhaForte = (s: string) => s.length >= 8 && s.length <= 72 && /[A-Z]/.test(s) && /[a-z]/.test(s) && /\d/.test(s) && /[^A-Za-z0-9]/.test(s) && !/\s/.test(s);
+
+/** Dados guardados na conta no cadastro: só os campos que o app usa, com tamanho limitado. */
+function dadosDoCadastro(v: unknown): Record<string, unknown> {
+  const d = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  const txt = (x: unknown, max: number) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const out: Record<string, unknown> = {};
+  if (txt(d.nome, 80)) out.nome = txt(d.nome, 80);
+  const e = d.empresa_pendente && typeof d.empresa_pendente === 'object' ? d.empresa_pendente as Record<string, unknown> : null;
+  if (e && txt(e.nome, 120)) out.empresa_pendente = { nome: txt(e.nome, 120), documento: txt(e.documento, 30), telefone: txt(e.telefone, 30) };
+  return out;
+}
+
 /** true se pode enviar agora (e marca o envio); false se já enviou este tipo para o e-mail há menos de 1 minuto. */
 async function podeEnviar(email: string, tipo: string) {
   const { data } = await admin.from('envios_acesso').select('enviado_em').eq('email', email).eq('tipo', tipo).maybeSingle();
@@ -126,7 +151,7 @@ async function confirmar(email: string) {
 }
 
 async function cadastrar(email: string, senha: string, dados: Record<string, unknown>) {
-  if (senha.length < 8) return json(400, { erro: 'A senha precisa ter pelo menos 8 caracteres.' });
+  if (!senhaForte(senha)) return json(400, { erro: 'A senha precisa ter de 8 a 72 caracteres, com letra maiúscula, letra minúscula, número e caractere especial, sem espaços.' });
   const nome = String(dados.nome ?? '').slice(0, 80);
   const existente = await contaDoEmail(email);
   if (existente) {
@@ -152,16 +177,24 @@ async function cadastrar(email: string, senha: string, dados: Record<string, unk
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
+    if (req.method !== 'POST') return json(405, { erro: 'Método não permitido.' });
     const body = await req.json().catch(() => ({}));
     const email = String(body.email ?? '').trim().toLowerCase();
-    if (!EMAIL_RE.test(email)) return json(400, { erro: 'Informe um e-mail válido.' });
+    if (email.length > 254 || !EMAIL_RE.test(email)) return json(400, { erro: 'Informe um e-mail válido.' });
+    // Limite por conexão: 20 pedidos por hora no total e 5 cadastros por hora (contra criação de contas em massa e
+    // envio de e-mails em série para endereços de terceiros).
+    const ip = ipDe(req);
+    if (!(await dentroDoLimite(`acesso:${ip}`, 20, 60))) return muitoUso();
+    if (body.acao === 'cadastrar' && !(await dentroDoLimite(`acesso-cadastro:${ip}`, 5, 60))) return muitoUso();
     switch (body.acao) {
       case 'recuperar': return await recuperar(email);
       case 'confirmar': return await confirmar(email);
-      case 'cadastrar': return await cadastrar(email, String(body.senha ?? ''), body.dados && typeof body.dados === 'object' ? body.dados : {});
+      case 'cadastrar': return await cadastrar(email, String(body.senha ?? ''), dadosDoCadastro(body.dados));
       default: return json(400, { erro: 'Ação desconhecida.' });
     }
   } catch (e) {
-    return json(500, { erro: e instanceof Error ? e.message : 'Erro inesperado no servidor.' });
+    // Detalhe técnico só no registro do servidor; quem chamou recebe uma mensagem genérica.
+    console.error('acesso', e);
+    return json(500, { erro: 'Não foi possível concluir agora. Tente de novo em instantes.' });
   }
 });

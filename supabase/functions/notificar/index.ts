@@ -109,6 +109,20 @@ async function contaAlterada(perfil: Perfil | null, body: Record<string, unknown
   return json(200, { ok: true, enviado: true });
 }
 
+/**
+ * O relatório vem pronto do app: tira o que um e-mail nunca precisa e que serviria para golpe (scripts, formulários,
+ * janelas embutidas, eventos e links javascript:). Os relatórios do EasyAudit não usam nada disso.
+ */
+function limparHtml(html: string) {
+  const PERIGOSAS = 'script|iframe|object|embed|form|frame|frameset|applet|base|meta|link';
+  return html
+    // o bloco inteiro (abre … fecha) e depois qualquer tag dessas que tenha sobrado sozinha
+    .replace(new RegExp(`<\\s*(${PERIGOSAS})\\b[^>]*>[\\s\\S]*?<\\s*\\/\\s*\\1\\s*>`, 'gi'), '')
+    .replace(new RegExp(`<\\s*\\/?\\s*(${PERIGOSAS})\\b[^>]*>`, 'gi'), '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src|action|formaction)\s*=\s*(["']?)\s*(javascript|vbscript):[^"'\s>]*\2/gi, '$1="#"');
+}
+
 async function relatorio(user: User, perfil: Perfil | null, body: Record<string, unknown>) {
   const modulo = body.modulo === 'auditoria' ? 'auditoria' : 'afericoes';
   const pode = perfil?.ativo && (perfil.papel === 'admin' || (perfil.modulos ?? []).includes(modulo));
@@ -120,8 +134,12 @@ async function relatorio(user: User, perfil: Perfil | null, body: Record<string,
   if (!para.length || para.length > 10 || !para.every(e => EMAIL_RE.test(e))) {
     return json(400, { erro: 'Informe de 1 a 10 e-mails válidos.' });
   }
-  const html = typeof body.html === 'string' ? body.html : '';
-  if (!html || html.length > 2_000_000) return json(400, { erro: 'Relatório inválido.' });
+  const bruto = typeof body.html === 'string' ? body.html : '';
+  if (!bruto || bruto.length > 2_000_000) return json(400, { erro: 'Relatório inválido.' });
+  const html = limparHtml(bruto);
+  // Limite por conta: 40 destinatários por hora (o remetente é o do EasyAudit; evita uso para envio em massa).
+  const { data: usados, error: eLim } = await admin.rpc('contar_uso', { p_chave: `relatorio:${user.id}`, p_minutos: 60, p_inc: para.length });
+  if (!eLim && Number(usados) > 40) return json(429, { erro: 'Limite de envios por hora atingido. Tente de novo mais tarde.' });
   const pdf = typeof body.pdf_base64 === 'string' ? body.pdf_base64 : '';
   if (pdf.length > 12_000_000) return json(413, { erro: 'O PDF é grande demais para enviar por e-mail.' });
 

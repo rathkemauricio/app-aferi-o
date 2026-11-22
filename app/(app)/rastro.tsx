@@ -109,7 +109,9 @@ export default function RastroScreen() {
     else if (acao !== 'todas') q = q.eq('acao', acao);
     if (termo) {
       const x = termo.replace(/[%,()*]/g, ' ');
-      q = q.or(`usuario_nome.ilike.%${x}%,usuario_email.ilike.%${x}%,alvo.ilike.%${x}%,filial.ilike.%${x}%`);
+      // Texto da busca vai para o filtro do PostgREST: tira os caracteres que mudariam o filtro (vírgula, parênteses, aspas, curingas).
+      const y = x.replace(/[,()"'\%*:]/g, ' ').trim();
+      if (y) q = q.or(`usuario_nome.ilike.%${y}%,usuario_email.ilike.%${y}%,alvo.ilike.%${y}%,filial.ilike.%${y}%`);
     }
     const { data, error } = await q;
     if (g !== geracao.current) return; // chegou outro filtro enquanto este carregava

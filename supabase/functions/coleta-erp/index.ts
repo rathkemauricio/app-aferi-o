@@ -109,9 +109,11 @@ async function gravarBarras(body: { filial_id: string; arquivo: string; itens: I
 
 /** Lote de páginas de um PDF enviado ao bucket coleta-arquivos (o app monta a base a partir dos textos). */
 const BUCKET = 'coleta-arquivos';
-async function extrairPdf(body: { caminho: string; de: number; ate: number }) {
+async function extrairPdf(body: { caminho: string; de: number; ate: number }, emp: string) {
   const caminho = String(body.caminho ?? '');
-  if (!/^(barras|arqueacao)\/[\w.-]+\.pdf$/.test(caminho)) return json(400, { erro: 'Arquivo inválido.' });
+  // Só PDFs da própria rede: barras/<empresa>/… ou arqueacao/<empresa>/…
+  const [pasta, empresa, arquivo, ...resto] = caminho.split('/');
+  if (!['barras', 'arqueacao'].includes(pasta) || empresa !== emp || !/^[\w.-]+\.pdf$/.test(arquivo ?? '') || resto.length) return json(400, { erro: 'Arquivo inválido.' });
   const { data, error } = await admin.storage.from(BUCKET).download(caminho);
   if (error || !data) return json(400, { erro: 'O PDF enviado não foi encontrado no servidor. Tente importar de novo.' });
   const de = Math.max(1, Math.floor(Number(body.de) || 1));
@@ -294,7 +296,7 @@ Deno.serve(async req => {
       case 'carregar': return await registrar(await carregar(body, emp));
       case 'gravar_barras': return await registrar(await gravarBarras(body, emp));
       case 'associar_ean': return await registrar(await associarEan(body, emp));
-      case 'extrair_pdf': return await extrairPdf(body);
+      case 'extrair_pdf': return await extrairPdf(body, emp);
       case 'enviar_resultado': return await registrar(await enviarResultado(body, emp));
       default: return json(400, { erro: 'Ação desconhecida.' });
     }

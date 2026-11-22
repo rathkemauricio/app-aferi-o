@@ -1,3 +1,4 @@
+import { empresaAtual } from '../../lib/auth';
 import { Platform } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { chamar } from './store';
@@ -116,7 +117,10 @@ async function lerArquivoBase64(uri: string) {
 async function lerNoServidor(uri: string, progresso?: Progresso, pasta: 'barras' | 'arqueacao' = 'barras') {
   if (!supabase) throw new Error('O app está em modo local: a importação precisa do servidor.');
   progresso?.('Enviando o PDF ao servidor…');
-  const caminho = `${pasta}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.pdf`;
+  // A 2ª pasta é a empresa: o servidor só deixa cada rede enviar, ler e apagar os PDFs dela.
+  const empresa = empresaAtual();
+  if (!empresa) throw new Error('Entre de novo no EasyAudit para importar o PDF.');
+  const caminho = `${pasta}/${empresa}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.pdf`;
   const { error } = await supabase.storage.from(BUCKET).upload(caminho, base64ParaBytes(await lerArquivoBase64(uri)), { contentType: 'application/pdf', upsert: false });
   if (error) throw new Error(`Não foi possível enviar o PDF: ${error.message}`);
   try {
