@@ -81,7 +81,7 @@ function Marca() {
 }
 
 /** Topo do site: marca, menu central em maiúsculas pequenas e, à direita, Entrar e Começar agora (uma linha). */
-export function SiteNav({ onPlanos, onSetores }: { onPlanos?: () => void; onSetores?: () => void }) {
+export function SiteNav({ onPosto, onTelas }: { onPosto?: () => void; onTelas?: () => void }) {
   const { desktop } = useSite();
   const router = useRouter();
   const link = (rotulo: string, onPress: () => void) => (
@@ -96,8 +96,8 @@ export function SiteNav({ onPlanos, onSetores }: { onPlanos?: () => void; onSeto
         {desktop ? (
           <View style={st.navCentro}>
             {link('COMO FUNCIONA', () => router.push(ROTA_ENTENDER))}
-            {link('SETORES', onSetores ?? (() => router.push('/inicio')))}
-            {link('PLANOS', onPlanos ?? (() => router.push('/inicio')))}
+            {link('NO POSTO', onPosto ?? (() => router.push('/inicio')))}
+            {link('TELAS', onTelas ?? (() => router.push('/inicio')))}
           </View>
         ) : null}
         <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>

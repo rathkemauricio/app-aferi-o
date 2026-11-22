@@ -9,20 +9,22 @@ import { CheckIcon, XIcon } from '../ui/icons';
 const C = SITE_CORES;
 
 const E_PARA = [
-  'Você tem várias unidades (postos, lojas, fábricas ou depósitos) e quer o mesmo padrão em todas.',
-  'A equipe ainda preenche formulários em papel ou planilhas que cada um faz de um jeito.',
+  'Você cuida de uma rede de postos de combustível e quer o mesmo padrão em todas as filiais.',
+  'A aferição, a medição dos tanques e as contagens ainda são feitas em papel ou em planilhas que cada um faz de um jeito.',
   'Você precisa saber quem fez cada verificação, quando, e o que ficou pendente.',
   'O relatório demora dias para chegar a quem decide.',
 ];
 const AINDA_NAO = [
-  'Você tem uma unidade só e poucas verificações por mês.',
-  'Você procura um sistema de gestão completo (vendas, fiscal, financeiro). O EasyAudit cuida da operação em campo.',
+  'Você tem um posto só e poucas verificações por mês.',
+  'Você procura um sistema de gestão completo (PDV, fiscal, financeiro). O EasyAudit cuida da auditoria e da operação na pista.',
+  'A sua empresa não é um posto de combustível. Por enquanto, o EasyAudit é feito só para postos.',
 ];
 
 const PERGUNTAS: [string, string][] = [
+  ['Serve para outros tipos de empresa?', 'Por enquanto, não. O EasyAudit é feito para redes de postos de combustível: pista, tanques, conveniência e a auditoria da operação.'],
   ['Funciona sem internet?', 'Sim. Os registros ficam guardados no celular e são enviados quando o sinal volta.'],
   ['Precisa instalar alguma coisa?', 'A equipe usa o app no celular Android. O painel abre no navegador do computador, sem instalar nada.'],
-  ['Quanto custa?', 'Depende do número de contas e dos módulos. Os planos estão na página inicial; o preço é combinado com a gente.'],
+  ['Quanto custa?', 'Depende do número de contas e dos módulos que a rede vai usar. O preço é combinado com a gente.'],
   ['Quem vê os dados?', 'Só as contas da sua empresa. E cada pessoa vê só os módulos liberados para ela.'],
   ['Como eu começo?', 'Toque em Começar agora, cadastre a empresa e confirme o e-mail. Quando a empresa for liberada, você recebe um aviso e convida a equipe.'],
 ];
@@ -55,7 +57,7 @@ function Pagina() {
       <ScrollView>
         {/* Abertura */}
         <Faixa style={s.topo}>
-          <Revela><Text style={s.h1} accessibilityRole="header">{'O EasyAudit é para a\\nsua operação?'}</Text></Revela>
+          <Revela><Text style={s.h1} accessibilityRole="header">{'O EasyAudit é para a\nsua rede de postos?'}</Text></Revela>
           <Revela atraso={80}><Text style={s.sub}>Veja como a equipe trabalha no celular, o que você acompanha no painel e o que recebe no fim de cada visita.</Text></Revela>
         </Faixa>
 
@@ -87,8 +89,8 @@ function Pagina() {
 
         {/* Passo 1: painel */}
         <Faixa style={s.secao}>
-          <Revela><Text style={s.passo}>1. Você cadastra as unidades e a equipe</Text></Revela>
-          <Revela atraso={60}><Text style={s.corpo}>No painel web você cadastra as unidades, importa as tabelas e convida cada pessoa por e-mail, escolhendo os módulos que ela vai usar.</Text></Revela>
+          <Revela><Text style={s.passo}>1. Você cadastra os postos e a equipe</Text></Revela>
+          <Revela atraso={60}><Text style={s.corpo}>No painel web você cadastra os postos, importa as tabelas de arqueação dos tanques e convida cada pessoa por e-mail, escolhendo os módulos que ela vai usar.</Text></Revela>
           <Revela atraso={120} style={{ marginTop: 24 }}>
             <View style={s.janela}>
               <View style={{ width: '100%', aspectRatio: 2160 / 1350 }}><Image source={require('../assets/site/painel-tanques.jpg')} style={st.preenche} resizeMode="cover"
@@ -102,7 +104,7 @@ function Pagina() {
         <Faixa style={[s.secao, desktop && { flexDirection: 'row', alignItems: 'center', gap: 56 }]}>
           <View style={{ flex: desktop ? 1 : undefined, gap: 12 }}>
             <Revela><Text style={s.passo}>2. A equipe faz as verificações no celular</Text></Revela>
-            <Revela atraso={60}><Text style={s.corpo}>Telas feitas para o pátio: a pessoa mede o tanque arrastando o nível, afere cada bico com a medida-padrão e marca o que está conforme. Funciona mesmo sem sinal.</Text></Revela>
+            <Revela atraso={60}><Text style={s.corpo}>Telas feitas para a pista: a pessoa mede o tanque arrastando o nível, afere cada bico com a medida-padrão e marca o que está conforme. Funciona mesmo sem sinal.</Text></Revela>
             <Revela atraso={100}><Text style={[s.passo, { marginTop: 24 }]}>3. Cada registro sai com nome e horário</Text></Revela>
             <Revela atraso={140}><Text style={s.corpo}>Ninguém digita nada de novo depois: o que foi feito no celular já está no painel, com quem fez e quando.</Text></Revela>
           </View>
@@ -130,7 +132,7 @@ function Pagina() {
         {/* Módulos */}
         <Faixa style={s.secao}>
           <Revela><Text style={s.h2} accessibilityRole="header">Os módulos</Text></Revela>
-          <Revela atraso={60}><Text style={s.corpo}>A empresa usa os módulos do plano; cada pessoa, só os que você liberar.</Text></Revela>
+          <Revela atraso={60}><Text style={s.corpo}>A rede usa os módulos combinados; cada pessoa, só os que você liberar.</Text></Revela>
           <View style={[s.modulos, desktop && { flexDirection: 'row', flexWrap: 'wrap' }]}>
             {MODULES.map((m, i) => (
               <Revela key={m.id} atraso={(i % 3) * 70} style={desktop ? { width: '33.33%' } : undefined}>

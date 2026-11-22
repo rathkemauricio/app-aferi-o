@@ -12,10 +12,10 @@ const W = 560, H = 440;
 const MENTA = '#3cbf83', AMBAR = '#b26a00', VERMELHO = '#d93b30';
 
 const ATOS = [
-  { titulo: 'Papel demais.', texto: 'Formulários impressos a cada visita. Viram pilha no arquivo e, um dia, vão para o lixo.' },
-  { titulo: 'Planilhas que não conversam.', texto: 'Cada unidade com a sua versão, cada pessoa com o seu jeito. Na hora de decidir, ninguém sabe qual é a certa.' },
-  { titulo: 'Ação que não sai do lugar.', texto: 'O problema aparece na operação, mas só vira ação dias depois, quando alguém digita tudo de novo.' },
-  { titulo: 'Com o EasyAudit, tudo nasce digital.', texto: 'Checklists, contagens e medições feitos no celular, com quem fez e quando. O relatório sai na hora, e a ação também.' },
+  { titulo: 'Papel demais.', texto: 'Aferição, checklist e contagem impressos a cada visita ao posto. Viram pilha no arquivo e, um dia, vão para o lixo.' },
+  { titulo: 'Planilhas que não conversam.', texto: 'Cada posto com a sua versão, cada auditor com o seu jeito. Na hora de fechar a sobra e a falta, ninguém sabe qual é a certa.' },
+  { titulo: 'Ação que não sai do lugar.', texto: 'O problema aparece na pista, mas só vira ação dias depois, quando alguém digita tudo de novo.' },
+  { titulo: 'Com o EasyAudit, tudo nasce digital.', texto: 'Aferições, medições de tanque e contagens feitas no celular, com quem fez e quando. O relatório sai na hora, e a ação também.' },
 ];
 
 /* ---------- Ato 1: a pilha cresce e vai para o lixo ---------- */

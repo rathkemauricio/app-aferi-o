@@ -1,24 +1,28 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeInDown, useReducedMotion } from 'react-native-reanimated';
-import { isStrongPassword, PASSWORD_RULES, traduzirErro } from '../components/AuthScreen';
-import { BotaoSite, CTA_COMECAR, Faixa, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
+import { isStrongPassword, PASSWORD_RULES } from '../components/AuthScreen';
+import { BotaoSite, Faixa, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
 import { pedirAcesso } from '../lib/acesso';
 import { emailValido } from '../lib/email';
 import { supabase } from '../lib/supabase';
-import { MODULES } from '../modules/registry';
-import { CheckCircleIcon, CheckIcon, EnvelopeIcon, WarningCircleIcon } from '../ui/icons';
+import { CheckCircleIcon, EnvelopeIcon, WarningCircleIcon } from '../ui/icons';
 import { Field } from '../ui/kit';
 import type { ThemeColors } from '../ui/theme';
 
-type Plano = { id: string; nome: string; preco_mensal: number | null; limite_contas: number; modulos: string[]; ordem: number };
 const EASE = Easing.bezier(0.23, 1, 0.32, 1);
-const preco = (v: number | null) => (v === null ? 'Sob consulta' : `${v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}/mês`);
-const nomeModulo = (id: string) => MODULES.find(m => m.id === id)?.name ?? id;
+
+/** O que acontece depois do cadastro (o plano e os módulos são combinados na liberação). */
+const PASSOS = [
+  'Confirme o e-mail pelo link que enviamos.',
+  'Entre com o e-mail e a senha: a rede fica aguardando a liberação.',
+  'Quando a rede for liberada, você recebe um aviso e convida a equipe.',
+];
 
 /**
- * Cadastro da empresa pelo site: dados da empresa, plano e o acesso do administrador.
+ * Cadastro da rede pelo site: dados da empresa e o acesso do administrador (sem escolha de plano: o servidor usa o
+ * plano padrão e o dono do EasyAudit ajusta contas e módulos ao liberar).
  * Cria a conta (com confirmação por e-mail) e guarda os dados da empresa na própria conta; no primeiro acesso,
  * a empresa é criada aguardando a liberação do dono do EasyAudit (função "empresas", ação "criar").
  */
@@ -28,34 +32,20 @@ export default function Comecar() {
 
 function Formulario() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ plano?: string }>();
   const { c: colors, desktop } = useSite();
   const s = useMemo(() => estilos(colors, desktop), [colors, desktop]);
   const reduz = useReducedMotion();
 
-  const [planos, setPlanos] = useState<Plano[] | null>(null);
-  const [plano, setPlano] = useState(params.plano ?? '');
   const [f, setF] = useState({ empresa: '', documento: '', telefone: '', nome: '', email: '', senha: '' });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [enviadoPara, setEnviadoPara] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!supabase) return;
-    void supabase.from('planos').select('id,nome,preco_mensal,limite_contas,modulos,ordem').eq('ativo', true).order('ordem').then(({ data }) => {
-      const lista = (data ?? []) as Plano[];
-      setPlanos(lista);
-      setPlano(p => (lista.some(x => x.id === p) ? p : lista.find(x => x.ordem === 2)?.id ?? lista[0]?.id ?? ''));
-    });
-  }, []);
-  const escolhido = planos?.find(p => p.id === plano) ?? null;
   const campo = (k: keyof typeof f) => (v: string) => { setF(x => ({ ...x, [k]: v })); setErro(''); };
 
   const enviar = async () => {
     if (!supabase || enviando) return;
     const email = f.email.trim().toLowerCase();
     if (f.empresa.trim().length < 2) { setErro('Informe o nome da empresa.'); return; }
-    if (!escolhido) { setErro('Escolha um plano.'); return; }
     if (!f.nome.trim()) { setErro('Informe o seu nome (aparece nos registros e relatórios).'); return; }
     if (!emailValido(email)) { setErro('Confira o e-mail digitado.'); return; }
     if (!isStrongPassword(f.senha)) { setErro(`A senha precisa ter: ${PASSWORD_RULES.filter(r => !r.test(f.senha)).map(r => r.label.toLowerCase()).join(', ')}.`); return; }
@@ -64,7 +54,7 @@ function Formulario() {
       // Pelo servidor: o e-mail de confirmação sai no layout do EasyAudit, com o link na web.
       const erro = await pedirAcesso({
         acao: 'cadastrar', senha: f.senha,
-        dados: { nome: f.nome.trim(), empresa_pendente: { nome: f.empresa.trim(), documento: f.documento.trim(), telefone: f.telefone.trim(), plano_id: escolhido.id } },
+        dados: { nome: f.nome.trim(), empresa_pendente: { nome: f.empresa.trim(), documento: f.documento.trim(), telefone: f.telefone.trim() } },
       }, email);
       if (erro) { setErro(erro); return; }
       setEnviadoPara(email);
@@ -103,7 +93,7 @@ function Formulario() {
         <Faixa style={s.pagina}>
           <Animated.View entering={reduz ? undefined : FadeInDown.duration(380).easing(EASE)} style={s.form}>
             <Text style={s.h1} accessibilityRole="header">Comece agora</Text>
-            <Text style={s.corpo}>Cadastre a sua empresa no EasyAudit. Você vira o administrador e convida a sua equipe depois da liberação.</Text>
+            <Text style={s.corpo}>Cadastre a sua rede de postos no EasyAudit. Você vira o administrador e convida a sua equipe depois da liberação.</Text>
 
             <Text style={s.grupo}>Empresa</Text>
             <Field label="Nome da empresa" value={f.empresa} onChangeText={campo('empresa')} placeholder="Ex.: Rede de Postos Horizonte" maxLength={120} />
@@ -111,26 +101,6 @@ function Formulario() {
               <View style={{ flex: 1 }}><Field label="CNPJ (opcional)" value={f.documento} onChangeText={campo('documento')} keyboardType="numbers-and-punctuation" maxLength={30} /></View>
               <View style={{ flex: 1 }}><Field label="Telefone (opcional)" value={f.telefone} onChangeText={campo('telefone')} keyboardType="phone-pad" maxLength={30} /></View>
             </View>
-
-            <Text style={s.grupo}>Plano</Text>
-            {!planos ? <ActivityIndicator color={colors.accent} style={{ alignSelf: 'flex-start' }} /> : (
-              <View style={{ gap: 8 }} accessibilityRole="radiogroup">
-                {planos.map(p => {
-                  const on = p.id === plano;
-                  return (
-                    <Pressable key={p.id} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => setPlano(p.id)}
-                      style={({ pressed }) => [s.opcao, { borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.accentSoft : colors.surface }, pressed && { transform: [{ scale: 0.99 }] }]}>
-                      <View style={[s.radio, { borderColor: on ? colors.accent : colors.borderStrong }]}>{on ? <View style={[s.radioMiolo, { backgroundColor: colors.accent }]} /> : null}</View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.opcaoNome, on && { color: colors.accentText }]}>{p.nome}</Text>
-                        <Text style={s.opcaoInfo}>Até {p.limite_contas} contas · {p.modulos.length} módulos</Text>
-                      </View>
-                      {p.preco_mensal !== null ? <Text style={[s.opcaoPreco, on && { color: colors.accentText }]}>{preco(p.preco_mensal)}</Text> : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
 
             <Text style={s.grupo}>Seu acesso de administrador</Text>
             <Field label="Seu nome" value={f.nome} onChangeText={campo('nome')} placeholder="Como aparece nos registros e relatórios" maxLength={80} autoComplete="name" />
@@ -150,26 +120,22 @@ function Formulario() {
             </Pressable>
           </Animated.View>
 
-          {/* Resumo do plano escolhido. */}
-          {escolhido ? (
-            <View style={[s.resumo, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={s.resumoTitulo}>Plano {escolhido.nome}</Text>
-              <Text style={s.resumoPreco}>{escolhido.preco_mensal === null ? `${escolhido.limite_contas} contas` : preco(escolhido.preco_mensal)}</Text>
-              <Text style={s.corpo}>{escolhido.preco_mensal === null ? 'Preço sob consulta. ' : `Até ${escolhido.limite_contas} contas ativas. `}Contas inativas não contam.</Text>
-              <View style={{ gap: 8, marginTop: 6 }}>
-                {escolhido.modulos.map(id => (
-                  <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <CheckIcon size={15} color={colors.accent} weight="bold" />
-                    <Text style={s.resumoItem}>{nomeModulo(id)}</Text>
-                  </View>
-                ))}
-              </View>
-              <View style={[s.nota, { borderTopColor: colors.border }]}>
-                <CheckCircleIcon size={18} color={colors.success} weight="duotone" />
-                <Text style={[s.corpo, { flex: 1, fontSize: 13.5, lineHeight: 20 }]}>Sem cobrança automática: a empresa é liberada pelo EasyAudit e o plano pode mudar depois.</Text>
-              </View>
+          {/* O que acontece depois do cadastro. */}
+          <View style={[s.resumo, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={s.resumoTitulo}>Depois do cadastro</Text>
+            <View style={{ gap: 12, marginTop: 6 }}>
+              {PASSOS.map((p, i) => (
+                <View key={p} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                  <View style={[s.passoNum, { backgroundColor: colors.accentSoft }]}><Text style={[s.passoNumTxt, { color: colors.accentText }]}>{i + 1}</Text></View>
+                  <Text style={[s.resumoItem, { flex: 1 }]}>{p}</Text>
+                </View>
+              ))}
             </View>
-          ) : null}
+            <View style={[s.nota, { borderTopColor: colors.border }]}>
+              <CheckCircleIcon size={18} color={colors.success} weight="duotone" />
+              <Text style={[s.corpo, { flex: 1, fontSize: 13.5, lineHeight: 20 }]}>Sem cobrança automática: o número de contas e os módulos são combinados com a gente na liberação.</Text>
+            </View>
+          </View>
         </Faixa>
         <SiteFooter />
       </ScrollView>
@@ -184,17 +150,12 @@ const estilos = (c: ThemeColors, desktop: boolean) => StyleSheet.create({
   corpo: { color: c.textMuted, fontSize: 15.5, lineHeight: 23 },
   grupo: { color: c.text, fontSize: 16, fontWeight: '800', marginTop: 18 },
   linha: { flexDirection: 'row', gap: 12 },
-  opcao: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  radioMiolo: { width: 10, height: 10, borderRadius: 5 },
-  opcaoNome: { color: c.text, fontSize: 15, fontWeight: '800' },
-  opcaoInfo: { color: c.textMuted, fontSize: 13 },
-  opcaoPreco: { color: c.text, fontSize: 14, fontWeight: '700' },
   erro: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12 },
   resumo: { width: desktop ? 360 : '100%', borderRadius: 20, borderWidth: 1, padding: 24, gap: 6, marginTop: desktop ? 96 : 0 },
   resumoTitulo: { color: c.text, fontSize: 15, fontWeight: '800' },
-  resumoPreco: { color: c.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
-  resumoItem: { color: c.text, fontSize: 14.5 },
+  resumoItem: { color: c.text, fontSize: 14.5, lineHeight: 21 },
+  passoNum: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  passoNumTxt: { fontSize: 13, fontWeight: '800' },
   nota: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', borderTopWidth: 1, paddingTop: 14, marginTop: 12 },
   selo: { width: 64, height: 64, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
 });
