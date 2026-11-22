@@ -111,7 +111,7 @@ function Rede({ t }: { t: SharedValue<number> }) {
 
 type Area = { nome: string; texto: string; usa: string[]; cena: (props: { t: SharedValue<number> }) => React.ReactNode; ms: number };
 const AREAS: Area[] = [
-  { nome: 'Pista', texto: 'Aferição de bombas e bicos com a medida-padrão, bico por bico, e o croqui de cada posto.', usa: ['Aferições', 'Croqui'], cena: Pista, ms: 2600 },
+  { nome: 'Pista', texto: 'Aferição de bombas e bicos com a medida-padrão, bico por bico, com o resultado de cada um no relatório.', usa: ['Aferições'], cena: Pista, ms: 2600 },
   { nome: 'Tanques', texto: 'Medição pela régua com a tabela de arqueação, venda e recebimento: sobra ou falta na hora.', usa: ['Conferência de Estoque'], cena: Tanques, ms: 3400 },
   { nome: 'Loja de conveniência', texto: 'Contagem de estoque com coletor de código de barras, até 3 contagens e relatório de divergências.', usa: ['Contagens', 'Inventários'], cena: Conveniencia, ms: 2400 },
   { nome: 'Equipe', texto: 'Cronometragem dos atendimentos e dimensionamento da equipe de cada posto.', usa: ['Tempos e Movimentos'], cena: Equipe, ms: 3600 },

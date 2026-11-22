@@ -2,6 +2,7 @@ import { type Href, useRouter } from 'expo-router';
 import { type ReactNode, useContext, useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import { MODULES } from '../../modules/registry';
 import { Logo } from '../Logo';
 import { color, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { useTela } from '../../ui/zoom';
@@ -28,6 +29,11 @@ export const SITE_CORES: ThemeColors = {
 };
 /** Verde-menta da marca (só preenchimentos: checks, níveis, linhas de progresso). */
 export const MENTA = '#5fd39a';
+
+/** Módulos que não aparecem no site público (o Croqui é privado). */
+const MODULOS_PRIVADOS = ['croqui'];
+/** Módulos mostrados no site (lista e contagem). */
+export const MODULOS_SITE = MODULES.filter(m => !MODULOS_PRIVADOS.includes(m.id));
 
 export function SiteTema({ children }: { children: ReactNode }) {
   const ctx = useContext(ThemeContext);

@@ -3,7 +3,7 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, type SharedValue, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { ArchiveIcon, BarcodeIcon, ClipboardTextIcon, GasPumpIcon, HourglassIcon, type Icon, RulerIcon, ShieldWarningIcon } from '../../ui/icons';
 import { Palco, useEmVista } from './motion';
-import { SITE_CORES } from './SiteChrome';
+import { MODULOS_SITE, SITE_CORES } from './SiteChrome';
 
 // Visual da abertura (600 × 560 lógicos): um arco com os módulos do sistema girando devagar sobre ele e,
 // no centro, o print real da medição de tanques no celular. Fatos (sem números inventados) na lateral.
@@ -56,7 +56,7 @@ export function HeroOrbita() {
 
 /** Fatos do produto, em coluna (no celular, em linha abaixo do visual). */
 export const FATOS: [string, string][] = [
-  ['9 módulos', 'num só app'],
+  [`${MODULOS_SITE.length} módulos`, 'num só app'],
   ['Sem internet', 'envia quando o sinal volta'],
   ['Android e web', 'celular e computador'],
 ];

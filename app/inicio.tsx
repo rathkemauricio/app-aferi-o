@@ -1,54 +1,17 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, useAnimatedRef, useAnimatedScrollHandler, useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { AreasDoPosto } from '../components/site/AreasDoPosto';
 import { Fatos, HeroOrbita } from '../components/site/HeroOrbita';
 import { Historia } from '../components/site/Historia';
-import { EASE, Revela, useEmVista } from '../components/site/motion';
+import { EASE, Revela } from '../components/site/motion';
 import { BotaoSite, CTA_COMECAR, CTA_ENTENDER, Faixa, MENTA, ROTA_COMECAR, ROTA_ENTENDER, SITE_CORES, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
 import { Telas } from '../components/site/Telas';
-import { COMBUSTIVEIS_PADRAO } from '../lib/combustiveis';
-import { CroquiCanvas } from '../modules/croqui/Canvas';
-import { type BombaCadastro, layoutInicial, PALETA_CLARA, tipoDoCombustivel } from '../modules/croqui/model';
 import { CheckIcon } from '../ui/icons';
 
+// O módulo Croqui é privado: não aparece no site (nem texto, nem demonstração, nem nos prints).
 const C = SITE_CORES;
-
-/* ---------- Croqui real com a aferição avançando bomba a bomba ---------- */
-const BOMBAS: BombaCadastro[] = [
-  ['Gasolina comum', 'Gasolina aditivada', 'Etanol', 'Gasolina comum'], ['Gasolina comum', 'Etanol'], ['Diesel S10', 'Diesel S10', 'Diesel S500'],
-  ['Gasolina comum', 'Gasolina aditivada', 'Etanol', 'Gasolina comum'], ['Diesel S10', 'Diesel S500'], ['Gasolina comum', 'Etanol'],
-].map((fuels, i) => ({ id: `ex-${i + 1}`, number: `Bomba 0${i + 1}`, nozzles: fuels.map((f, j) => ({ id: `ex-${i + 1}-${j}`, number: String(i * 4 + j + 1).padStart(2, '0'), fuel: f })) }));
-// Sequência da visita: bomba em andamento (amarelo), aferida (verde) e uma com não conformidade (vermelho).
-const PASSOS = 14;
-function corNoPasso(i: number, passo: number) {
-  const feita = passo >= i * 2 + 2, andando = passo === i * 2 || passo === i * 2 + 1;
-  if (feita) return i === 4 ? '#dc2626' : '#16a34a';
-  return andando ? '#d97706' : undefined;
-}
-function CroquiAoVivo() {
-  const reduz = useReducedMotion();
-  const { ref, visto } = useEmVista(false, '0px');
-  const [passo, setPasso] = useState(reduz ? PASSOS - 1 : 0);
-  useEffect(() => {
-    if (reduz || !visto) return;
-    const id = setInterval(() => setPasso(x => (x + 1) % PASSOS), 750);
-    return () => clearInterval(id);
-  }, [reduz, visto]);
-  const items = useMemo(() => layoutInicial(BOMBAS, nome => tipoDoCombustivel(nome, COMBUSTIVEIS_PADRAO)), []);
-  const destaques = useMemo(() => {
-    const d: Record<string, string> = {};
-    items.forEach(it => { const i = BOMBAS.findIndex(b => b.id === it.ref); const cor = i >= 0 ? corNoPasso(i, passo) : undefined; if (cor) d[it.id] = cor; });
-    return d;
-  }, [items, passo]);
-  const paleta = useMemo(() => ({ ...PALETA_CLARA, accent: C.accent }), []);
-  return (
-    <View ref={ref} style={st.moldura}>
-      <CroquiCanvas items={items} bandeira="branca" mostrarNomes={false} paleta={paleta} destaques={destaques} enquadrar />
-    </View>
-  );
-}
 
 const MUDA = [
   'Cada aferição, medição e contagem com o nome de quem fez e o horário.',
@@ -118,15 +81,6 @@ function Pagina() {
           <Revela atraso={120} style={{ marginTop: 24 }}><Telas desktop={desktop} /></Revela>
         </Faixa></View>
 
-        {/* Ao vivo: o croqui de verdade do sistema */}
-        <Faixa style={[s.secao, desktop && { flexDirection: 'row', alignItems: 'center', gap: 56 }]}>
-          <View style={{ flex: desktop ? 0.8 : undefined, gap: 14 }}>
-            <Revela><Text style={s.h2} accessibilityRole="header">Acompanhe enquanto a equipe trabalha.</Text></Revela>
-            <Revela atraso={80}><Text style={s.corpo}>O contorno de cada bomba muda de cor conforme a aferição avança: amarelo em andamento, verde aferida, vermelho com não conformidade. É o croqui de verdade do sistema.</Text></Revela>
-          </View>
-          <Revela atraso={120} style={{ flex: desktop ? 1.2 : undefined, marginTop: desktop ? 0 : 24 }}><CroquiAoVivo /></Revela>
-        </Faixa>
-
         {/* O que muda */}
         <Faixa style={s.secao}>
           <Revela><Text style={s.h2} accessibilityRole="header">O que muda no dia seguinte.</Text></Revela>
@@ -159,10 +113,6 @@ function Pagina() {
     </View>
   );
 }
-
-const st = StyleSheet.create({
-  moldura: { borderRadius: 18, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, padding: 12 },
-});
 
 const estilos = (desktop: boolean) => StyleSheet.create({
   hero: { flexDirection: desktop ? 'row' : 'column', alignItems: 'center', gap: desktop ? 24 : 24, paddingTop: desktop ? 56 : 32, paddingBottom: desktop ? 40 : 16 },

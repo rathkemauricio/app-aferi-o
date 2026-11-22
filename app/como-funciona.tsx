@@ -2,8 +2,7 @@ import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Image, type ImageSourcePropType, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Revela } from '../components/site/motion';
-import { BotaoSite, CTA_COMECAR, Faixa, MENTA, ROTA_COMECAR, SITE_CORES, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
-import { MODULES } from '../modules/registry';
+import { BotaoSite, CTA_COMECAR, Faixa, MENTA, MODULOS_SITE, ROTA_COMECAR, SITE_CORES, SiteFooter, SiteNav, SiteTema, useSite } from '../components/site/SiteChrome';
 import { CheckIcon, XIcon } from '../ui/icons';
 
 const C = SITE_CORES;
@@ -134,7 +133,7 @@ function Pagina() {
           <Revela><Text style={s.h2} accessibilityRole="header">Os módulos</Text></Revela>
           <Revela atraso={60}><Text style={s.corpo}>A rede usa os módulos combinados; cada pessoa, só os que você liberar.</Text></Revela>
           <View style={[s.modulos, desktop && { flexDirection: 'row', flexWrap: 'wrap' }]}>
-            {MODULES.map((m, i) => (
+            {MODULOS_SITE.map((m, i) => (
               <Revela key={m.id} atraso={(i % 3) * 70} style={desktop ? { width: '33.33%' } : undefined}>
                 <View style={s.modulo}>
                   <View style={s.moduloIcone}><m.icon size={20} color={C.text} weight="duotone" /></View>
