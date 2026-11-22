@@ -1,11 +1,11 @@
 // Empresas (clientes do EasyAudit): cadastro pelo site e painel do dono da plataforma.
 //
 // Chamada do app (supabase.functions.invoke('empresas', { body })), com o JWT de quem está logado:
-//   { acao: 'criar', nome?, documento?, telefone?, plano_id?, tipo? }
-//        conta sem empresa cria a própria empresa e vira administradora dela. tipo 'posto' (cadastro do próprio
-//        posto pelo app): a empresa já nasce ativa, com os módulos vazios. Sem tipo (cadastro da rede pelo site):
-//        fica aguardando a liberação do dono. Sem os campos, usa os dados guardados no cadastro do site
-//        (user_metadata.empresa_pendente). → { ok, empresa_id }
+//   { acao: 'criar', nome?, documento?, telefone?, plano_id? }
+//        conta sem empresa cria a própria empresa (o posto, pelo app, ou a rede, pelo site) e vira administradora
+//        dela. A empresa já nasce ativa, com todos os módulos (vazios) e o limite de contas do plano (padrão:
+//        essencial); o dono ajusta depois em Empresas e planos. Sem os campos, usa os dados guardados no cadastro
+//        do site (user_metadata.empresa_pendente). → { ok, empresa_id }
 //   Conta sem empresa, para entrar numa rede que já usa o EasyAudit (só pede; quem libera é o administrador dela):
 //   { acao: 'redes' }                  → { ok, redes: [{ id, nome }], pedido: { id, empresa_id, empresa_nome, status, created_at } | null }
 //   { acao: 'pedir_acesso', empresa_id } → { ok }   (um pedido aberto por conta: pedir outra rede cancela o anterior)
@@ -39,7 +39,7 @@ const MODULOS = ['afericoes', 'tempos', 'croqui', 'auditoria', 'riscos', 'invent
 const texto = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const soModulos = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map(String).filter(m => MODULOS.includes(m)))] : null);
 
-type Pedido = { nome?: unknown; documento?: unknown; telefone?: unknown; plano_id?: unknown; tipo?: unknown };
+type Pedido = { nome?: unknown; documento?: unknown; telefone?: unknown; plano_id?: unknown };
 type Conta = NonNullable<Awaited<ReturnType<typeof contaDe>>>;
 
 async function criar(body: Pedido, conta: Conta, origem: string) {
@@ -51,12 +51,11 @@ async function criar(body: Pedido, conta: Conta, origem: string) {
   if (nome.length < 2) return json(400, { erro: 'Informe o nome da empresa.' });
   const { data: plano } = await admin.from('planos').select('id,nome,limite_contas,modulos,ativo').eq('id', texto(dados.plano_id, 40) || 'essencial').maybeSingle();
   if (!plano?.ativo) return json(400, { erro: 'Escolha um dos planos disponíveis.' });
-  // Cadastro do próprio posto pelo app: a pessoa já entra como dona, com os módulos vazios.
-  const posto = body.tipo === 'posto';
 
+  // Cadastro por conta própria: a pessoa já entra como dona, com todos os módulos (vazios).
   const { data: emp, error } = await admin.from('empresas').insert({
     nome, documento: texto(dados.documento, 30), telefone: texto(dados.telefone, 30), plano_id: plano.id,
-    limite_contas: plano.limite_contas, modulos: plano.modulos, status: posto ? 'ativa' : 'aguardando', criado_por: conta.user.id,
+    limite_contas: plano.limite_contas, modulos: MODULOS, status: 'ativa', criado_por: conta.user.id,
   }).select('id').single();
   if (error || !emp) throw new Error(`Não foi possível cadastrar a empresa: ${error?.message ?? ''}`);
   const nomePessoa = texto(meta.nome, 80) || conta.perfil?.nome || '';
@@ -73,14 +72,13 @@ async function criar(body: Pedido, conta: Conta, origem: string) {
   const base = APP_URL;
   await enviar({
     para: DONO_EMAIL,
-    assunto: posto ? `Novo posto cadastrado: ${nome}` : `Nova empresa aguardando liberação: ${nome}`,
+    assunto: `Nova empresa no EasyAudit: ${nome}`,
     html: layout({
-      titulo: posto ? 'Novo posto no EasyAudit' : 'Nova empresa no EasyAudit',
+      titulo: 'Nova empresa no EasyAudit',
       paragrafos: [
-        `<b>${esc(nome)}</b> se cadastrou no plano <b>${esc(plano.nome)}</b> (até ${plano.limite_contas} contas).`,
+        `<b>${esc(nome)}</b> se cadastrou no plano <b>${esc(plano.nome)}</b> (até ${plano.limite_contas} contas), com todos os módulos.`,
         `Administrador: ${esc(nomePessoa || conta.user.email)} (${esc(conta.user.email)})${texto(dados.telefone, 30) ? `, telefone ${esc(texto(dados.telefone, 30))}` : ''}${texto(dados.documento, 30) ? `, CNPJ ${esc(texto(dados.documento, 30))}` : ''}.`,
-        posto ? 'O posto já está usando o sistema (com os módulos vazios). Plano, contas e módulos se ajustam em Empresas e planos.'
-          : 'A empresa só vê o sistema depois que você liberar em Empresas e planos.',
+        'A empresa já está usando o sistema, com os módulos vazios. Plano, contas e módulos se ajustam (ou a empresa se suspende) em Empresas e planos.',
       ],
       botao: base ? { texto: 'Abrir Empresas e planos', url: `${base}/plataforma` } : undefined,
     }),

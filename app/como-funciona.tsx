@@ -25,7 +25,7 @@ const PERGUNTAS: [string, string][] = [
   ['Precisa instalar alguma coisa?', 'A equipe usa o app no celular Android. O painel abre no navegador do computador, sem instalar nada.'],
   ['Quanto custa?', 'Depende do número de contas e dos módulos que a rede vai usar. O preço é combinado com a gente.'],
   ['Quem vê os dados?', 'Só as contas da sua empresa. E cada pessoa vê só os módulos liberados para ela.'],
-  ['Como eu começo?', 'Toque em Começar agora, cadastre a empresa e confirme o e-mail. Quando a empresa for liberada, você recebe um aviso e convida a equipe.'],
+  ['Como eu começo?', 'Toque em Começar agora, cadastre a sua rede e confirme o e-mail. Ao entrar, a rede já está pronta, com todos os módulos: cadastre os postos e convide a equipe.'],
 ];
 
 /** Moldura de celular em volta de um print real. */
@@ -131,7 +131,7 @@ function Pagina() {
         {/* Módulos */}
         <Faixa style={s.secao}>
           <Revela><Text style={s.h2} accessibilityRole="header">Os módulos</Text></Revela>
-          <Revela atraso={60}><Text style={s.corpo}>A rede usa os módulos combinados; cada pessoa, só os que você liberar.</Text></Revela>
+          <Revela atraso={60}><Text style={s.corpo}>A rede começa com todos os módulos; cada pessoa usa só os que você liberar para ela.</Text></Revela>
           <View style={[s.modulos, desktop && { flexDirection: 'row', flexWrap: 'wrap' }]}>
             {MODULOS_SITE.map((m, i) => (
               <Revela key={m.id} atraso={(i % 3) * 70} style={desktop ? { width: '33.33%' } : undefined}>

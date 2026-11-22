@@ -22,10 +22,10 @@ async function chamarEmpresas<T = unknown>(body: Record<string, unknown>): Promi
 
 /**
  * Conta logada que ainda não usa o sistema. Multiempresa:
- * - sem empresa: escolhe entre cadastrar o próprio posto (vira dona e já entra, com os módulos vazios) ou pedir
- *   acesso a uma rede que já usa o EasyAudit (só entra quando o administrador dela aprovar). Quem veio do cadastro
- *   da rede pelo site tem a empresa criada aqui, com os dados do cadastro (fica aguardando a liberação);
- * - empresa aguardando liberação ou suspensa (o dono do EasyAudit libera);
+ * - sem empresa: escolhe entre cadastrar o próprio posto (vira dona e já entra, com todos os módulos vazios) ou
+ *   pedir acesso a uma rede que já usa o EasyAudit (só entra quando o administrador dela aprovar). Quem veio do
+ *   cadastro da rede pelo site tem a empresa criada aqui, com os dados do cadastro (também já entra);
+ * - empresa aguardando liberação (cadastros antigos) ou suspensa (o dono do EasyAudit libera);
  * - conta da empresa ainda não liberada pelo administrador dela.
  */
 export default function AguardandoRoute() {
@@ -185,7 +185,7 @@ export default function AguardandoRoute() {
       <Card>
         <Field label="Nome do posto" value={nomePosto} onChangeText={setNomePosto} maxLength={120} placeholder="Ex.: Posto Horizonte" />
         <Button title="Cadastrar e entrar" icon={StorefrontIcon}
-          onPress={() => { if (nomePosto.trim().length < 2) { notify('Informe o nome do posto'); return; } void criar({ nome: nomePosto.trim(), tipo: 'posto' }); }} />
+          onPress={() => { if (nomePosto.trim().length < 2) { notify('Informe o nome do posto'); return; } void criar({ nome: nomePosto.trim() }); }} />
       </Card>
     ) : null}
 

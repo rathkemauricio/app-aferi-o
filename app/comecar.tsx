@@ -13,18 +13,18 @@ import type { ThemeColors } from '../ui/theme';
 
 const EASE = Easing.bezier(0.23, 1, 0.32, 1);
 
-/** O que acontece depois do cadastro (o plano e os módulos são combinados na liberação). */
+/** O que acontece depois do cadastro (a rede já nasce liberada, com todos os módulos). */
 const PASSOS = [
   'Confirme o e-mail pelo link que enviamos.',
-  'Entre com o e-mail e a senha: a rede fica aguardando a liberação.',
-  'Quando a rede for liberada, você recebe um aviso e convida a equipe.',
+  'Entre com o e-mail e a senha: a sua rede já está pronta, com os módulos vazios.',
+  'Cadastre os postos e convide a equipe em Usuários e permissões.',
 ];
 
 /**
  * Cadastro da rede pelo site: dados da empresa e o acesso do administrador (sem escolha de plano: o servidor usa o
- * plano padrão e o dono do EasyAudit ajusta contas e módulos ao liberar).
+ * plano padrão, com todos os módulos, e a rede já nasce liberada; o dono do EasyAudit ajusta depois).
  * Cria a conta (com confirmação por e-mail) e guarda os dados da empresa na própria conta; no primeiro acesso,
- * a empresa é criada aguardando a liberação do dono do EasyAudit (função "empresas", ação "criar").
+ * a empresa é criada já liberada (função "empresas", ação "criar").
  */
 export default function Comecar() {
   return <SiteTema><Formulario /></SiteTema>;
@@ -75,7 +75,7 @@ function Formulario() {
               <View style={s.selo}><EnvelopeIcon size={28} color={colors.accentText} weight="duotone" /></View>
               <Text style={[s.h1, { textAlign: 'center' }]}>Confirme o seu e-mail</Text>
               <Text style={[s.corpo, { textAlign: 'center' }]}>
-                Enviamos um link para {enviadoPara}. Depois de confirmar, entre com esse e-mail e a sua senha: a {f.empresa.trim()} é cadastrada e fica aguardando a liberação do EasyAudit.
+                Enviamos um link para {enviadoPara}. Depois de confirmar, entre com esse e-mail e a sua senha: a {f.empresa.trim()} é cadastrada e já fica pronta para usar.
               </Text>
               <BotaoSite titulo="Ir para o login" grande onPress={() => router.replace('/login')} />
             </Animated.View>
@@ -93,7 +93,7 @@ function Formulario() {
         <Faixa style={s.pagina}>
           <Animated.View entering={reduz ? undefined : FadeInDown.duration(380).easing(EASE)} style={s.form}>
             <Text style={s.h1} accessibilityRole="header">Comece agora</Text>
-            <Text style={s.corpo}>Cadastre a sua rede de postos no EasyAudit. Você vira o administrador e convida a sua equipe depois da liberação.</Text>
+            <Text style={s.corpo}>Cadastre a sua rede de postos no EasyAudit. Você vira o administrador e já pode convidar a sua equipe.</Text>
 
             <Text style={s.grupo}>Empresa</Text>
             <Field label="Nome da empresa" value={f.empresa} onChangeText={campo('empresa')} placeholder="Ex.: Rede de Postos Horizonte" maxLength={120} />
@@ -133,7 +133,7 @@ function Formulario() {
             </View>
             <View style={[s.nota, { borderTopColor: colors.border }]}>
               <CheckCircleIcon size={18} color={colors.success} weight="duotone" />
-              <Text style={[s.corpo, { flex: 1, fontSize: 13.5, lineHeight: 20 }]}>Sem cobrança automática: o número de contas e os módulos são combinados com a gente na liberação.</Text>
+              <Text style={[s.corpo, { flex: 1, fontSize: 13.5, lineHeight: 20 }]}>Sem cobrança automática. A rede começa com todos os módulos; para aumentar o número de contas, fale com a gente.</Text>
             </View>
           </View>
         </Faixa>
