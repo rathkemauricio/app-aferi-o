@@ -12,6 +12,8 @@ const PERFIL_KEY = (id: string) => `nevoeiro.perfil.${id}`;
 const EMPRESA_DO_APARELHO = 'easyaudit.empresa-do-aparelho';
 /** Empresa dos dados guardados antes do registro acima existir (migração 20261119000100_multiempresa). */
 const EMPRESA_ANTES_DO_REGISTRO = '0e7e0e10-0000-4000-8000-000000000001';
+/** Escopo já limpo depois da correção do cache dos módulos carregados sob demanda (22/11/2026). */
+const LIMPEZA_V2 = 'easyaudit.limpeza-caches.v2';
 export type EmpresaStatus = 'aguardando' | 'ativa' | 'suspensa';
 export type Empresa = { id: string; nome: string; status: EmpresaStatus; modulos: string[]; limite_contas: number; plano_id: string };
 type PerfilCache = { papel: Papel; ativo: boolean; modulos: string[]; nome?: string; avatar?: string | null; empresa?: Empresa | null; filial?: string | null };
@@ -48,7 +50,7 @@ type AuthState = {
   signOut: () => Promise<void>;
 };
 
-export const AuthContext = createContext<AuthState>({
+const AuthContext = createContext<AuthState>({
   ready: false, userEmail: null, userId: null, papel: null, ativo: false, empresa: null, dono: false, isAdmin: false, filialConta: null, modulos: [], nome: '', avatar: null, podeAcessar: () => false, perfilPronto: false,
   recarregarPerfil: async () => undefined, signOut: async () => undefined,
 });
@@ -104,7 +106,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const empId = perfil?.empresa?.id ? (perfil.filial ? `${perfil.empresa.id}|${perfil.filial}` : perfil.empresa.id) : null;
     if (empId) {
       const anterior = await AsyncStorage.getItem(EMPRESA_DO_APARELHO).catch(() => null);
-      if ((anterior ?? EMPRESA_ANTES_DO_REGISTRO) !== empId) await resetAll();
+      // Limpeza única (v2): aparelhos que já tinham trocado de empresa antes da correção podem ter cópias de módulos
+      // ainda não abertos com dados da empresa anterior; apaga tudo uma vez e baixa de novo do servidor.
+      const limpo = await AsyncStorage.getItem(LIMPEZA_V2).catch(() => null);
+      if ((anterior ?? EMPRESA_ANTES_DO_REGISTRO) !== empId || limpo !== empId) {
+        await resetAll();
+        await AsyncStorage.setItem(LIMPEZA_V2, empId).catch(() => undefined);
+      }
       if (anterior !== empId) await AsyncStorage.setItem(EMPRESA_DO_APARELHO, empId).catch(() => undefined);
     }
     setPapel(perfil?.papel ?? null);
