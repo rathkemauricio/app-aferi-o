@@ -8,7 +8,8 @@
 // Secrets (npx supabase secrets set ...): GEMINI_API_KEY (obrigatório) e GEMINI_MODEL (opcional; padrão
 // gemini-3.8-flash). Só modelos com cota gratuita na reserva (nov/2026: 3.8 Flash, 3.6 Flash, 3.5 Flash-Lite,
 // 2.5 Flash — este é desativado em 1/12/2026). gemini-4-argon/carbon e os "pro" são só pagos.
-// Publicar: npx supabase functions deploy analise-ia --no-verify-jwt
+// Roda em segundo plano (EdgeRuntime.waitUntil): responde 202 com o id e o app acompanha tm_analises_ia.status
+// (processando, pronta ou erro, com a mensagem). Publicar: npx supabase functions deploy analise-ia --no-verify-jwt
 import { admin, entrarComoAtor, registrarAcao } from '../_shared/ator.ts';
 import { contaDe } from '../_shared/conta.ts';
 
@@ -59,37 +60,94 @@ Regras:
 
 type Resultado = Record<string, unknown>;
 
+/** Tempo máximo de cada modelo e do pedido inteiro (o servidor encerra o trabalho em segundo plano por volta de 150 s). */
+const LIMITE_MODELO_MS = 55_000;
+const LIMITE_TOTAL_MS = 130_000;
+
+/** Modelos "flash" que a chave enxerga (para quando os da lista não existem mais), do mais novo para o mais antigo. */
+async function modelosDisponiveis(): Promise<string[]> {
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': CHAVE } });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return ((j?.models ?? []) as { name: string; supportedGenerationMethods?: string[] }[])
+      .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+      .map(m => m.name.replace(/^models\//, ''))
+      .filter(n => /flash/i.test(n) && !/(image|tts|audio|live|exp|preview|thinking)/i.test(n))
+      .sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+  } catch { return []; }
+}
+
 async function perguntarGemini(perfil: { nome: string; contexto: string }, dados: unknown): Promise<{ modelo: string; resultado: Resultado }> {
   const pedido = `${perfil.contexto}\n\nDados da unidade (JSON):\n${JSON.stringify(dados)}`;
-  let ultimoErro = '';
-  for (const modelo of MODELOS) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': CHAVE },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SISTEMA }] },
-        contents: [{ role: 'user', parts: [{ text: pedido }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.3 },
-      }),
-    });
-    if (r.status === 404) { ultimoErro = `modelo ${modelo} não encontrado`; continue; }
+  const inicio = Date.now();
+  const tentativas: string[] = [];
+  let fila = [...MODELOS];
+  let descobriu = false;
+  while (fila.length) {
+    const modelo = fila.shift()!;
+    const resta = LIMITE_TOTAL_MS - (Date.now() - inicio);
+    if (resta < 8_000) { tentativas.push(`${modelo}: sem tempo para tentar`); break; }
+    const espera = Math.min(LIMITE_MODELO_MS, resta);
+    const ctrl = new AbortController();
+    const relogio = setTimeout(() => ctrl.abort(), espera);
+    let r: Response;
+    try {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
+        method: 'POST', signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': CHAVE },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SISTEMA }] },
+          contents: [{ role: 'user', parts: [{ text: pedido }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 8192 },
+        }),
+      });
+    } catch (e) {
+      clearTimeout(relogio);
+      tentativas.push(`${modelo}: ${ctrl.signal.aborted ? `demorou mais de ${Math.round(espera / 1000)} s` : String(e).slice(0, 120)}`);
+      continue;
+    }
+    clearTimeout(relogio);
     const corpo = await r.json().catch(() => null);
     if (!r.ok) {
-      const msg = corpo?.error?.message ?? `HTTP ${r.status}`;
-      if (r.status === 400 && /api key/i.test(msg)) throw new Error('A chave do Gemini (GEMINI_API_KEY) foi recusada. Confira a chave no servidor.');
-      // Sem cota ou créditos neste modelo: tenta o próximo da lista.
-      if (r.status === 429 || /quota|credit|exhausted|billing/i.test(msg)) { ultimoErro = `${modelo}: ${msg}`; continue; }
-      throw new Error(`O Gemini respondeu com erro: ${msg}`);
+      const msg = String(corpo?.error?.message ?? `HTTP ${r.status}`);
+      console.error('analise-ia', modelo, r.status, msg.slice(0, 300));
+      if (r.status === 400 && /api key/i.test(msg)) throw new Error('A chave do Gemini (GEMINI_API_KEY) foi recusada pelo Google. Gere uma chave nova no Google AI Studio e grave no servidor.');
+      if (r.status === 403) throw new Error(`O Google bloqueou a chave do Gemini: ${msg.slice(0, 200)}`);
+      tentativas.push(`${modelo}: ${r.status === 404 ? 'modelo não existe para esta chave' : r.status === 429 ? 'sem cota agora' : msg.slice(0, 160)}`);
+      // Modelo inexistente: na primeira vez, acrescenta os modelos "flash" que a chave realmente enxerga.
+      if (r.status === 404 && !descobriu) {
+        descobriu = true;
+        const extras = (await modelosDisponiveis()).filter(m => !MODELOS.includes(m) && !fila.includes(m)).slice(0, 3);
+        fila = [...fila, ...extras];
+      }
+      continue;
     }
-    const texto = (corpo?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('').trim();
-    if (!texto) throw new Error(`O Gemini não devolveu resposta${corpo?.candidates?.[0]?.finishReason ? ` (${corpo.candidates[0].finishReason})` : ''}.`);
+    const cand = corpo?.candidates?.[0];
+    const texto = ((cand?.content?.parts ?? []) as { text?: string; thought?: boolean }[]).filter(p => !p.thought).map(p => p.text ?? '').join('').trim();
+    if (!texto) { tentativas.push(`${modelo}: resposta vazia${cand?.finishReason ? ` (${cand.finishReason})` : ''}`); continue; }
     const limpo = texto.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-    try { return { modelo, resultado: JSON.parse(limpo) as Resultado }; }
-    catch { return { modelo, resultado: { resumo: texto, confianca: 'baixa', dados_faltantes: ['A resposta não veio no formato esperado; texto bruto no resumo.'] } }; }
+    try { return { modelo, resultado: JSON.parse(limpo) as Resultado }; } catch { /* tenta extrair abaixo */ }
+    // Às vezes vem texto antes ou depois do JSON: usa o bloco entre a primeira e a última chave.
+    const a = limpo.indexOf('{'), b = limpo.lastIndexOf('}');
+    if (a >= 0 && b > a) { try { return { modelo, resultado: JSON.parse(limpo.slice(a, b + 1)) as Resultado }; } catch { /* segue */ } }
+    if (cand?.finishReason === 'MAX_TOKENS') { tentativas.push(`${modelo}: resposta cortada (longa demais)`); continue; }
+    return { modelo, resultado: { resumo: texto.slice(0, 4000), confianca: 'baixa', dados_faltantes: ['A resposta não veio no formato esperado; texto bruto no resumo.'] } };
   }
-  throw new Error(/quota|credit|exhausted|billing|429/i.test(ultimoErro)
-    ? `A chave do Gemini está sem cota ou créditos nos modelos ${MODELOS.join(', ')}. Mensagem do Google: ${ultimoErro.slice(0, 300)}`
-    : `Nenhum modelo do Gemini disponível para esta chave (${ultimoErro}). Configure GEMINI_MODEL no servidor.`);
+  throw new Error(`Nenhum modelo do Gemini respondeu. ${tentativas.join(' · ')}`);
+}
+
+/** Conclui a análise em segundo plano e grava o resultado (ou o motivo da falha) no registro. */
+async function processar(id: string, perfilId: string, dados: unknown) {
+  try {
+    const { modelo, resultado } = await perguntarGemini(PERFIS[perfilId], dados);
+    const { error } = await admin.from('tm_analises_ia').update({ status: 'pronta', modelo, resultado, erro: null }).eq('id', id);
+    if (error) throw new Error(`Análise feita, mas não foi salva: ${error.message}`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Erro inesperado na análise.';
+    console.error('analise-ia falhou', id, msg);
+    await admin.from('tm_analises_ia').update({ status: 'erro', erro: msg.slice(0, 1500) }).eq('id', id);
+  }
 }
 
 async function analisarTempos(body: { filial_id?: string; perfil?: string; dados?: unknown }, usuario: { id: string; nome: string }, emp: string) {
@@ -100,12 +158,20 @@ async function analisarTempos(body: { filial_id?: string; perfil?: string; dados
   const tamanho = JSON.stringify(body.dados ?? null).length;
   if (!body.dados || tamanho > 300_000) return json(400, { erro: 'Dados da análise ausentes ou grandes demais.' });
   const perfilId = body.perfil && PERFIS[body.perfil] ? body.perfil : 'posto_combustivel';
+  // Uma análise por vez por filial (evita pedidos repetidos enquanto a anterior ainda roda).
+  const { data: rodando } = await admin.from('tm_analises_ia').select('id,updated_at').eq('filial_id', filialId).eq('empresa_id', emp)
+    .eq('status', 'processando').is('deleted_at', null).limit(1);
+  if (rodando?.[0] && Date.now() - new Date(rodando[0].updated_at as string).getTime() < 3 * 60_000) return json(202, { ok: true, id: rodando[0].id, status: 'processando' });
 
-  const { modelo, resultado } = await perguntarGemini(PERFIS[perfilId], body.dados);
   const id = `ia-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  const { error } = await admin.from('tm_analises_ia').insert({ id, empresa_id: emp, filial_id: filialId, perfil: perfilId, modelo, resultado, dados: body.dados, usuario: usuario.id, usuario_nome: usuario.nome });
-  if (error) throw new Error(`Análise feita, mas não foi salva: ${error.message}`);
-  return json(200, { ok: true, id, modelo, resultado });
+  const { error } = await admin.from('tm_analises_ia').insert({ id, empresa_id: emp, filial_id: filialId, perfil: perfilId, status: 'processando', dados: body.dados, usuario: usuario.id, usuario_nome: usuario.nome });
+  if (error) throw new Error(`Não foi possível registrar a análise: ${error.message}`);
+  // Responde na hora; o Gemini pode levar mais de um minuto (antes isso estourava o tempo limite: erros 504/546).
+  const tarefa = processar(id, perfilId, body.dados);
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(tarefa); else await tarefa;
+  return json(202, { ok: true, id, status: 'processando' });
 }
 
 Deno.serve(async req => {

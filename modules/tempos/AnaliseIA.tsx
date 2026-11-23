@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import type { Filial } from '../../lib/data';
 import { supabase } from '../../lib/supabase';
@@ -26,7 +26,8 @@ type Analise = {
   por_turno_setor?: { turno?: string; setor?: string; funcionarios?: number; observacao?: string }[];
   justificativa?: string[]; riscos?: string[]; recomendacoes?: string[]; dados_faltantes?: string[]; confianca?: string;
 };
-type Registro = { id: string; modelo: string; resultado: Analise; usuario_nome: string; updated_at: string };
+type Registro = { id: string; modelo: string | null; resultado: Analise | null; usuario_nome: string; updated_at: string; status?: 'processando' | 'pronta' | 'erro'; erro?: string | null };
+const CAMPOS = 'id,modelo,resultado,usuario_nome,updated_at,status,erro';
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const nf = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '—');
@@ -68,7 +69,7 @@ function montarDados(d: TmData, filial: Filial, dim: ResumoDimensionamento) {
 }
 
 function relatorioHtml(filial: Filial, reg: Registro) {
-  const a = reg.resultado;
+  const a: Analise = reg.resultado ?? {};
   const li = (xs: unknown) => lista(xs).map(x => `<li>${esc(x)}</li>`).join('') || '<li>—</li>';
   const linhas = (a.por_turno_setor ?? []).map(x => `<tr><td>${esc(x.turno)}</td><td>${esc(x.setor)}</td><td class="n">${nf(x.funcionarios)}</td><td>${esc(x.observacao)}</td></tr>`).join('');
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Análise com IA · ${esc(filial.nome)}</title><style>
@@ -88,32 +89,61 @@ ${linhas ? `<h2>Por turno e setor</h2><table><tr><th>Turno</th><th>Setor</th><th
 export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial; dim: ResumoDimensionamento }) {
   const { s, t, colors } = useLook();
   const [ultima, setUltima] = useState<Registro | null>(null);
+  /** Pedido em andamento ou que falhou por último (mostra a situação e o motivo). */
+  const [pedido, setPedido] = useState<Registro | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [analisando, setAnalisando] = useState(false);
+  const vivo = useRef(true);
+  useEffect(() => () => { vivo.current = false; }, []);
 
   const carregar = useCallback(async () => {
     if (!supabase) return;
     setCarregando(true);
-    const { data: rows } = await supabase.from('tm_analises_ia').select('id,modelo,resultado,usuario_nome,updated_at').eq('filial_id', filial.id).is('deleted_at', null).order('updated_at', { ascending: false }).limit(1);
-    setUltima((rows?.[0] as Registro | undefined) ?? null);
+    const { data: rows } = await supabase.from('tm_analises_ia').select(CAMPOS).eq('filial_id', filial.id).is('deleted_at', null).order('updated_at', { ascending: false }).limit(5);
+    const lista = (rows ?? []) as Registro[];
+    if (!vivo.current) return;
+    setUltima(lista.find(r => (r.status ?? 'pronta') === 'pronta' && r.resultado) ?? null);
+    const recente = lista[0];
+    setPedido(recente && recente.status && recente.status !== 'pronta' ? recente : null);
     setCarregando(false);
   }, [filial.id]);
   useEffect(() => { void carregar(); }, [carregar]);
 
+  /** Acompanha a análise no servidor (roda em segundo plano) até ficar pronta ou falhar (máx. 4 min). */
+  const acompanhar = useCallback(async (id: string) => {
+    if (!supabase) return;
+    setAnalisando(true);
+    const fim = Date.now() + 4 * 60_000;
+    while (vivo.current && Date.now() < fim) {
+      await new Promise(r => setTimeout(r, 4000));
+      const { data: row } = await supabase.from('tm_analises_ia').select(CAMPOS).eq('id', id).maybeSingle();
+      const reg = row as Registro | null;
+      if (!reg || reg.status === 'processando') continue;
+      if (!vivo.current) return;
+      setAnalisando(false);
+      if (reg.status === 'erro') { setPedido(reg); notify('Análise não concluída', reg.erro || 'O servidor não informou o motivo.'); return; }
+      setPedido(null); setUltima(reg); return;
+    }
+    if (vivo.current) { setAnalisando(false); notify('A análise está demorando', 'Ela continua no servidor. Volte a esta tela em alguns minutos para ver o resultado.'); }
+  }, []);
+  // Abriu a tela com uma análise ainda rodando: continua acompanhando.
+  useEffect(() => { if (pedido?.status === 'processando' && !analisando) void acompanhar(pedido.id); }, [pedido?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const coletas = data.coletas.filter(c => c.filial_id === filial.id).length;
   const analisar = async () => {
     if (!supabase) return;
-    setAnalisando(true);
+    setAnalisando(true); setPedido(null);
     const { data: r, error } = await supabase.functions.invoke('analise-ia', { body: { acao: 'tempos', filial_id: filial.id, perfil: 'posto_combustivel', dados: montarDados(data, filial, dim) } });
-    setAnalisando(false);
     if (error) {
+      setAnalisando(false);
       let msg = 'Não foi possível falar com o servidor. Verifique a conexão.';
       try { const res = (error as { context?: Response }).context; const c = res ? await res.json() : null; if (c?.erro) msg = String(c.erro); } catch { /* sem JSON */ }
       notify('Análise não concluída', msg); return;
     }
-    const x = r as { id: string; modelo: string; resultado: Analise };
-    setUltima({ id: x.id, modelo: x.modelo, resultado: x.resultado, usuario_nome: '', updated_at: new Date().toISOString() });
-    void carregar();
+    const x = r as { id: string; status?: string; modelo?: string; resultado?: Analise };
+    // Servidor antigo (resposta direta) ou novo (em segundo plano).
+    if (x.resultado) { setAnalisando(false); setUltima({ id: x.id, modelo: x.modelo ?? '', resultado: x.resultado, usuario_nome: '', updated_at: new Date().toISOString() }); void carregar(); return; }
+    void acompanhar(x.id);
   };
 
   const a = ultima?.resultado;
@@ -150,10 +180,18 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
         {bloco('Riscos', a.riscos)}
         {bloco('Recomendações', a.recomendacoes)}
         {bloco('Dados que faltam', a.dados_faltantes)}
-        <Text style={t.caption}>{ultima ? `${new Date(ultima.updated_at).toLocaleString('pt-BR')}${ultima.usuario_nome ? ` · pedida por ${ultima.usuario_nome}` : ''} · ${ultima.modelo}` : ''} · Gerada por IA: confira antes de decidir.</Text>
+        <Text style={t.caption}>{ultima ? `${new Date(ultima.updated_at).toLocaleString('pt-BR')}${ultima.usuario_nome ? ` · pedida por ${ultima.usuario_nome}` : ''} · ${ultima.modelo ?? ''}` : ''} · Gerada por IA: confira antes de decidir.</Text>
         <Button title="Imprimir / PDF" icon={PrinterIcon} variant="secondary" size="sm" style={s.alignStart} onPress={() => { if (ultima) void imprimirHtml(relatorioHtml(filial, ultima), `Análise IA ${filial.nome}`); }} />
       </> : null}
-      <Button title={analisando ? 'Analisando… (pode levar até 1 minuto)' : a ? 'Analisar de novo' : 'Analisar com IA'} icon={SparkleIcon} disabled={analisando || !coletas} onPress={() => void analisar()} />
+      {pedido?.status === 'erro' && !analisando ? (
+        <View style={{ gap: 4, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.danger }}>
+          <Text style={[t.bodyStrong, { color: colors.danger }]}>A última análise não foi concluída</Text>
+          <Text style={t.caption}>{pedido.erro || 'O servidor não informou o motivo.'}</Text>
+          <Text style={t.caption}>{new Date(pedido.updated_at).toLocaleString('pt-BR')}</Text>
+        </View>
+      ) : null}
+      {analisando ? <Text style={t.caption}>A IA está analisando no servidor. Pode levar até 2 minutos; você pode sair desta tela e voltar depois.</Text> : null}
+      <Button title={analisando ? 'Analisando…' : a ? 'Analisar de novo' : 'Analisar com IA'} icon={SparkleIcon} disabled={analisando || !coletas} onPress={() => void analisar()} />
       {!coletas ? <Text style={t.caption}>Faça coletas de tempos nesta filial para a IA ter dados.</Text> : null}
     </Card>
   );
