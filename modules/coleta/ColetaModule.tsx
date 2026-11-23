@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { type ComponentRef, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { type ComponentRef, createContext, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -13,7 +13,7 @@ import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { dataBR, esc, imprimirHtml, rotuloFilial } from '../../lib/util';
-import { ArrowRightIcon, BarcodeIcon, HourglassIcon, CaretDownIcon, FloppyDiskIcon, ClockCounterClockwiseIcon, DotsThreeVerticalIcon, EraserIcon, KeyboardIcon, PauseIcon, PencilSimpleIcon, PlayIcon, ResetIcon, TrashIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PlusIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
+import { ArrowRightIcon, BarcodeIcon, EyeSlashIcon, HourglassIcon, CaretDownIcon, FloppyDiskIcon, ClockCounterClockwiseIcon, DotsThreeVerticalIcon, EraserIcon, KeyboardIcon, PauseIcon, PencilSimpleIcon, PlayIcon, ResetIcon, TrashIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, FileCsvIcon, MagnifyingGlassIcon, MinusIcon, PackageIcon, PlusIcon, PrinterIcon, StorefrontIcon, UploadSimpleIcon } from '../../ui/icons';
 import { confirmAction, EmptyState, Field, notify, Sheet } from '../../ui/kit';
 import { pageMaxWidth, space, ThemeContext, type ThemeColors } from '../../ui/theme';
 import { Carregando } from '../../ui/carregando';
@@ -102,6 +102,13 @@ export default function ColetaModule() {
 }
 
 type Dados = ReturnType<typeof useColeta>;
+/**
+ * Contagem cega: falso enquanto quem conta não pode ver o saldo (contagem cega em andamento e conta que não é
+ * administrador). Esconde o saldo, o certo/errado de cada item e os filtros de divergência.
+ */
+const SaldoVisivel = createContext(true);
+/** Pode ver o saldo desta contagem? (administrador sempre; nas cegas, só depois de concluída) */
+const veSaldo = (ct: Contagem, isAdmin: boolean) => !ct.cega || isAdmin || concluida(ct);
 type Nav = { ir: (t: Tela) => void; trocar: (t: Tela) => void; voltar: () => void; inicio: () => void };
 const nomeFilial = (d: Dados, id: string) => { const f = d.filiais.find(x => x.id === id); return f ? rotuloFilial(f) : 'Filial removida'; };
 /** Base de códigos de barra da rede inteira (id 'rede'): vale para todas as filiais; a base própria da filial soma a ela. */
@@ -622,6 +629,13 @@ function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; 
 
 function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; nav: Nav }) {
   const c = useCores();
+  const { isAdmin } = useAuth();
+  /** Alguma contagem cega ainda em andamento (quem não é administrador não vê o relatório do inventário até terminar). */
+  const cegaAberta = !isAdmin && dados.contagens.some(x => x.inventario_id === inv.id && x.cega && !concluida(x));
+  const reabrirContagem = (ct: Contagem, itens: Produto[], q: ReturnType<typeof quantidades>) => {
+    if (ct.cega) { notify('Contagem cega não reabre', 'Depois de ver as sobras e as faltas, a contagem cega não pode ser reaberta. Se precisar contar de novo, abra uma nova contagem cega.'); return; }
+    contagensCol.put({ ...ct, rodadas: reabrir(ct, itens, q) });
+  };
   const { produtos, erro } = useProdutos(inv);
   const col = useColetas(inv.id);
   const [recarregando, setRecarregando] = useState(false);
@@ -696,13 +710,13 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
           const cartao = (
             <Cartao onPress={() => nav.ir({ n: 'contagem', id: ct.id, aba: 'itens' })}>
               <Text style={[k.cTit, { color: c.text }]}>{ct.nome}</Text>
-              <Text style={[k.cTxt, { color: c.textMuted }]}>{ROTULO_CLASSE[ct.classe]} · {ct.classe === 'completa' ? 'todas as categorias' : `${ct.categorias.length} categoria${ct.categorias.length === 1 ? '' : 's'}`} · {Math.round(pc * 100)}%</Text>
+              <Text style={[k.cTxt, { color: c.textMuted }]}>{ROTULO_CLASSE[ct.classe]} · {ct.classe === 'completa' ? 'todas as categorias' : `${ct.categorias.length} categoria${ct.categorias.length === 1 ? '' : 's'}`}{veSaldo(ct, isAdmin) ? ` · ${Math.round(pc * 100)}%` : ''}{ct.cega ? ' · contagem cega' : ''}</Text>
               {ct.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Criada por <Text style={[k.b, { color: c.text }]}>{ct.criado_por_nome}</Text>{ct.criado_em ? ` · ${dataHora(ct.criado_em)}` : ''}</Text> : null}
               <Text style={[k.cap, { color: c.textMuted }]}>{textoTempo(ct, inv, agora, true)}</Text>
               <View style={[k.linha, { flexWrap: 'wrap' }]}>{ct.pausada ? <Pilula texto="Pausada" tom="alerta" /> : null}{ct.rodadas.map((r, i) => <Pilula key={i} texto={`${i + 1}ª ${ROTULO_RODADA[r]}`} tom={tomRodada(r)} icone={r === 'andamento' && !ct.pausada ? HourglassIcon : undefined} />)}</View>
               {feita && !enc ? (
                 <View style={k.linha}>
-                  <View style={{ flex: 1 }}><Botao titulo="Reabrir contagem" tipo="s" onPress={() => contagensCol.put({ ...ct, rodadas: reabrir(ct, itens, q) })} /></View>
+                  {ct.cega ? null : <View style={{ flex: 1 }}><Botao titulo="Reabrir contagem" tipo="s" onPress={() => reabrirContagem(ct, itens, q)} /></View>}
                   <View style={{ flex: 1 }}><Botao titulo="Ver relatório" tipo="s" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id, contagem: ct.id })} /></View>
                 </View>
               ) : null}
@@ -711,7 +725,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
           // Arrastar: direita edita (ou reabre a contagem concluída); esquerda exclui.
           return enc ? <View key={ct.id}>{cartao}</View> : (
             <Deslizavel key={ct.id} raio={16} direita={feita ? ARRASTE_REABRIR : ARRASTE_EDITAR} esquerda={ARRASTE_EXCLUIR}
-              onDireita={() => (feita ? contagensCol.put({ ...ct, rodadas: reabrir(ct, itens, q) }) : nav.ir({ n: 'nova', inv: inv.id, editar: ct.id }))}
+              onDireita={() => (feita ? reabrirContagem(ct, itens, q) : nav.ir({ n: 'nova', inv: inv.id, editar: ct.id }))}
               onEsquerda={() => excluirContagem(ct)}>
               {cartao}
             </Deslizavel>
@@ -719,7 +733,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
         })}
         {contagens.length && !enc ? <Text style={[k.cap, { color: c.textMuted }]}>Arraste uma contagem: para a direita edita (ou reabre, se concluída); para a esquerda exclui.</Text> : null}
         {contagens.length ? (
-          <Cartao onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })}>
+          <Cartao onPress={() => (cegaAberta ? notify('Contagem cega em andamento', 'O relatório do inventário abre quando as contagens cegas terminarem.') : nav.ir({ n: 'relatorio', inv: inv.id }))}>
             <View style={k.linha}>
               <FileCsvIcon size={22} color={c.text} />
               <View style={{ flex: 1 }}>
@@ -748,6 +762,10 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
   const [classes, setClasses] = useState<(ClasseContagem)[]>(
     editar ? (editar.classe === 'mista' ? ['pista', 'conveniencia'] : [editar.classe]) : parcial ? ['conveniencia'] : ['completa']);
   const [cats, setCats] = useState<string[]>(editar?.categorias ?? []);
+  const { isAdmin } = useAuth();
+  const [cega, setCega] = useState<boolean>(editar?.cega ?? false);
+  /** Contagem cega em andamento: só o administrador pode desligar (senão quem conta veria o saldo no meio). */
+  const travaCega = !!editar?.cega && !isAdmin;
   const completa = classes.includes('completa');
   /** Completa sem nenhuma categoria marcada = todas as categorias; marcando, conta só as marcadas. */
   const todas = completa && !cats.length;
@@ -783,12 +801,12 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
     const classe: ClasseContagem = todas ? 'completa' : classesMarcadas.length > 1 ? 'mista' : classesMarcadas[0] ?? (classes[0] === 'completa' ? 'mista' : classes[0]);
     if (editar) {
       // Edição no meio da contagem: mantém as rodadas e as coletas; muda nome, classificação e categorias.
-      contagensCol.put({ ...editar, nome: nome.trim() || editar.nome, classe, categorias: todas ? [] : cats });
+      contagensCol.put({ ...editar, nome: nome.trim() || editar.nome, classe, categorias: todas ? [] : cats, cega: travaCega ? true : cega });
       nav.voltar();
       return;
     }
     const id = uid('cont');
-    contagensCol.put({ id, inventario_id: inv.id, nome: nome.trim() || (todas ? 'Contagem completa' : cats.length === 1 ? cats[0] : `${ROTULO_CLASSE[classe]} (${cats.length} categorias)`), classe, categorias: todas ? [] : cats, rodadas: ['andamento', 'aguardando', 'aguardando'] });
+    contagensCol.put({ id, inventario_id: inv.id, nome: nome.trim() || (todas ? 'Contagem completa' : cats.length === 1 ? cats[0] : `${ROTULO_CLASSE[classe]} (${cats.length} categorias)`), classe, categorias: todas ? [] : cats, rodadas: ['andamento', 'aguardando', 'aguardando'], cega });
     nav.trocar({ n: 'contagem', id, aba: COLETA_AQUI ? 'coleta' : 'itens' });
   };
   const opcoes = (parcial ? [] : [{ id: 'completa' as ClasseContagem, titulo: 'Completa' }]).concat([{ id: 'pista', titulo: 'Pista' }, { id: 'conveniencia', titulo: 'Conveniência' }]);
@@ -801,6 +819,10 @@ function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dad
       </>}>
         <Rotulo>Nome da contagem</Rotulo>
         <Field value={nome} onChangeText={setNome} placeholder={todas ? 'Contagem completa' : 'Ex.: Bebidas alcoólicas'} />
+        <Rotulo>Saldo para quem conta</Rotulo>
+        <Segmentos opcoes={[{ id: 'aberta', titulo: 'Mostrar o saldo' }, { id: 'cega', titulo: 'Contagem cega', sub: 'sem ver o saldo', desab: travaCega }]}
+          valor={cega ? 'cega' : 'aberta'} onChange={v => { if (travaCega) { notify('Contagem cega', 'Só o administrador pode mostrar o saldo de uma contagem cega.'); return; } setCega(v === 'cega'); }} />
+        {cega ? <Text style={[k.cap, { color: c.textMuted }]}>Quem conta não vê o saldo do Petros nem se o item está certo ou errado. Ao terminar a contagem, o Detalhamento mostra as sobras e as faltas. Uma contagem cega concluída não pode ser reaberta. O administrador vê tudo.</Text> : null}
         <Rotulo>Classificação</Rotulo>
         <Segmentos opcoes={opcoes} valor={classes} multi onChange={alternarClasse} />
         {editar ? <Text style={[k.cap, { color: c.textMuted }]}>Incluir ou tirar categorias no meio da contagem: os itens das categorias novas entram como pendentes; o que já foi coletado continua salvo.</Text> : null}
@@ -877,6 +899,10 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   // Percentual das categorias desta contagem (o mesmo do cartão da contagem), não do inventário inteiro.
   const prog = produtos ? percentualContagem(ct, itens, q).pct : 0;
   const ativa = ct.rodadas[r - 1] === 'andamento' && inv.status !== 'encerrado' && !ct.pausada;
+  const { isAdmin } = useAuth();
+  const verSaldo = veSaldo(ct, isAdmin);
+  // Cega: o progresso é por itens coletados (o percentual por quantidade deixaria deduzir o saldo).
+  const progVisivel = verSaldo ? prog : (lista.length ? lista.filter(p => (q.get(p.codigo)?.[r - 1] ?? null) !== null).length / lista.length : 0);
   /** Coletar, corrigir e zerar itens (app e web). */
   const coletavel = ativa && COLETA_AQUI;
   const [sel, setSel] = useState<string | null>(null);
@@ -972,12 +998,12 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
     </View>
   );
 
-  return (
+  return (<SaldoVisivel.Provider value={verSaldo}>
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={ct.nome} cor={tela.aba === 'coleta' && ativa && simples ? P.verde : undefined}
         sub={tela.aba === 'coleta' ? `${r}ª contagem · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}` : `${inv.codigo} · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}`}
         onVoltar={nav.voltar} direita={<View style={k.linha}>
-        {tela.aba === 'coleta' ? <Anel pct={prog} size={46} claro /> : null}
+        {tela.aba === 'coleta' ? <Anel pct={progVisivel} size={46} claro /> : null}
         {podePausar ? (
           <Pressable accessibilityRole="button" accessibilityLabel={ct.pausada ? 'Retomar contagem' : 'Pausar contagem'} hitSlop={8} onPress={trocarPausa}
             style={({ pressed }) => [k.pausa, { backgroundColor: pressed ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.18)' }]}>
@@ -1004,7 +1030,8 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
         ))}
       </View>
       {!produtos ? <Carregando texto="Carregando os itens…" />
-        : tela.aba === 'detalhe' ? <Detalhamento ct={ct} produtos={produtos} q={q} inv={inv} filial={nomeFilial(dados, inv.filial_id)} />
+        : tela.aba === 'detalhe' ? (verSaldo ? <Detalhamento ct={ct} produtos={produtos} q={q} inv={inv} filial={nomeFilial(dados, inv.filial_id)} />
+          : <Corpo><EmptyState icon={EyeSlashIcon} title="Contagem cega" text="As sobras e as faltas aparecem aqui quando a contagem terminar. Até lá, conte sem o saldo do Petros." /></Corpo>)
         : tela.aba === 'itens' ? (
           <View style={{ flex: 1 }}>
             <FlatList
@@ -1052,7 +1079,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
                       <View style={{ flex: 1, gap: 2 }}>
                         <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{x.codigo} · {x.categoria}</Text>
                         <Text style={[k.cTxt, { color: c.text, fontSize: 15 }]} numberOfLines={2}>{x.nome}</Text>
-                        <Text style={[k.cap, { color: pode ? c.accentText : c.textMuted }]}>{desconhecido ? 'Saldo desconhecido' : `Saldo ${fmtQ(x.saldo)}`} · {motivoFora}</Text>
+                        <Text style={[k.cap, { color: pode ? c.accentText : c.textMuted }]}>{verSaldo ? `${desconhecido ? 'Saldo desconhecido' : `Saldo ${fmtQ(x.saldo)}`} · ${motivoFora}` : pode ? 'Fora desta lista: toque para coletar' : 'Fora desta contagem'}</Text>
                       </View>
                       {pode ? <View style={{ justifyContent: 'center' }}><CaretRightIcon size={16} color={c.textMuted} /></View> : null}
                     </Pressable>
@@ -1096,13 +1123,13 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
         <Sheet title={ct.nome} onClose={() => setMenu(false)}>
           <Botao titulo="Editar contagem (nome e categorias)" tipo="s" icone={PencilSimpleIcon} onPress={() => { setMenu(false); nav.ir({ n: 'nova', inv: inv.id, editar: ct.id }); }} />
           <Botao titulo={ct.pausada ? 'Retomar contagem' : 'Pausar contagem'} tipo="s" icone={ct.pausada ? PlayIcon : PauseIcon} onPress={pausar} />
-          <Botao titulo="Ver relatório desta contagem" tipo="s" icone={FileCsvIcon} onPress={() => { setMenu(false); nav.ir({ n: 'relatorio', inv: inv.id, contagem: ct.id }); }} />
+          {verSaldo ? <Botao titulo="Ver relatório desta contagem" tipo="s" icone={FileCsvIcon} onPress={() => { setMenu(false); nav.ir({ n: 'relatorio', inv: inv.id, contagem: ct.id }); }} /> : null}
           <Botao titulo="Excluir contagem" tipo="s" icone={TrashIcon} onPress={excluir} />
           <Text style={[k.cap, { color: c.textMuted }]}>Pausada, a contagem não recebe leituras até ser retomada. Ao editar, dá para incluir ou tirar categorias no meio da contagem: o que já foi coletado continua valendo.</Text>
         </Sheet>
       ) : null}
     </View>
-  );
+  </SaldoVisivel.Provider>);
 }
 
 /** Liga um código de barras lido (não cadastrado) a um item da carga, escolhido pela pesquisa. */
@@ -1110,6 +1137,7 @@ function CadastrarCodigo({ ean, inventarioId, produtos, noEscopo, onClose, onFei
   ean: string; inventarioId: string; produtos: Produto[]; noEscopo: Set<string>; onClose: () => void; onFeito: (p: Produto, onde: 'servidor' | 'local') => void;
 }) {
   const c = useCores();
+  const verSaldo = useContext(SaldoVisivel);
   const [busca, setBusca] = useState('');
   const [salvando, setSalvando] = useState<string | null>(null);
   // Itens desta contagem primeiro; depois os sem código de barras (os mais prováveis), e por nome.
@@ -1133,7 +1161,7 @@ function CadastrarCodigo({ ean, inventarioId, produtos, noEscopo, onClose, onFei
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{x.codigo} · {x.categoria}</Text>
             <Text style={[k.cTxt, { color: c.text }]} numberOfLines={2}>{x.nome}</Text>
-            <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Saldo {fmtQ(x.saldo)} · {x.eans.length ? `${x.eans.length} código${x.eans.length === 1 ? '' : 's'} de barras` : 'sem código de barras'}{noEscopo.has(x.codigo) ? ' · nesta contagem' : ''}</Text>
+            <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>{verSaldo ? `Saldo ${fmtQ(x.saldo)} · ` : ''}{x.eans.length ? `${x.eans.length} código${x.eans.length === 1 ? '' : 's'} de barras` : 'sem código de barras'}{noEscopo.has(x.codigo) ? ' · nesta contagem' : ''}</Text>
           </View>
           {salvando === x.codigo ? <ActivityIndicator color={c.textMuted} /> : <CaretRightIcon size={16} color={c.textMuted} />}
         </Pressable>
@@ -1164,7 +1192,7 @@ function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos
     const divergentes: LinhaDivergente[] = [
       ...d.faltas.map(l => ({ ...l, situacao: 'Falta' })), ...d.sobras.map(l => ({ ...l, situacao: 'Sobra' })), ...d.naoColetados.map(l => ({ ...l, situacao: 'Não coletado' })),
     ];
-    const sub = `${filial}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${textoTempo(ct, inv, Date.now(), true)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
+    const sub = `${filial}${ct.cega ? ' · Contagem cega' : ''}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${textoTempo(ct, inv, Date.now(), true)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
     const html = htmlDivergencias({ titulo: `Itens divergentes · ${ct.nome}`, sub, divergentes, nota: 'Vale a última quantidade coletada de cada item; item não coletado entra como falta.' });
     try { await imprimirHtml(html, `Divergências ${ct.nome}`, true); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
@@ -1229,10 +1257,11 @@ const filtrarSituacao = (itens: Produto[], r: Rodada, q: Map<string, Qtd3>, f: F
 
 function FiltroSituacao({ valor, onChange, n }: { valor: FiltroSit; onChange: (f: FiltroSit) => void; n: Record<FiltroSit, number> }) {
   const c = useCores();
+  const verSaldo = useContext(SaldoVisivel);
   const cor: Record<FiltroSit, string> = { todos: c.textMuted, pendente: c.warning, divergente: c.danger, correto: c.success };
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
-      {(['todos', 'pendente', 'divergente', 'correto'] as const).map(f => {
+      {(verSaldo ? (['todos', 'pendente', 'divergente', 'correto'] as const) : (['todos', 'pendente'] as const)).map(f => {
         const on = f === valor;
         return (
           <Pressable key={f} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${ROTULO_FILTRO[f]}: ${n[f]}`} onPress={() => onChange(f)}
@@ -1324,8 +1353,11 @@ function LinhaLista({ ct, r, p, qq, meu, partes, onCorrigir, historico, expandiv
   const [salvo, setSalvo] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  const s = situacaoNaRodada(p, r, qq);
-  const cor = s === 'correto' ? c.success : s === 'divergente' ? c.danger : c.warning;
+  const verSaldo = useContext(SaldoVisivel);
+  // Cega: só "coletado" ou "pendente" (a cor de certo/errado entregaria o saldo).
+  const s0 = situacaoNaRodada(p, r, qq);
+  const s = !verSaldo && s0 !== 'pendente' ? 'coletado' : s0;
+  const cor = s === 'correto' ? c.success : s === 'divergente' ? c.danger : s === 'coletado' ? c.accent : c.warning;
   const fundo = s === 'correto' ? c.successSoft : s === 'divergente' ? c.dangerSoft : c.surface;
   const mostrarSalvo = (msg: string) => {
     setSalvo(msg);
@@ -1376,7 +1408,9 @@ function LinhaLista({ ct, r, p, qq, meu, partes, onCorrigir, historico, expandiv
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo} · {p.categoria}</Text>
             <Text style={[k.cTxt, { color: c.text, fontSize: 15.5 }]} numberOfLines={aberto ? 4 : 2}>{p.nome}</Text>
-            <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Saldo <Text style={[k.b, { color: c.text }]}>{fmtQ(p.saldo)}</Text> · <Text style={[k.b, { color: cor }]}>{s === 'correto' ? 'Correto' : s === 'divergente' ? `Incorreto (${(total ?? 0) - p.saldo > 0 ? '+' : ''}${fmtQ((total ?? 0) - p.saldo)})` : 'Pendente'}</Text></Text>
+            {verSaldo
+              ? <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Saldo <Text style={[k.b, { color: c.text }]}>{fmtQ(p.saldo)}</Text> · <Text style={[k.b, { color: cor }]}>{s === 'correto' ? 'Correto' : s === 'divergente' ? `Incorreto (${(total ?? 0) - p.saldo > 0 ? '+' : ''}${fmtQ((total ?? 0) - p.saldo)})` : 'Pendente'}</Text></Text>
+              : <Text style={[k.cap, k.b, { color: cor }]} numberOfLines={1}>{s === 'coletado' ? 'Coletado' : 'Pendente'}</Text>}
           </View>
           {expandivel ? <View style={{ transform: [{ rotate: aberto ? '90deg' : '0deg' }] }}><CaretRightIcon size={16} color={c.textMuted} /></View> : null}
         </Pressable>
@@ -1421,11 +1455,11 @@ function LinhaLista({ ct, r, p, qq, meu, partes, onCorrigir, historico, expandiv
               ['Código', p.codigo],
               ['Categoria', `${p.categoria} · ${p.classe === 'pista' ? 'Pista' : 'Conveniência'}`],
               ['Código de barras', p.eans.length ? p.eans.join(' · ') : 'Nenhum cadastrado'],
-              ['Saldo no Petros', fmtQ(p.saldo)],
+              ...(verSaldo ? [['Saldo no Petros', fmtQ(p.saldo)]] : []),
               ...(p.custo !== null ? [['Custo', p.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]] : []),
               ...(p.venda !== null ? [['Venda', p.venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]] : []),
               ...Array.from({ length: r }, (_, i) => [`${i + 1}ª contagem`, qq[i] === null ? 'não contado' : fmtQ(qq[i])]),
-              ['Diferença', total === null ? '—' : `${total - p.saldo > 0 ? '+' : ''}${fmtQ(total - p.saldo)}`],
+              ...(verSaldo ? [['Diferença', total === null ? '—' : `${total - p.saldo > 0 ? '+' : ''}${fmtQ(total - p.saldo)}`]] : []),
             ] as [string, string][]).map(([rot, val]) => (
               <View key={rot} style={{ flexDirection: 'row', gap: 8 }}>
                 <Text style={[k.cap, { color: c.textMuted, width: 118 }]}>{rot}</Text>
@@ -1455,13 +1489,16 @@ function LinhaLista({ ct, r, p, qq, meu, partes, onCorrigir, historico, expandiv
 
 function LinhaItem({ p, r, q, onPress }: { p: Produto; r: Rodada; q: [number | null, number | null, number | null]; onPress?: () => void }) {
   const c = useCores();
-  const s = situacaoNaRodada(p, r, q);
+  const verSaldo = useContext(SaldoVisivel);
+  const s0 = situacaoNaRodada(p, r, q);
+  // Cega: coletado (azul) ou pendente; sem certo/errado nem saldo.
+  const s = !verSaldo && s0 !== 'pendente' ? 'correto' : s0;
   // Caixinha verde = correto, amarela = pendente (ainda não coletado), vermelha = divergente (coletado diferente do saldo).
-  const cor = s === 'correto' ? [c.successSoft, c.success] : s === 'divergente' ? [c.dangerSoft, c.danger] : [c.warningSoft, c.warning];
-  const m = motivo(p, r, q);
+  const cor = !verSaldo && s0 !== 'pendente' ? [c.accentSoft, c.accent] : s === 'correto' ? [c.successSoft, c.success] : s === 'divergente' ? [c.dangerSoft, c.danger] : [c.warningSoft, c.warning];
+  const m = verSaldo ? motivo(p, r, q) : '';
   const coletado = q[r - 1];
-  const dif = coletado === null ? null : coletado - p.saldo;
-  const rotulo = s === 'correto' ? 'Correto' : s === 'divergente' ? 'Divergente' : 'Pendente';
+  const dif = coletado === null || !verSaldo ? null : coletado - p.saldo;
+  const rotulo = !verSaldo ? (s0 === 'pendente' ? 'Pendente' : 'Coletado') : s === 'correto' ? 'Correto' : s === 'divergente' ? 'Divergente' : 'Pendente';
   const caixa = s === 'pendente' ? P.acao : cor[1];
   return (
     <Pressable accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={`${p.nome}: ${rotulo}${coletado !== null ? `, coletado ${fmtQ(coletado)}` : ''}`} disabled={!onPress} onPress={onPress}
@@ -1470,9 +1507,11 @@ function LinhaItem({ p, r, q, onPress }: { p: Produto; r: Rodada; q: [number | n
         <PackageIcon size={22} color={s === 'pendente' ? P.acaoTxt : '#fff'} weight="fill" />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo}{m ? ` · ${m}` : ` · ${p.categoria}`}{p.saldo === 0 ? ' · zerado no Petros' : ''}</Text>
+        <Text style={[k.mono, { color: c.textMuted }]} numberOfLines={1}>{p.codigo}{m ? ` · ${m}` : ` · ${p.categoria}`}{verSaldo && p.saldo === 0 ? ' · zerado no Petros' : ''}</Text>
         <Text style={[k.cTxt, { color: c.text, fontSize: 16 }]} numberOfLines={2}>{p.nome}</Text>
-        <Text style={[k.cTxt, { color: c.text }]}>Saldo <Text style={k.b}>{fmtQ(p.saldo)}</Text>{r > 1 ? Array.from({ length: r - 1 }, (_, i) => <Text key={i}> · {i + 1}ª <Text style={k.b}>{fmtQ(q[i])}</Text></Text>) : null}</Text>
+        {verSaldo
+          ? <Text style={[k.cTxt, { color: c.text }]}>Saldo <Text style={k.b}>{fmtQ(p.saldo)}</Text>{r > 1 ? Array.from({ length: r - 1 }, (_, i) => <Text key={i}> · {i + 1}ª <Text style={k.b}>{fmtQ(q[i])}</Text></Text>) : null}</Text>
+          : r > 1 ? <Text style={[k.cTxt, { color: c.text }]}>{Array.from({ length: r - 1 }, (_, i) => <Text key={i}>{i ? ' · ' : ''}{i + 1}ª <Text style={k.b}>{fmtQ(q[i])}</Text></Text>)}</Text> : null}
       </View>
       <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 2, minWidth: 74 }}>
         <Text style={[k.cap, k.b, { color: cor[1] }]}>{rotulo}</Text>
@@ -1961,7 +2000,7 @@ function FinalizarRodada({ c: ct, inv, r, nav }: { c: Contagem; inv: Inventario;
       <Topo titulo={`Finalizar contagem ${r}`} sub={`${ct.nome} · ${inv.codigo}`} onVoltar={nav.voltar} />
       <Corpo rodape={<>
         <Botao titulo={`Finalizar contagem ${r}`} onPress={finalizar} desabilitado={!produtos} />
-        <Text style={[k.cap, { color: c.textMuted, textAlign: 'center' }]}>Pode ser reaberta depois. Os itens já coletados são mantidos.</Text>
+        <Text style={[k.cap, { color: c.textMuted, textAlign: 'center' }]}>{ct.cega ? 'Contagem cega: quando terminar, as sobras e as faltas aparecem no Detalhamento e ela não pode ser reaberta.' : 'Pode ser reaberta depois. Os itens já coletados são mantidos.'}</Text>
       </>}>
         <Segmentos opcoes={ct.rodadas.map((s, i) => ({ id: String(i + 1), titulo: `Contagem ${i + 1}`, sub: ROTULO_RODADA[s] }))} valor={String(r)} onChange={() => undefined} />
         <Text style={[k.secao, { color: c.text }]}>Resumo da contagem · {res.total.toLocaleString('pt-BR')} itens</Text>

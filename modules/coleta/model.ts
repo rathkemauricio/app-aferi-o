@@ -44,6 +44,11 @@ export type Contagem = SyncRow & {
   pausada?: boolean;
   /** Pausas da contagem (a última fica aberta, sem `ate`, enquanto estiver pausada), com quem pausou. */
   pausas?: Pausa[];
+  /**
+   * Contagem cega: quem conta (não administrador) não vê o saldo do Petros nem o certo/errado de cada item até a
+   * contagem terminar; aí o Detalhamento mostra sobras e faltas. Concluída, não pode ser reaberta.
+   */
+  cega?: boolean;
   /** Quem criou a contagem e quando (o banco grava; não muda depois). */
   criado_por_nome?: string | null;
   criado_em?: string | null;
