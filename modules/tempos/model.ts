@@ -9,7 +9,11 @@ export const DEMANDAS = ['Pico', 'Movimento normal', 'Baixo movimento'] as const
 export const TURNOS = ['Manhã', 'Tarde', 'Noite'] as const;
 export const TODOS_SETORES = '';
 
-export type Atividade = { id: string; nome: string; setor: string; classe: string; ref: number | null; ativo?: boolean };
+export type Atividade = {
+  id: string; nome: string; setor: string; classe: string; ref: number | null; ativo?: boolean;
+  /** Pode acontecer a qualquer momento do dia (ex.: entrega, descarga de caminhão): não tem lugar fixo na sequência. */
+  qualquerHora?: boolean;
+};
 /** metaColetas: coletas por filial antes de finalizar (padrão 9 = 3 turnos × 3 demandas); ciclosMinimos: amostra por atividade (padrão 10). */
 export type Parametros = { ritmo: number; tol: number; metaColetas?: number; ciclosMinimos?: number };
 export const META_COLETAS_PADRAO = 9;

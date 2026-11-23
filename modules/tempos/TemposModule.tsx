@@ -1,6 +1,8 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Animated, { useAnimatedRef, useScrollOffset, useSharedValue } from 'react-native-reanimated';
+import { RolagemArrastavel } from './ListaArrastavel';
+import { BackHandler, Pressable, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { ListNumbersIcon, ArrowLeftIcon, ChartBarIcon, ClockCounterClockwiseIcon, CloudCheckIcon, CloudSlashIcon, DeviceMobileIcon, GearIcon, HourglassIcon, type Icon, TimerIcon } from '../../ui/icons';
@@ -28,6 +30,10 @@ export default function TemposModule() {
   const [ui, setUiState] = useState<UiState | null>(null);
   /** Gestão → Dimensionamento: cadastro de setores e atividades ou cálculo da equipe. */
   const [dimAba, setDimAba] = useState<'setores' | 'calculo'>('setores');
+  const rolagemRef = useAnimatedRef<Animated.ScrollView>();
+  const rolagemOffset = useScrollOffset(rolagemRef);
+  const conteudoRolagem = useSharedValue(0);
+  const rolagem = useMemo(() => ({ ref: rolagemRef, offset: rolagemOffset, conteudo: conteudoRolagem }), [rolagemRef, rolagemOffset, conteudoRolagem]);
 
   // Restaura o lugar onde o usuário estava (aba, coleta, atendimento) e grava a cada mudança.
   useEffect(() => { void loadUi().then(setUiState); void sincronizarModulo(); }, []);
@@ -109,9 +115,13 @@ export default function TemposModule() {
         </View>
       )}
 
-      <ScrollView key={`${tab}-${tab === 'coletas' ? stack.length : ui?.gestao}`} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-        {loaded && ui ? body() : <View style={s.stack}><Skeleton height={28} width="45%" /><Skeleton height={90} /><Skeleton height={160} /></View>}
-      </ScrollView>
+      {/* Animated.ScrollView: a lista arrastável (aba Atividades) rola a tela sozinha quando o bloco chega perto da borda. */}
+      <RolagemArrastavel.Provider value={rolagem}>
+        <Animated.ScrollView ref={rolagemRef} key={`${tab}-${tab === 'coletas' ? stack.length : ui?.gestao}`} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled"
+          onContentSizeChange={(_w, h) => conteudoRolagem.set(h)}>
+          {loaded && ui ? body() : <View style={s.stack}><Skeleton height={28} width="45%" /><Skeleton height={90} /><Skeleton height={160} /></View>}
+        </Animated.ScrollView>
+      </RolagemArrastavel.Provider>
 
       <View style={[s.nav, { paddingBottom: Math.max(insets.bottom, 6) }]}>
         {NAV.map(([id, NavIcon, label]) => {

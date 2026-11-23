@@ -12,7 +12,8 @@ import { useLook } from './ui';
  * atividades de cada tipo de operação (posto ou centro de distribuição). Pedido do usuário (23/11/2026).
  */
 const TODOS = 'Todos os setores';
-type EdicaoAtv = { id?: string; nome: string; setor: string; classe: string; ref: string };
+type EdicaoAtv = { id?: string; nome: string; setor: string; classe: string; ref: string; qualquerHora?: boolean };
+const SIM_QH = 'A qualquer hora do dia', NAO_QH = 'Em momento definido';
 type EdicaoSetor = { de?: string; nome: string };
 
 export function SetoresAtividades({ data, onSequencia }: { data: TmData; onSequencia: () => void }) {
@@ -73,7 +74,7 @@ export function SetoresAtividades({ data, onSequencia }: { data: TmData; onSeque
     const nome = atv.nome.trim();
     if (!nome) { notify('Informe o nome da atividade'); return; }
     const ref = Number(atv.ref.replace(',', '.'));
-    const campos: Omit<Atividade, 'id' | 'ativo'> = { nome, setor: atv.setor === TODOS ? TODOS_SETORES : atv.setor, classe: atv.classe, ref: atv.ref.trim() && !Number.isNaN(ref) && ref > 0 ? ref : null };
+    const campos: Omit<Atividade, 'id' | 'ativo'> = { nome, setor: atv.setor === TODOS ? TODOS_SETORES : atv.setor, classe: atv.classe, ref: atv.ref.trim() && !Number.isNaN(ref) && ref > 0 ? ref : null, qualquerHora: !!atv.qualquerHora };
     salvarAtividades(atv.id ? data.atividades.map(a => (a.id === atv.id ? { ...a, ...campos } : a)) : [...data.atividades, { id: uid('atv'), ...campos, ativo: true }]);
     setAtv(null);
   };
@@ -86,9 +87,9 @@ export function SetoresAtividades({ data, onSequencia }: { data: TmData; onSeque
       <Text style={[t.caption, { width: 22, textAlign: 'right' }]}>{i + 1}.</Text>
       <View style={s.flex}>
         <Text style={t.bodyStrong} numberOfLines={2}>{a.nome}</Text>
-        <Text style={t.caption}>{a.classe} · {a.ref ? `referência ${num(a.ref)} min` : 'tempo pela cronometragem'}</Text>
+        <Text style={t.caption}>{a.classe} · {a.ref ? `referência ${num(a.ref)} min` : 'tempo pela cronometragem'}{a.qualquerHora ? ' · a qualquer hora do dia' : ''}</Text>
       </View>
-      <IconButton icon={PencilSimpleIcon} label={`Editar ${a.nome}`} onPress={so(() => setAtv({ id: a.id, nome: a.nome, setor: a.setor === TODOS_SETORES ? TODOS : a.setor, classe: a.classe, ref: a.ref ? String(a.ref).replace('.', ',') : '' }))} />
+      <IconButton icon={PencilSimpleIcon} label={`Editar ${a.nome}`} onPress={so(() => setAtv({ id: a.id, nome: a.nome, setor: a.setor === TODOS_SETORES ? TODOS : a.setor, classe: a.classe, ref: a.ref ? String(a.ref).replace('.', ',') : '', qualquerHora: !!a.qualquerHora }))} />
       <IconButton icon={TrashIcon} tone="danger" label={`Excluir ${a.nome}`} onPress={so(() => excluirAtv(a))} />
     </View>
   );
@@ -156,6 +157,9 @@ export function SetoresAtividades({ data, onSequencia }: { data: TmData; onSeque
         <View style={s.group}><Text style={t.label}>Setor</Text>
           <ChoiceChips value={atv.setor} options={[...(setores.includes(atv.setor) || atv.setor === TODOS ? [] : [atv.setor]), ...setores, TODOS]} onChange={v => setAtv({ ...atv, setor: v })} /></View>
         <View style={s.group}><Text style={t.label}>Classificação</Text><ChoiceChips value={atv.classe} options={[...CLASSES]} onChange={v => setAtv({ ...atv, classe: v })} /></View>
+        <View style={s.group}><Text style={t.label}>Quando acontece</Text>
+          <ChoiceChips value={atv.qualquerHora ? SIM_QH : NAO_QH} options={[NAO_QH, SIM_QH]} onChange={v => setAtv({ ...atv, qualquerHora: v === SIM_QH })} />
+          <Text style={t.caption}>"A qualquer hora do dia": pode acontecer em qualquer momento (ex.: entrega, descarga de caminhão).</Text></View>
         <Field label="Tempo de referência (min)" helper="Opcional. Sem referência, o tempo vem da cronometragem." keyboardType="decimal-pad" value={atv.ref} onChangeText={v => setAtv({ ...atv, ref: v })} />
         {atv.id ? <StatusPill label={atvEmUso(atv.id) ? 'Já tem cronometragens' : 'Ainda sem cronometragem'} tone={atvEmUso(atv.id) ? 'accent' : 'neutral'} /> : null}
       </Sheet>

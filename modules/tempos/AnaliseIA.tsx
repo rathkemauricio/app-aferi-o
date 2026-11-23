@@ -60,6 +60,7 @@ function montarDados(d: TmData, filial: Filial, dim: ResumoDimensionamento) {
     tempo_por_classe_h: Object.fromEntries(ind.porClasse.map(([c, seg]) => [c, r1(seg / 3600)])),
     atividades: ind.atividades.slice(0, 30).map(a => ({
       atividade: a.nome, classe: classeDe.get(a.id) ?? '', ciclos: a.ciclos, media_min: r1(a.mediaSeg / 60),
+      ...(d.atividades.find(x => x.id === a.id)?.qualquerHora ? { a_qualquer_hora_do_dia: true } : {}),
       tempo_padrao_min: a.padraoSeg === null ? null : r1(a.padraoSeg / 60), referencia_min: a.ref, situacao: a.situacao,
     })),
     // Ociosidade calculada pelo sistema (não pela IA): espera + intervalos entre atendimentos no tempo observado.

@@ -66,6 +66,8 @@ Como chegar ao número de funcionários:
 Regras:
 - Use só os dados recebidos; não invente números. Quando faltar dado, diga o que falta e trabalhe com premissas explícitas.
 - Amostras pequenas (poucos ciclos ou poucas coletas) reduzem a confiança: diga isso.
+- Atividades com a_qualquer_hora_do_dia (ex.: entrega, descarga de caminhão) acontecem em qualquer momento: trate como demanda eventual
+  que exige folga ou cobertura na equipe, não como etapa de horário fixo.
 - Não avalie pessoas individualmente: fale de funções, turnos e setores.
 - Responda em português do Brasil, de forma objetiva, para os gestores da unidade.
 - Responda SOMENTE com um JSON válido neste formato:

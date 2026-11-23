@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Platform, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useAuth, useUsuarioLogado } from '../../lib/auth';
 import { useIdentidade } from '../../lib/identidade';
 import { esc, imprimirHtml } from '../../lib/util';
-import { CheckIcon, PencilSimpleIcon, PrinterIcon, ResetIcon, XIcon } from '../../ui/icons';
+import { CheckIcon, ClockIcon, PencilSimpleIcon, PrinterIcon, ResetIcon, XIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, IconButton, notify } from '../../ui/kit';
 import { PageHead } from './ColetasTab';
 import { ListaArrastavel } from './ListaArrastavel';
@@ -26,11 +26,13 @@ function sequenciaHtml(lista: Atividade[], tipoNome: string, marca: { nome: stri
 .head{border-bottom:4px solid #f4c542;padding-bottom:12px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
 .marca{font-weight:900;color:#174b78;letter-spacing:1px;font-size:12px}h1{margin:4px 0;font-size:22px}.muted{color:#66788a}
 ol{margin:18px 0 0;padding:0;list-style:none;counter-reset:n}li{display:flex;gap:12px;align-items:center;padding:8px 10px;border-bottom:1px solid #edf0f4;break-inside:avoid}
+.qh{margin-left:auto;font-size:11px;font-weight:700;color:#9a5b00;background:#fdf1d8;border-radius:999px;padding:2px 8px;white-space:nowrap}
 li b{min-width:28px;text-align:right;color:#174b78;font-size:14px}.nota{font-size:10.5px;color:#66788a;margin-top:14px}
 </style></head><body>
 <div class="head"><div>${marca.logo ? `<img src="${marca.logo}" alt="${esc(marca.nome)}" style="max-height:44px;max-width:180px;object-fit:contain;display:block;margin-bottom:6px">` : ''}<div class="marca">${esc(marca.nome.toUpperCase())}</div><h1>Sequência das atividades</h1><div class="muted">${esc(tipoNome)} · ordem cronológica dos fatos</div></div>
 <div style="text-align:right"><b>${lista.length} atividade(s)</b><div class="muted">${esc(agora.toLocaleDateString('pt-BR'))}</div></div></div>
-<ol>${lista.map((a, i) => `<li><b>${i + 1}</b><span>${esc(a.nome)}</span></li>`).join('')}</ol>
+<ol>${lista.map((a, i) => `<li><b>${i + 1}</b><span>${esc(a.nome)}</span>${a.qualquerHora ? '<span class="qh">⏱ a qualquer hora do dia</span>' : ''}</li>`).join('')}</ol>
+${lista.some(a => a.qualquerHora) ? '<p class="nota">⏱ A qualquer hora do dia: atividade que pode acontecer em qualquer momento (ex.: entrega, descarga de caminhão); a posição na lista é só uma referência.</p>' : ''}
 <p class="nota">Sequência informativa, montada na ordem em que os fatos e as tarefas acontecem. A coleta de tempos pode ser feita em qualquer ordem. Gerado por ${esc(quem || 'EasyAudit')} em ${esc(agora.toLocaleDateString('pt-BR'))} às ${esc(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))}.</p>
 </body></html>`;
 }
@@ -58,6 +60,8 @@ export function SequenciaAtividades({ data }: { data: TmData }) {
     salvarAtividades(data.atividades.map(a => (a.id === atual.id ? { ...a, nome: nomeNovo } : a)));
     setEditando(null);
   };
+  /** Liga/desliga "pode acontecer a qualquer momento do dia" (vale para a atividade em todo o módulo). */
+  const alternarQualquerHora = (a: Atividade) => salvarAtividades(data.atividades.map(x => (x.id === a.id ? { ...x, qualquerHora: !x.qualquerHora } : x)));
   const recomecar = () => confirmAction('Recomeçar a sequência?', 'A lista volta para a ordem do cadastro das atividades.', 'Recomeçar', () => salvarSequencia(tipo, []));
 
   return <>
@@ -65,7 +69,7 @@ export function SequenciaAtividades({ data }: { data: TmData }) {
     <Card>
       <ChoiceChips value={nome} options={[TIPOS_OPERACAO.posto.nome, TIPOS_OPERACAO.cd.nome]} onChange={v => setTipo(v === TIPOS_OPERACAO.cd.nome ? 'cd' : 'posto')} />
       <Text style={t.caption}>
-        {isAdmin ? 'Arraste os blocos pelo puxador (⋮⋮) até a ordem em que as tarefas acontecem; o lápis edita o nome da atividade (vale em todo o módulo). Cada mudança já fica gravada. ' : ''}
+        {isAdmin ? 'Arraste os blocos pelo puxador (⋮⋮) até a ordem em que as tarefas acontecem; o lápis edita o nome; o relógio marca as que podem acontecer a qualquer hora do dia (ex.: entrega, descarga de caminhão). Cada mudança já fica gravada. ' : ''}
         Esta sequência serve para consulta e impressão: a coleta pode ser feita em qualquer ordem e o cronômetro não muda.
       </Text>
       <Button title="Imprimir a lista" icon={PrinterIcon} disabled={!lista.length} onPress={imprimir} />
@@ -86,7 +90,17 @@ export function SequenciaAtividades({ data }: { data: TmData }) {
               <IconButton icon={CheckIcon} label="Salvar o nome" onPress={salvarNome} />
               <IconButton icon={XIcon} label="Cancelar" onPress={() => setEditando(null)} />
             </> : <>
-              <Text style={[t.bodyStrong, s.flex]} numberOfLines={2}>{a.nome}</Text>
+              <View style={s.flex}>
+                <Text style={t.bodyStrong} numberOfLines={a.qualquerHora ? 1 : 2}>{a.nome}</Text>
+                {a.qualquerHora ? <Text style={[t.caption, { color: colors.warning }]} numberOfLines={1}>A qualquer hora do dia</Text> : null}
+              </View>
+              {/* Relógio: pode acontecer a qualquer momento do dia (entrega, descarga…). Aceso = marcado. */}
+              <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!a.qualquerHora, disabled: !isAdmin }} disabled={!isAdmin}
+                accessibilityLabel={`${a.nome}: pode acontecer a qualquer hora do dia`} hitSlop={6} onPress={() => alternarQualquerHora(a)}
+                style={({ pressed }) => [{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 1,
+                  borderColor: a.qualquerHora ? colors.warning : colors.border, backgroundColor: a.qualquerHora ? colors.warningSoft : 'transparent' }, pressed && { opacity: 0.6 }]}>
+                <ClockIcon size={18} color={a.qualquerHora ? colors.warning : colors.textFaint} weight={a.qualquerHora ? 'fill' : 'regular'} />
+              </Pressable>
               {isAdmin ? <IconButton icon={PencilSimpleIcon} label={`Editar o nome de ${a.nome}`} onPress={() => setEditando({ id: a.id, nome: a.nome })} /> : null}
             </>}
           </View>
