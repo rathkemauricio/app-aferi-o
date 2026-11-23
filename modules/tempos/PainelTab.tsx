@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { ChartBarIcon, StorefrontIcon } from '../../ui/icons';
-import { Button, Card, ChoiceChips, EmptyState, SectionHeader, StatusPill, type Tone } from '../../ui/kit';
+import { ChartBarIcon, FilePdfIcon, StorefrontIcon } from '../../ui/icons';
+import { Button, Card, ChoiceChips, EmptyState, notify, SectionHeader, StatusPill, type Tone } from '../../ui/kit';
+import { useUsuarioLogado } from '../../lib/auth';
+import { useIdentidade } from '../../lib/identidade';
+import { imprimirHtml } from '../../lib/util';
+import { relatorioTemposHtml } from './relatorio';
 import { type Filtro, indicadores } from './calc';
 import { FilialPicker, PageHead } from './ColetasTab';
 import { ciclosMinimos, DEMANDAS, fmtMin, num, SETORES } from './model';
@@ -22,9 +26,19 @@ export function PainelTab({ data }: { data: TmData }) {
   const [escolher, setEscolher] = useState(false);
   const r = indicadores(data, f);
   const filial = data.filiais.find(x => x.id === f.filialId);
+  const marca = useIdentidade();
+  const usuario = useUsuarioLogado();
+  const [gerando, setGerando] = useState(false);
+  const gerarPdf = async () => {
+    setGerando(true);
+    try { await imprimirHtml(relatorioTemposHtml(data, f, marca, usuario), `Tempos e Movimentos ${filial ? filial.nome : 'rede'}`); }
+    catch (e) { notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'); }
+    finally { setGerando(false); }
+  };
 
   return <>
-    <PageHead title="Painel" subtitle={`${r.coletas} coleta(s) no filtro`} />
+    <PageHead title="Painel" subtitle={`${r.coletas} coleta(s) no filtro`}
+      action={<Button title={gerando ? 'Gerando…' : 'Relatório em PDF'} icon={FilePdfIcon} variant="secondary" size="sm" disabled={gerando || !r.coletas} onPress={() => void gerarPdf()} />} />
     <Card>
       <View style={s.row}>
         <Text style={[t.label, s.flex]}>Filial: {filial ? `${filial.codigo} · ${filial.nome}` : 'todas'}</Text>

@@ -1,11 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useUsuarioLogado } from '../../lib/auth';
 import { useAtividade } from '../../lib/presenca';
+import { useIdentidade } from '../../lib/identidade';
+import { imprimirHtml } from '../../lib/util';
+import { relatorioTemposHtml } from './relatorio';
 import { ehSomenteLeitura } from '../../lib/sync';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import {
-  ArrowLeftIcon, CalendarBlankIcon, ChartBarIcon, CheckIcon, FlagCheckeredIcon, ListBulletsIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlayIcon, PlusIcon,
+  ArrowLeftIcon, CalendarBlankIcon, ChartBarIcon, CheckIcon, FilePdfIcon, FlagCheckeredIcon, ListBulletsIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlayIcon, PlusIcon,
   QueueIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, XIcon,
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
@@ -78,6 +81,7 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
   const { s, t, colors } = useLook();
   const [form, setForm] = useState<ColetaForm | null>(null);
   const usuario = useUsuarioLogado();
+  const marca = useIdentidade();
   const filial = data.filiais.find(f => f.id === filialId) ?? null;
   const st = statusDaFilial(data, filialId);
   const fim = st?.finalizado_em ?? null;
@@ -101,10 +105,17 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
   };
 
   const sim = (ok: boolean) => (ok ? '✓' : '✗');
+  const gerarPdf = async () => {
+    try { await imprimirHtml(relatorioTemposHtml(data, { filialId, setor: '', demanda: '' }, marca, usuario), `Tempos e Movimentos ${filial.nome}`); }
+    catch (e) { notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'); }
+  };
   return <>
     <Button title="Filiais" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={nav.pop} />
     <PageHead title={`${filial.codigo} · ${filial.nome}`} subtitle={fim ? `Coletas finalizadas em ${new Date(fim).toLocaleString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : 'Em coleta'}
-      action={!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario))} /> : undefined} />
+      action={<View style={[s.row, { flexWrap: 'wrap', justifyContent: 'flex-end' }]}>
+        {pr.coletas ? <IconButton icon={FilePdfIcon} label="Relatório em PDF" onPress={() => void gerarPdf()} /> : null}
+        {!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario))} /> : null}
+      </View>} />
 
     {/* Progresso pela meta padrão (Gestão → Cadastros → Parâmetros) */}
     <Card>
