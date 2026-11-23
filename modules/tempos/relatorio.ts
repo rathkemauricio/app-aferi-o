@@ -1,7 +1,7 @@
 import { esc } from '../../lib/util';
 import { type Filtro, coletasFiltradas, atendimentosDe, indicadores, ociosidade, progressoFilial } from './calc';
 import { ciclosMinimos, dataBR, fmtDur, fmtMin, horaBR, num, pausaSeg, TIPOS_OPERACAO } from './model';
-import { statusDaFilial, tipoDe, type TmData } from './store';
+import { sequenciaDe, statusDaFilial, tipoDe, type TmData } from './store';
 
 /** Análise com IA salva (tm_analises_ia) e o dimensionamento da planilha enviado junto. */
 export type AnaliseParaRelatorio = {
@@ -23,7 +23,7 @@ export type DimParaRelatorio = {
 
 /** Ordem das atividades no relatório: como foram executadas na unidade, a do cadastro (setas) ou por tempo gasto. */
 export type OrdemAtividades = 'cronologica' | 'cadastro' | 'tempo';
-export const ROTULO_ORDEM: Record<OrdemAtividades, string> = { cronologica: 'Ordem cronológica (como foram executadas)', cadastro: 'Ordem do cadastro', tempo: 'Mais tempo gasto primeiro' };
+export const ROTULO_ORDEM: Record<OrdemAtividades, string> = { cronologica: 'Ordem cronológica (como foram executadas)', cadastro: 'Sequência das atividades (montada)', tempo: 'Mais tempo gasto primeiro' };
 export type OpcoesRelatorio = { ordem: OrdemAtividades; linhaDoTempo: boolean };
 
 const n1 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '—');
@@ -74,7 +74,8 @@ export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string;
     posicao.set(e.atividade_id, [...(posicao.get(e.atividade_id) ?? []), k]);
   }));
   const media = (xs: number[] = []) => (xs.length ? xs.reduce((x, y) => x + y, 0) / xs.length : 99);
-  const indiceCadastro = new Map(d.atividades.map((a, i) => [a.id, i]));
+  // Sequência montada (Gestão → Sequência das atividades) do tipo da unidade; sem unidade, a do posto e depois a do CD.
+  const indiceCadastro = new Map([...sequenciaDe(d, ehCd ? 'cd' : 'posto'), ...sequenciaDe(d, ehCd ? 'posto' : 'cd')].map((a, i) => [a.id, i]));
   const atividadesOrdenadas = [...r.atividades].sort((a, b) =>
     ordem === 'tempo' ? b.totalSeg - a.totalSeg
       : ordem === 'cadastro' ? (indiceCadastro.get(a.id) ?? 1e9) - (indiceCadastro.get(b.id) ?? 1e9)

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMemo, useSyncExternalStore } from 'react';
 import { type ConfigRow, configCol, ehCD, useConfig, useFiliais } from '../../lib/data';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
-import { type Atendimento, ATIVIDADES_CD, ATIVIDADES_PADRAO, type Atividade, CFG_ATIVIDADES, CFG_SETORES_CD, CFG_SETORES_POSTO, SETORES, SETORES_CD, type TipoOperacao, CFG_PARAMETROS, CFG_VEICULOS, type Coleta, type Parametros, PARAMETROS_PADRAO, type StatusFilial, type Veiculo, VEICULOS_PADRAO } from './model';
+import { type Atendimento, ATIVIDADES_CD, ATIVIDADES_PADRAO, type Atividade, CFG_ATIVIDADES, CFG_SETORES_CD, CFG_SETORES_POSTO, cfgSequencia, SETORES, SETORES_CD, TODOS_SETORES, type TipoOperacao, CFG_PARAMETROS, CFG_VEICULOS, type Coleta, type Parametros, PARAMETROS_PADRAO, type StatusFilial, type Veiculo, VEICULOS_PADRAO } from './model';
 
 /* ---------- Coleções sincronizadas ---------- */
 export const coletasCol = new Collection<Coleta>({ table: 'tm_coletas', storageKey: 'nevoeiro.tempos.coletas.v2' });
@@ -40,7 +40,7 @@ export const useDrafts = () => useSyncExternalStore(drafts.subscribe, drafts.get
 /* ---------- Estado da tela (volta exatamente onde o usuário estava) ---------- */
 export type ColetasView = { name: 'home' } | { name: 'filial'; filialId: string } | { name: 'analise'; filialId: string } | { name: 'coleta'; coletaId: string } | { name: 'atendimento'; coletaId: string; atendimentoId: string };
 export type Tab = 'coletas' | 'painel' | 'historico' | 'gestao';
-export type GestaoAba = 'dimensionamento' | 'plano' | 'cadastros';
+export type GestaoAba = 'dimensionamento' | 'sequencia' | 'plano' | 'cadastros';
 export type UiState = { tab: Tab; stack: ColetasView[]; filialId: string; gestao: GestaoAba };
 const UI_KEY = 'nevoeiro.tempos.ui.v2';
 export const UI_PADRAO: UiState = { tab: 'coletas', stack: [{ name: 'home' }], filialId: '', gestao: 'dimensionamento' };
@@ -65,7 +65,20 @@ export type TmData = {
   setoresCd: string[];
   /** Setores do posto (editáveis no mesmo lugar). */
   setoresPosto: string[];
+  /** Sequência informativa das atividades por tipo (ids), montada arrastando; não afeta a coleta. */
+  sequencias: Record<TipoOperacao, string[]>;
 };
+
+/**
+ * Atividades do tipo de operação (setores do tipo + as que valem para todos) na ordem da sequência informativa;
+ * as que ainda não estão na sequência vão para o fim, na ordem do cadastro.
+ */
+export function sequenciaDe(d: Pick<TmData, 'atividades' | 'setoresCd' | 'setoresPosto' | 'sequencias'>, tipo: TipoOperacao) {
+  const setores = new Set(setoresDoTipo(d, tipo));
+  const ativas = d.atividades.filter(a => a.ativo !== false && (a.setor === TODOS_SETORES || setores.has(a.setor)));
+  const ordem = new Map((d.sequencias[tipo] ?? []).map((id, i) => [id, i]));
+  return ativas.map((a, i) => ({ a, k: ordem.get(a.id) ?? 1e6 + i })).sort((x, y) => x.k - y.k).map(x => x.a);
+}
 
 /** Tipo de operação da unidade: CD quando classificada como "Centro de distribuição" no cadastro da filial. */
 export const tipoDe = (d: Pick<TmData, 'filiais'>, filialId: string): TipoOperacao => (ehCD(d.filiais.find(f => f.id === filialId)) ? 'cd' : 'posto');
@@ -89,6 +102,8 @@ export function useTm() {
   const veiculosCfg = useConfig<{ lista: Veiculo[] }>(CFG_VEICULOS, { lista: VEICULOS_PADRAO });
   const setoresCdCfg = useConfig<{ lista: string[] }>(CFG_SETORES_CD, { lista: SETORES_CD });
   const setoresPostoCfg = useConfig<{ lista: string[] }>(CFG_SETORES_POSTO, { lista: [...SETORES] });
+  const seqPosto = useConfig<{ ids: string[] }>(cfgSequencia('posto'), { ids: [] });
+  const seqCd = useConfig<{ ids: string[] }>(cfgSequencia('cd'), { ids: [] });
   const data = useMemo<TmData>(() => ({
     filiais: f.filiais,
     coletas: [...c.list].sort((x, y) => y.data.localeCompare(x.data)),
@@ -102,7 +117,8 @@ export function useTm() {
     statusFiliais: st.list,
     setoresCd: Array.isArray(setoresCdCfg.lista) ? setoresCdCfg.lista : SETORES_CD,
     setoresPosto: Array.isArray(setoresPostoCfg.lista) && setoresPostoCfg.lista.length ? setoresPostoCfg.lista : [...SETORES],
-  }), [f.filiais, c.list, a.list, d.list, atvCfg, parametros, p.list, veiculosCfg, st.list, setoresCdCfg, setoresPostoCfg]);
+    sequencias: { posto: Array.isArray(seqPosto.ids) ? seqPosto.ids : [], cd: Array.isArray(seqCd.ids) ? seqCd.ids : [] },
+  }), [f.filiais, c.list, a.list, d.list, atvCfg, parametros, p.list, veiculosCfg, st.list, setoresCdCfg, setoresPostoCfg, seqPosto, seqCd]);
   return {
     data,
     loaded: c.loaded && a.loaded && p.loaded && cfg.loaded && d.loaded && f.loaded && st.loaded,
@@ -112,6 +128,8 @@ export function useTm() {
 
 export const salvarAtividades = (lista: Atividade[]) => configCol.put({ id: CFG_ATIVIDADES, valor: { lista } } as ConfigRow);
 export const salvarVeiculos = (lista: Veiculo[]) => configCol.put({ id: CFG_VEICULOS, valor: { lista } } as ConfigRow);
+/** Grava a sequência informativa (ids na ordem) do tipo de operação. */
+export const salvarSequencia = (tipo: TipoOperacao, ids: string[]) => configCol.put({ id: cfgSequencia(tipo), valor: { ids } } as ConfigRow);
 /** Grava a lista de setores do tipo de operação. */
 export const salvarSetores = (tipo: TipoOperacao, lista: string[]) => configCol.put({ id: tipo === 'cd' ? CFG_SETORES_CD : CFG_SETORES_POSTO, valor: { lista } } as ConfigRow);
 export const salvarParametros = (v: Parametros) => configCol.put({ id: CFG_PARAMETROS, valor: v } as ConfigRow);

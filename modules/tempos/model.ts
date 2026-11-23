@@ -102,6 +102,11 @@ export const SETORES_CD = ['Recebimento', 'Armazenagem', 'Separação e expediç
 export const CFG_SETORES_CD = 'tm.setores_cd';
 /** Setores do posto (editáveis em Gestão → Dimensionamento → Setores e atividades); padrão = SETORES. */
 export const CFG_SETORES_POSTO = 'tm.setores_posto';
+/**
+ * Sequência das atividades (Gestão → Sequência das atividades): ordem cronológica dos fatos, independente do setor.
+ * Só informativa (impressão e relatório); NÃO muda a ordem do cronômetro nas coletas. Uma por tipo de operação.
+ */
+export const cfgSequencia = (tipo: 'posto' | 'cd') => `tm.sequencia.${tipo}`;
 const [CR, CA, CS, CI, CAD] = SETORES_CD;
 /**
  * Atividades padrão do CD (sem tempo de referência: o tempo vem da cronometragem). O administrador acrescenta as

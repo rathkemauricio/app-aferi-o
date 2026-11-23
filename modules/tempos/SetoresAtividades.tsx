@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAuth } from '../../lib/auth';
 import { ArrowDownIcon, ArrowsDownUpIcon, ArrowUpIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from '../../ui/icons';
-import { ListaArrastavel } from './ListaArrastavel';
 import { Button, Card, ChoiceChips, confirmAction, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { type Atividade, CLASSES, num, TIPOS_OPERACAO, type TipoOperacao, TODOS_SETORES, uid } from './model';
 import { coletasCol, salvarAtividades, salvarSetores, setoresDoTipo, tipoDe, type TmData } from './store';
@@ -13,18 +12,15 @@ import { useLook } from './ui';
  * atividades de cada tipo de operação (posto ou centro de distribuição). Pedido do usuário (23/11/2026).
  */
 const TODOS = 'Todos os setores';
-const atvChave = (a: Atividade) => a.id;
 type EdicaoAtv = { id?: string; nome: string; setor: string; classe: string; ref: string };
 type EdicaoSetor = { de?: string; nome: string };
 
-export function SetoresAtividades({ data }: { data: TmData }) {
+export function SetoresAtividades({ data, onSequencia }: { data: TmData; onSequencia: () => void }) {
   const { s, t, colors } = useLook();
   const { isAdmin } = useAuth();
   const [tipo, setTipo] = useState<TipoOperacao>(() => (data.filiais.some(f => tipoDe(data, f.id) === 'cd') ? 'cd' : 'posto'));
   const [atv, setAtv] = useState<EdicaoAtv | null>(null);
   const [setor, setSetor] = useState<EdicaoSetor | null>(null);
-  /** Setor aberto na ordenação por arrastar (um setor por vez, sem misturar). */
-  const [ordenar, setOrdenar] = useState<string | null>(null);
   const setores = setoresDoTipo(data, tipo);
   const outros = setoresDoTipo(data, tipo === 'cd' ? 'posto' : 'cd');
   const unidades = data.filiais.filter(f => tipoDe(data, f.id) === tipo);
@@ -63,13 +59,6 @@ export function SetoresAtividades({ data }: { data: TmData }) {
   };
 
   /* ---------- Ordem (a mesma do cronômetro e do relatório "ordem do cadastro") ---------- */
-  /** Nova ordem das atividades de um setor (arrastar e soltar): ocupam os mesmos lugares na lista da rede, na ordem nova. */
-  const reordenarSetor = (se: string, ids: string[]) => {
-    const doSetor = (a: Atividade) => a.ativo !== false && (se === TODOS ? a.setor === TODOS_SETORES : a.setor === se);
-    const porId = new Map(data.atividades.map(a => [a.id, a]));
-    const fila = ids.map(id => porId.get(id)).filter((a): a is Atividade => !!a);
-    salvarAtividades(data.atividades.map(a => (doSetor(a) ? fila.shift() ?? a : a)));
-  };
   const moverSetor = (se: string, passo: -1 | 1) => {
     const i = setores.indexOf(se), j = i + passo;
     if (i < 0 || j < 0 || j >= setores.length) return;
@@ -114,13 +103,10 @@ export function SetoresAtividades({ data }: { data: TmData }) {
           : tipo === 'cd' ? 'Nenhuma unidade classificada como centro de distribuição. Classifique no cadastro da filial (campo bandeira).' : 'Nenhuma unidade de posto.'}
         {' '}O tipo vem do cadastro da unidade ({nUnidades('posto')} posto(s), {nUnidades('cd')} CD).
       </Text>
-      <Text style={t.caption}>A ordem das atividades é a do cronômetro e a do relatório (opção "ordem do cadastro"). Arraste os blocos, um setor por vez, até chegar à sequência real das tarefas.</Text>
-      {isAdmin ? (
-        <View style={[s.row, { flexWrap: 'wrap' }]}>
-          <Button title="Ordenar atividades (arrastar)" icon={ArrowsDownUpIcon} size="sm" onPress={() => setOrdenar(setores[0] ?? TODOS)} />
-          <Button title="Novo setor" icon={PlusIcon} variant="secondary" size="sm" onPress={() => setSetor({ nome: '' })} />
-        </View>
-      ) : null}
+      <View style={[s.row, { flexWrap: 'wrap' }]}>
+        <Button title="Sequência das atividades" icon={ArrowsDownUpIcon} variant="secondary" size="sm" onPress={onSequencia} />
+        {isAdmin ? <Button title="Novo setor" icon={PlusIcon} size="sm" onPress={() => setSetor({ nome: '' })} /> : null}
+      </View>
     </Card>
 
     {setores.map(se => {
@@ -154,27 +140,6 @@ export function SetoresAtividades({ data }: { data: TmData }) {
       <Text style={[t.caption, { padding: 12 }, s.divided]}>Ex.: Espera e Retrabalho, que entram no cálculo do tempo ocioso. Valem para posto e CD.</Text>
     </Card>
     {!isAdmin ? <Text style={t.caption}>Somente o administrador cadastra, edita e exclui setores e atividades.</Text> : null}
-
-    {ordenar !== null && (
-      <Sheet title="Ordenar atividades" onClose={() => setOrdenar(null)}
-        footer={<Button title="Pronto" onPress={() => setOrdenar(null)} />}>
-        <Text style={t.caption}>{TIPOS_OPERACAO[tipo].nome} · escolha o setor e arraste os blocos pelo puxador (⋮⋮) até a ordem em que as tarefas acontecem. Cada soltura já fica gravada.</Text>
-        <ChoiceChips value={ordenar} options={[...setores, TODOS]} onChange={setOrdenar} />
-        {ativas(ordenar).length ? (
-          <ListaArrastavel itens={ativas(ordenar)} chave={atvChave} onSoltar={ids => reordenarSetor(ordenar, ids)}
-            cores={{ fundo: colors.surface, borda: colors.border, ativo: colors.accent, icone: colors.textMuted }}
-            render={(a, i) => (
-              <View style={s.row}>
-                <Text style={[t.bodyStrong, { width: 26, color: colors.accentText }]}>{i + 1}</Text>
-                <View style={s.flex}>
-                  <Text style={t.bodyStrong} numberOfLines={1}>{a.nome}</Text>
-                  <Text style={t.caption} numberOfLines={1}>{a.classe}</Text>
-                </View>
-              </View>
-            )} />
-        ) : <Text style={t.caption}>Nenhuma atividade neste setor.</Text>}
-      </Sheet>
-    )}
 
     {setor && (
       <Sheet title={setor.de ? 'Renomear setor' : `Novo setor (${TIPOS_OPERACAO[tipo].nome.toLowerCase()})`} onClose={() => setSetor(null)}

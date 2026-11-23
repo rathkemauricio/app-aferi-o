@@ -22,7 +22,7 @@ export function OpcoesImpressao({ onClose, onGerar }: { onClose: () => void; onG
         <ChoiceChips value={ROTULO_ORDEM[o.ordem]} options={ORDENS.map(x => ROTULO_ORDEM[x])} onChange={v => setO({ ...o, ordem: ORDENS.find(x => ROTULO_ORDEM[x] === v) ?? 'cronologica' })} />
         <Text style={t.caption}>
           {o.ordem === 'cronologica' ? 'Na sequência em que as tarefas foram executadas na unidade (pela primeira vez em que cada uma foi cronometrada).'
-            : o.ordem === 'cadastro' ? 'Na ordem que você montou arrastando os blocos (Dimensionamento → Setores e atividades).'
+            : o.ordem === 'cadastro' ? 'Na sequência que você montou arrastando os blocos (Gestão → Sequência das atividades).'
               : 'As que mais consumiram tempo primeiro.'}
         </Text>
       </View>

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { GestureDetector, type PanGestureConfig, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { ReduceMotion, type SharedValue, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -16,8 +16,10 @@ const MOLA = { duration: 260, dampingRatio: 0.9, reduceMotion: ReduceMotion.Syst
 type Props<T> = {
   itens: T[];
   chave: (item: T) => string;
-  /** Conteúdo do bloco (o puxador fica à esquerda). */
+  /** Conteúdo do bloco (o puxador fica à esquerda). `indice` acompanha o arrasto ao vivo (numeração 1, 2, 3…). */
   render: (item: T, indice: number) => ReactNode;
+  /** Sem permissão para ordenar: só a lista, sem puxador. */
+  somenteLeitura?: boolean;
   /** Nova ordem (chaves), ao soltar um bloco num lugar diferente. */
   onSoltar: (chaves: string[]) => void;
   cores: { fundo: string; borda: string; ativo: string; icone: string };
@@ -29,20 +31,26 @@ function ordemDe(pos: Record<string, number>) {
   return Object.keys(pos).sort((a, b) => pos[a] - pos[b]);
 }
 
-export function ListaArrastavel<T>({ itens, chave, render, onSoltar, cores }: Props<T>) {
+export function ListaArrastavel<T>({ itens, chave, render, onSoltar, cores, somenteLeitura = false }: Props<T>) {
   const ids = useMemo(() => itens.map(chave), [itens, chave]);
   const assinatura = ids.join('|');
   const pos = useSharedValue<Record<string, number>>(Object.fromEntries(ids.map((id, i) => [id, i])));
-  // Lista mudou (gravada, outro setor, item novo): volta às posições da lista.
-  useEffect(() => { pos.set(Object.fromEntries(ids.map((id, i) => [id, i]))); }, [assinatura]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Ordem durante o arrasto (só muda quando um bloco troca de casa), para a numeração acompanhar ao vivo.
+  const [viva, setViva] = useState<string[]>(ids);
+  // Lista mudou (gravada, outro filtro, item novo): volta às posições da lista.
+  useEffect(() => { pos.set(Object.fromEntries(ids.map((id, i) => [id, i]))); setViva(ids); }, [assinatura]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Callbacks estáveis: o gesto não é recriado no meio do arrasto quando a numeração re-renderiza a lista.
+  const ref = useRef({ assinatura, onSoltar });
+  ref.current = { assinatura, onSoltar };
+  const aoSoltar = useCallback((nova: string[]) => { setViva(nova); if (nova.join('|') !== ref.current.assinatura) ref.current.onSoltar(nova); }, []);
+  const indice = useMemo(() => new Map(viva.map((id, i) => [id, i])), [viva]);
   return (
     <View style={{ height: Math.max(0, ids.length * PASSO - VAO) }}>
       {itens.map((item, i) => {
         const id = ids[i];
         return (
-          <Bloco key={id} id={id} pos={pos} total={ids.length} cores={cores}
-            onFim={(nova: string[]) => { if (nova.join('|') !== assinatura) onSoltar(nova); }}>
-            {render(item, i)}
+          <Bloco key={id} id={id} pos={pos} total={ids.length} cores={cores} onFim={aoSoltar} onMudou={setViva} somenteLeitura={somenteLeitura}>
+            {render(item, indice.get(id) ?? i)}
           </Bloco>
         );
       })}
@@ -50,8 +58,9 @@ export function ListaArrastavel<T>({ itens, chave, render, onSoltar, cores }: Pr
   );
 }
 
-function Bloco({ id, pos, total, cores, onFim, children }: {
-  id: string; pos: SharedValue<Record<string, number>>; total: number; cores: Props<unknown>['cores']; onFim: (nova: string[]) => void; children: ReactNode;
+function Bloco({ id, pos, total, cores, onFim, onMudou, somenteLeitura, children }: {
+  id: string; pos: SharedValue<Record<string, number>>; total: number; cores: Props<unknown>['cores'];
+  onFim: (nova: string[]) => void; onMudou: (nova: string[]) => void; somenteLeitura: boolean; children: ReactNode;
 }) {
   const ativo = useSharedValue(false);
   const y = useSharedValue(0);
@@ -60,6 +69,7 @@ function Bloco({ id, pos, total, cores, onFim, children }: {
     // No celular, segurar um instante no puxador antes de arrastar (a rolagem da tela continua funcionando).
     activateAfterLongPress: Platform.OS === 'web' ? 0 : 120,
     minDistance: 1,
+    enabled: !somenteLeitura,
     onActivate: () => {
       'worklet';
       inicio.set((pos.get()[id] ?? 0) * PASSO);
@@ -80,6 +90,7 @@ function Bloco({ id, pos, total, cores, onFim, children }: {
       const nova: Record<string, number> = {};
       ordem.forEach((k, i) => { nova[k] = i; });
       pos.set(nova);
+      scheduleOnRN(onMudou, ordem);
     },
     onFinalize: () => {
       'worklet';
@@ -87,7 +98,7 @@ function Bloco({ id, pos, total, cores, onFim, children }: {
       ativo.set(false);
       scheduleOnRN(onFim, ordemDe(pos.get()));
     },
-  }), [id, total, onFim]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [id, total, onFim, onMudou, somenteLeitura]); // eslint-disable-line react-hooks/exhaustive-deps
   const pan = usePanGesture(config);
   const estilo = useAnimatedStyle(() => {
     const destino = (pos.get()[id] ?? 0) * PASSO;
@@ -105,7 +116,7 @@ function Bloco({ id, pos, total, cores, onFim, children }: {
     <Animated.View style={[st.bloco, { backgroundColor: cores.fundo }, estilo]}>
       <GestureDetector gesture={pan}>
         <View style={st.puxador} accessibilityLabel="Arrastar para mudar a ordem">
-          <DotsSixVerticalIcon size={22} color={cores.icone} weight="bold" />
+          <DotsSixVerticalIcon size={22} color={cores.icone} weight="bold" style={somenteLeitura ? { opacity: 0.25 } : undefined} />
         </View>
       </GestureDetector>
       <View style={st.conteudo}>{children}</View>

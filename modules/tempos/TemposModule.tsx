@@ -10,6 +10,7 @@ import { CadastrosTab } from './CadastrosTab';
 import { AtendimentoScreen, ColetaScreen, ColetasHome, FilialScreen } from './ColetasTab';
 import { DimensionamentoTab } from './DimensionamentoTab';
 import { SetoresAtividades } from './SetoresAtividades';
+import { SequenciaAtividades } from './SequenciaAtividades';
 import { HistoricoTab } from './HistoricoTab';
 import { PainelTab } from './PainelTab';
 import { PlanoTab } from './PlanoTab';
@@ -17,7 +18,7 @@ import { type ColetasView, type GestaoAba, loadUi, saveUi, sincronizarModulo, ty
 import { useLook } from './ui';
 
 const NAV: [Tab, Icon, string][] = [['coletas', TimerIcon, 'Coletas'], ['painel', ChartBarIcon, 'Painel'], ['historico', ClockCounterClockwiseIcon, 'Histórico'], ['gestao', GearIcon, 'Gestão']];
-const GESTAO: [GestaoAba, string][] = [['dimensionamento', 'Dimensionamento'], ['plano', 'Plano de ação'], ['cadastros', 'Cadastros']];
+const GESTAO: [GestaoAba, string][] = [['dimensionamento', 'Dimensionamento'], ['sequencia', 'Sequência das atividades'], ['plano', 'Plano de ação'], ['cadastros', 'Cadastros']];
 
 export default function TemposModule() {
   const router = useRouter();
@@ -69,11 +70,12 @@ export default function TemposModule() {
     if (tab === 'gestao') return <>
       <ChoiceChips value={GESTAO.find(g => g[0] === ui.gestao)?.[1] ?? 'Dimensionamento'} options={GESTAO.map(g => g[1])} onChange={v => setUi(u => ({ ...u, gestao: GESTAO.find(g => g[1] === v)?.[0] ?? 'dimensionamento' }))} />
       {ui.gestao === 'plano' ? <PlanoTab data={data} filialId={ui.filialId} />
+        : ui.gestao === 'sequencia' ? <SequenciaAtividades data={data} />
         : ui.gestao === 'cadastros' ? <CadastrosTab data={data} onSetores={() => { setDimAba('setores'); setUi(u => ({ ...u, gestao: 'dimensionamento' })); }} />
         : <>
           {/* Dimensionamento: cadastro de setores e atividades (posto e CD) e o cálculo da equipe. */}
           <ChoiceChips value={dimAba === 'setores' ? 'Setores e atividades' : 'Cálculo da equipe'} options={['Setores e atividades', 'Cálculo da equipe']} onChange={v => setDimAba(v === 'Setores e atividades' ? 'setores' : 'calculo')} />
-          {dimAba === 'setores' ? <SetoresAtividades data={data} /> : <DimensionamentoTab data={data} filialId={ui.filialId} setFilialId={setFilialId} />}
+          {dimAba === 'setores' ? <SetoresAtividades data={data} onSequencia={() => setUi(u => ({ ...u, gestao: 'sequencia' }))} /> : <DimensionamentoTab data={data} filialId={ui.filialId} setFilialId={setFilialId} />}
         </>}
     </>;
     const nav = { push, pop };
