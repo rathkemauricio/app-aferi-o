@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import type { Filial } from '../../lib/data';
+import { useAtividade } from '../../lib/presenca';
+import { ehSomenteLeitura } from '../../lib/sync';
 import { shareText } from '../../lib/share';
 import { dataBR, isoValida, rotuloFilial } from '../../lib/util';
 import { CheckIcon, EyeIcon, FileCsvIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, ShieldWarningIcon, StorefrontIcon, TrashIcon, UploadSimpleIcon } from '../../ui/icons';
@@ -194,6 +196,11 @@ export function UnidadeForm({ unidade, filiais, unidades, onClose }: { unidade: 
   const pv = isoValida(ur) ? calcProxima(ur, r.cl) : null;
   const filial = filiais.find(f => f.id === filialId);
   const filtradas = filiais.filter(f => `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(buscaF.toLowerCase())).slice(0, 40);
+  // Quem está online: avaliação de risco em andamento (critérios marcados até agora).
+  useAtividade(unidade && !ehSomenteLeitura() ? {
+    modulo: 'riscos', titulo: 'Avaliação de risco', filial: unidade.nome,
+    detalhe: `${n} de 5 critérios marcados${n === 5 ? ` · risco ${r.cl}` : ''}`, pct: (n / 5) * 100, abrir: '/riscos',
+  } : null);
   const salvar = () => {
     if (!filial && !unidade) { notify('Escolha a filial', 'A unidade do mapa é uma filial do cadastro (ou uma área dela).'); return; }
     if (nova && !area.trim()) { notify('Informe a área', 'Toda filial já está no mapa. Para dividir, dê um nome à área (ex.: Pista ou Loja).'); return; }

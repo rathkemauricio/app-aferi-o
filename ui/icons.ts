@@ -115,3 +115,4 @@ export const CheckSquareOffsetIcon: Icon = require('phosphor-react-native/src/ic
 export const ListMagnifyingGlassIcon: Icon = require('phosphor-react-native/src/icons/ListMagnifyingGlass').ListMagnifyingGlassIcon;
 export const ImageIcon: Icon = require('phosphor-react-native/src/icons/Image').ImageIcon;
 export const CubeIcon: Icon = require('phosphor-react-native/src/icons/Cube').CubeIcon;
+export const BroadcastIcon: Icon = require('phosphor-react-native/src/icons/Broadcast').BroadcastIcon;

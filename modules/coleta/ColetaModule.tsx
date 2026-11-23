@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { type ComponentRef, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth, useUsuarioLogado } from '../../lib/auth';
+import { useAtividade } from '../../lib/presenca';
+import { ehSomenteLeitura } from '../../lib/sync';
 import { preferencias, usePreferencias } from '../../lib/preferencias';
 import { tocar } from '../../lib/sons';
 import { shareText } from '../../lib/share';
@@ -65,6 +67,16 @@ export default function ColetaModule() {
   useEffect(() => aoReiniciarContagens(() => setPilha([{ n: 'lista' }])), []);
   const nav = { ir, trocar, voltar, inicio };
   const dados = useColeta();
+  // Link "Acompanhar" (Quem está online): /coleta?abrir=<id da contagem> abre a contagem de quem está coletando.
+  const { abrir } = useLocalSearchParams<{ abrir?: string }>();
+  const [abriu, setAbriu] = useState('');
+  useEffect(() => {
+    if (!abrir || abriu === abrir || !pronto || !dados.loaded) return;
+    const ct = dados.contagens.find(c => c.id === abrir);
+    if (!ct) { void contagensCol.sync(); void inventariosCol.sync(); return; }
+    setAbriu(abrir);
+    setPilha([{ n: 'lista' }, { n: 'inventario', id: ct.inventario_id }, { n: 'contagem', id: ct.id, aba: 'itens' }]);
+  }, [abrir, abriu, pronto, dados.loaded, dados.contagens]);
   const { colors, mode } = useContext(ThemeContext);
   aplicarPaleta(colors, mode === 'dark');
   // Apaga do aparelho as cópias dos arquivos de inventários que não estão mais abertos.
@@ -904,6 +916,21 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
     m.forEach(l => l.sort((a, b) => b.hora.localeCompare(a.hora)));
     return m;
   }, [col.list, ct.id, r, disp]);
+  // Quem está online: o administrador (e o dono, como auditor) vê esta contagem e o andamento ao vivo.
+  const recentes = useMemo(() => {
+    if (!disp || !produtos) return [];
+    const nome = new Map(produtos.map(p => [p.codigo, p.nome]));
+    const l: [string, string][] = [];
+    col.list.forEach(x => { if (x.contagem_id === ct.id && x.rodada === r && x.dispositivo === disp) x.hist.slice(0, 5).forEach(([h, n]) => { if (n) l.push([h, `${h.slice(0, 5)} · ${nome.get(x.codigo) ?? x.codigo} ${n > 0 ? '+' : ''}${n.toLocaleString('pt-BR')}`]); }); });
+    return l.sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5).map(x => x[1]);
+  }, [col.list, ct.id, r, disp, produtos]);
+  const contados = useMemo(() => lista.filter(p => (q.get(p.codigo)?.[r - 1] ?? null) !== null).length, [lista, q, r]);
+  // Só quem está coletando (quem só abriu para ver, ou o dono em visita, não aparece como coletando).
+  useAtividade(produtos && !ehSomenteLeitura() && (coletavel || recentes.length > 0) ? {
+    modulo: 'coleta', titulo: `${inv.codigo} · ${ct.nome}`, filial: nomeFilial(dados, inv.filial_id),
+    detalhe: `${ct.pausada ? 'Pausada · ' : ativa ? '' : 'Rodada parada · '}Rodada ${r} · ${contados.toLocaleString('pt-BR')} de ${lista.length.toLocaleString('pt-BR')} itens contados · ${Math.round(prog * 100)}%`,
+    pct: Math.min(100, prog * 100), recentes, abrir: `/coleta?abrir=${encodeURIComponent(ct.id)}`,
+  } : null);
   const avisoLista = (msg: string) => { setCorrigir(null); notify(msg); };
   const mudar = (p: Partial<Extract<Tela, { n: 'contagem' }>>) => nav.trocar({ ...tela, ...p });
   // Pesquisa: itens desta contagem e, abaixo, qualquer outro item da carga (inclusive os zerados da base de barras).

@@ -1,5 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useUsuarioLogado } from '../../lib/auth';
+import { useAtividade } from '../../lib/presenca';
+import { ehSomenteLeitura } from '../../lib/sync';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import {
@@ -266,6 +268,14 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
   const pausada = aberta ? etapaPausada(aberta) : false;
   const now = useNow(!!aberta && !pausada);
   const [verTodas, setVerTodas] = useState(false);
+  // Quem está online: cronometragem em andamento (etapa atual e quantas já foram).
+  const nomeEtapa = (id: string) => data.atividades.find(x => x.id === id)?.nome ?? 'etapa';
+  useAtividade(c && a && rascunho && !ehSomenteLeitura() ? {
+    modulo: 'tempos', titulo: `Cronometragem · ${a.tipo === 'completo' ? 'atendimento completo' : 'atividade individual'}`, filial: nomeFilial(data, c.filial_id),
+    detalhe: `${c.setor} · ${a.etapas.length} etapa(s)${aberta ? ` · agora: ${nomeEtapa(aberta.atividade_id)}${pausada ? ' (pausada)' : ''}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`,
+    recentes: a.etapas.slice(-4).reverse().map(e => `${horaBR(e.inicio)} · ${nomeEtapa(e.atividade_id)}${e.fim ? '' : ' (em andamento)'}`),
+    abrir: '/tempos',
+  } : null);
   if (!c || !a) return <Missing onBack={nav.pop} />;
 
   const emAndamento = !!rascunho;

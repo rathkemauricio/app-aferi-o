@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentidade } from '../../lib/identidade';
-import { useRouter } from 'expo-router';
+import { useAtividade } from '../../lib/presenca';
+import { ehSomenteLeitura } from '../../lib/sync';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -64,6 +66,9 @@ export default function AuditoriaModule() {
     void auditoriasCol.sync();
   }, []);
   useEffect(() => { if (sessaoPronta) void AsyncStorage.setItem(SESSAO, abertaId ?? '').catch(() => undefined); }, [abertaId, sessaoPronta]);
+  // Link "Acompanhar" (Quem está online): /auditoria?abrir=<id da auditoria>.
+  const { abrir } = useLocalSearchParams<{ abrir?: string }>();
+  useEffect(() => { if (abrir && sessaoPronta) { setModelos(false); setAbertaId(abrir); } }, [abrir, sessaoPronta]);
 
   const aberta = abertaId ? auditorias.find(a => a.id === abertaId) ?? null : null;
   const voltar = () => { if (router.canGoBack()) router.back(); else router.replace('/'); };
@@ -267,6 +272,12 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
 
   const itensRef = useRef(itens);
   itensRef.current = itens;
+  // Mudança vinda de outro aparelho (ou de quem está sendo acompanhado): atualiza a tela, se não houver edição pendente aqui.
+  useEffect(() => {
+    if (pendente.current || auditoria.itens === itensRef.current) return;
+    itensRef.current = auditoria.itens;
+    setItens(auditoria.itens);
+  }, [auditoria.itens]);
   const mudarItem = useCallback((id: number, patch: Partial<ItemAuditoria>, imediato = false) => {
     const novos = itensRef.current.map(i => (i.id === id ? { ...i, ...patch } : i));
     itensRef.current = novos;
@@ -318,6 +329,13 @@ function AuditoriaTela({ auditoria, filiais, sincronizado, onVoltar }: { auditor
   const avaliados = itens.length - c.pendentes;
   const pct = itens.length ? Math.round((avaliados / itens.length) * 100) : 0;
   const itemAberto = aberto !== null ? itens.find(i => i.id === aberto) : undefined;
+  // Quem está online: auditoria em execução e quantos requisitos já foram avaliados.
+  useAtividade(!concluida && !ehSomenteLeitura() ? {
+    modulo: 'auditoria', titulo: cab.escopo || 'Auditoria', filial,
+    detalhe: `${avaliados} de ${itens.length} requisitos avaliados${nAcao ? ` · ${nAcao} pedem ação` : ''}${itemAberto ? ` · agora: item ${itemAberto.id}` : ''}`,
+    pct, recentes: itemAberto ? [`Item ${itemAberto.id}: ${itemAberto.titulo.slice(0, 90)}`] : undefined,
+    abrir: `/auditoria?abrir=${encodeURIComponent(auditoria.id)}`,
+  } : null);
 
   /** Abre um requisito (fecha o anterior) e o traz para o topo da lista. */
   const abrir = useCallback((id: number | null) => {

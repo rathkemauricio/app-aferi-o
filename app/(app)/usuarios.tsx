@@ -9,7 +9,7 @@ import { Alvo, RolagemTutorial } from '../../tutoriais';
 import { emailValido, enviarEmail } from '../../lib/email';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
-import { ArrowLeftIcon, BuildingsIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, StorefrontIcon, UserCircleIcon } from '../../ui/icons';
+import { ArrowLeftIcon, BroadcastIcon, BuildingsIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, StorefrontIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 import { BotaoVoltar } from '../../ui/voltar';
@@ -292,7 +292,10 @@ export default function UsuariosScreen() {
                 </Card>
               );
             })() : null}
-            <Alvo id="usuarios-criar"><Button title="Criar conta" icon={PlusIcon} onPress={() => setNovo({ ...NOVO_VAZIO })} /></Alvo>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+              <Alvo id="usuarios-criar"><Button title="Criar conta" icon={PlusIcon} onPress={() => setNovo({ ...NOVO_VAZIO })} /></Alvo>
+              <Button title="Quem está online" icon={BroadcastIcon} variant="secondary" onPress={() => router.push('/online')} />
+            </View>
             <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar por nome ou e-mail" />
 
             <SectionHeader title={`Aguardando aprovação (${pendentes.length + pedidosVistos.length})`} />

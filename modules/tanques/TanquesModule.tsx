@@ -1,8 +1,10 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUsuarioLogado } from '../../lib/auth';
+import { useAtividade } from '../../lib/presenca';
+import { ehSomenteLeitura } from '../../lib/sync';
 import { docsCol } from '../../lib/data';
 import type { Combustivel } from '../../lib/combustiveis';
 import { esc, imprimirHtml, rotuloFilial } from '../../lib/util';
@@ -35,6 +37,16 @@ export default function TanquesModule() {
   const tela = pilha[pilha.length - 1];
   const ir = (x: Tela) => setPilha(p => [...p, x]);
   const voltar = () => { if (pilha.length > 1) setPilha(p => p.slice(0, -1)); else if (router.canGoBack()) router.back(); else router.replace('/'); };
+  // Link "Acompanhar" (Quem está online): /tanques?abrir=<id da medição>.
+  const { abrir } = useLocalSearchParams<{ abrir?: string }>();
+  const [abriu, setAbriu] = useState('');
+  useEffect(() => {
+    if (!abrir || abriu === abrir || !dados.loaded) return;
+    const m = dados.medicoes.find(x => x.id === abrir);
+    if (!m) return;
+    setAbriu(abrir);
+    setPilha([{ n: 'filiais' }, { n: 'filial', id: m.filial_id }, { n: 'medicao', id: m.id }]);
+  }, [abrir, abriu, dados.loaded, dados.medicoes]);
   // Tudo que a tela usa: medições, tanques cadastrados, tabelas de arqueação e o croqui (docs da filial). Sem isto, o
   // cadastro feito no painel só chegava ao celular na próxima atualização geral.
   useEffect(() => { void Promise.all([medicoesCol.sync(), tanquesCol.sync(), tabelasCol.sync(), docsCol.sync()]).catch(() => undefined); }, []);
@@ -199,6 +211,13 @@ function MedicaoTela({ m, filialNome, combustiveis, nomeComb, corComb, voltar, a
   const fin = m.status === 'finalizada';
   const r = resumo(m);
   const salvar = (patch: Partial<Medicao>) => medicoesCol.put({ ...m, ...patch });
+  // Quem está online: medição em andamento e quantos tanques já foram medidos.
+  const medidos = m.tanques.filter(l => l.metragem !== null).length;
+  useAtividade(!fin && !ehSomenteLeitura() ? {
+    modulo: 'tanques', titulo: 'Medição dos tanques', filial: filialNome,
+    detalhe: `${medidos} de ${m.tanques.length} tanques medidos${medidos ? ` · ${m.tanques.filter(l => l.metragem !== null).slice(-3).map(l => `${l.tanque}: ${l.metragem} cm`).join(' · ')}` : ''}`,
+    pct: m.tanques.length ? (medidos / m.tanques.length) * 100 : 0, abrir: `/tanques?abrir=${encodeURIComponent(m.id)}`,
+  } : null);
   // Centímetros → litros sempre em dia (tela normal e interativa): tanque com tabela e metragem sem litros, ou com
   // litros da tabela desatualizados (tabela ligada depois, trocada ou corrigida), recalcula sozinho. Litros digitados ficam.
   useEffect(() => {

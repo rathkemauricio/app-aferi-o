@@ -9,7 +9,7 @@ import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
 import { Alvo } from '../tutoriais';
-import { CaretLeftIcon, DropIcon, GearIcon, GraduationCapIcon, HouseIcon, ListMagnifyingGlassIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
+import { BroadcastIcon, CaretLeftIcon, DropIcon, GearIcon, GraduationCapIcon, HouseIcon, ListMagnifyingGlassIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
 import { confirmAction } from '../ui/kit';
 import { ThemeContext, type ThemeColors } from '../ui/theme';
 
@@ -148,7 +148,10 @@ export function DesktopShell({ children }: { children: ReactNode }) {
       { label: 'Combustíveis', route: '/combustiveis' as Href, icon: DropIcon },
       { label: 'Bandeiras', route: '/bandeiras' as Href, icon: StorefrontIcon },
     ] }]),
-    ...(isAdmin ? [{ titulo: 'ADMINISTRAÇÃO', itens: [{ label: 'Usuários e permissões', route: '/usuarios' as Href, icon: UserCircleIcon }] }] : []),
+    ...(isAdmin || dono ? [{ titulo: 'ADMINISTRAÇÃO', itens: [
+      ...(isAdmin ? [{ label: 'Usuários e permissões', route: '/usuarios' as Href, icon: UserCircleIcon }] : []),
+      { label: 'Quem está online', route: '/online' as Href, icon: BroadcastIcon },
+    ] }] : []),
     ...(dono ? [{ titulo: 'PLATAFORMA', itens: [{ label: 'Empresas e planos', route: '/plataforma' as Href, icon: SquaresFourIcon }, { label: 'Rastreabilidade', route: '/rastro' as Href, icon: ListMagnifyingGlassIcon }] }] : []),
     { titulo: 'PREFERÊNCIAS', itens: [{ label: 'Configurações', route: '/configuracoes', icon: GearIcon }, { label: 'Tutoriais', route: '/tutoriais' as Href, icon: GraduationCapIcon }] },
   ];

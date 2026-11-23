@@ -8,6 +8,7 @@ import { createTypography, pageMaxWidth, radius, space, ThemeContext, type Theme
 import { BotaoVoltar } from '../../ui/voltar';
 import { useRouter } from 'expo-router';
 import { useAuth, useUsuarioLogado } from '../../lib/auth';
+import { useAtividade } from '../../lib/presenca';
 import { combustiveisAtivos, useCombustiveis } from '../../lib/combustiveis';
 import { auditReportHtml } from './relatorio';
 import { afericoesCol } from './registros';
@@ -292,6 +293,15 @@ export default function AfericoesModule() {
   const branch = data.branches.find(b => b.id === draft.branchId);
   const currentPump = branch?.pumps.find(p => p.id === selectedPumpId);
   const currentNozzle = currentPump?.nozzles.find(n => n.id === selectedNozzleId);
+  // Quem está online: aferição em andamento (o rascunho fica no aparelho até salvar; o andamento vai junto).
+  const totalBicos = branch ? branch.pumps.reduce((n, p) => n + p.nozzles.length, 0) : 0;
+  const bicosFeitos = branch ? branch.pumps.reduce((n, p) => n + p.nozzles.filter(z => draft.data[z.id]?.checks.some(v => !!v)).length, 0) : 0;
+  const naoConformes = branch ? Object.values(draft.data).filter(d => d.checks.includes('NC')).length : 0;
+  useAtividade(branch && auditStage !== 'branch' ? {
+    modulo: 'afericoes', titulo: auditMeta.editId ? 'Editando aferição' : 'Aferição de bicos', filial: `${branch.name} #${branch.code}`,
+    detalhe: `${bicosFeitos} de ${totalBicos} bicos aferidos${naoConformes ? ` · ${naoConformes} com não conformidade` : ''}${currentPump && currentNozzle ? ` · agora: bomba ${currentPump.number}, bico ${currentNozzle.number}` : auditStage === 'final' ? ' · finalizando' : ''}`,
+    pct: totalBicos ? (bicosFeitos / totalBicos) * 100 : 0, abrir: '/afericoes',
+  } : null);
   const setAuditCheck = (index: number, value: string) => setDraft(d => { const old = d.data[selectedNozzleId] ?? { checks: [], notes: [] }; const checks = [...old.checks]; checks[index] = value; const notes = [...old.notes]; if (value !== 'NC' && value !== 'OB') notes[index] = ''; return { ...d, data: { ...d.data, [selectedNozzleId]: { checks, notes } } }; });
   const setAuditNote = (index: number, value: string) => setDraft(d => { const old = d.data[selectedNozzleId] ?? { checks: [], notes: [] }; const notes = [...old.notes]; notes[index] = value; return { ...d, data: { ...d.data, [selectedNozzleId]: { ...old, notes } } }; });
   const saveNozzleDraft = () => {

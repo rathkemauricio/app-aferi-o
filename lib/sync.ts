@@ -92,16 +92,19 @@ export class Collection<T extends SyncRow> {
   /* ---------- Escrita local ---------- */
   private clean(item: T): T { return this.opts.softDelete === false ? item : ({ ...item, deleted_at: null } as T); }
   put(item: T) {
+    if (bloqueado()) return;
     const clean = this.clean(item);
     this.items.set(item.id, clean);
     this.outbox.set(item.id, clean);
     this.save(); this.emit(); this.scheduleFlush();
   }
   putMany(list: T[]) {
+    if (bloqueado()) return;
     list.forEach(item => { const clean = this.clean(item); this.items.set(item.id, clean); this.outbox.set(item.id, clean); });
     this.save(); this.emit(); this.scheduleFlush();
   }
   remove(id: string) {
+    if (bloqueado()) return;
     const cur = this.items.get(id);
     if (!cur) return;
     this.items.delete(id);
@@ -180,6 +183,21 @@ export class Collection<T extends SyncRow> {
   }
 
   async sync() { await this.flush(); await this.pull(); }
+}
+
+/* ---------- Só leitura (dono da plataforma visitando outra rede como auditor) ---------- */
+let somenteLeitura = false;
+let aoBloquear: (() => void) | null = null;
+let ultimoAviso = 0;
+/** Enquanto ligado, nenhuma coleção grava (o banco também barra). `aviso` explica ao usuário, no máximo a cada 4 s. */
+export function setSomenteLeitura(on: boolean) { somenteLeitura = on; }
+/** Mensagem mostrada quando algo tenta gravar no modo só leitura (definida pelo layout, que tem os avisos). */
+export function setAvisoSomenteLeitura(aviso: (() => void) | null) { aoBloquear = aviso; }
+export const ehSomenteLeitura = () => somenteLeitura;
+function bloqueado() {
+  if (!somenteLeitura) return false;
+  if (Date.now() - ultimoAviso > 4000) { ultimoAviso = Date.now(); aoBloquear?.(); }
+  return true;
 }
 
 /** Liga/desliga a sincronização com o servidor para todas as coleções (sessão com acesso). */

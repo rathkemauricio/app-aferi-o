@@ -293,6 +293,30 @@ async function moverConta(body: Record<string, unknown>, conta: Conta) {
   return json(200, { ok: true });
 }
 
+/**
+ * Visita do dono: entra numa rede "como auditor" para acompanhar quem está coletando (só leitura: o banco barra
+ * toda gravação enquanto profiles.visitando estiver preenchido). Sem empresa_id = sai da visita.
+ */
+async function visitar(body: Record<string, unknown>, conta: NonNullable<Awaited<ReturnType<typeof contaDe>>>) {
+  const id = texto(body.empresa_id, 60);
+  const atual = (conta.perfil as { visitando?: string | null } | null)?.visitando ?? null;
+  if (!id) {
+    const { error } = await admin.from('profiles').update({ visitando: null }).eq('user_id', conta.user.id);
+    if (error) throw new Error(error.message);
+    if (atual) await registrarAcao({ userId: conta.user.id, empresaId: atual, acao: 'saiu da visita à rede (auditor, só leitura)', tabela: 'funcao:empresas', alvo: atual });
+    return json(200, { ok: true });
+  }
+  const { data: emp } = await admin.from('empresas').select('id,nome,status').eq('id', id).maybeSingle();
+  if (!emp) return json(404, { erro: 'Rede não encontrada.' });
+  if (emp.status !== 'ativa') return json(409, { erro: 'Só dá para visitar rede ativa.' });
+  // Visitar a própria rede é o mesmo que sair da visita.
+  const visitando = emp.id === conta.perfil?.empresa_id ? null : emp.id;
+  const { error } = await admin.from('profiles').update({ visitando }).eq('user_id', conta.user.id);
+  if (error) throw new Error(error.message);
+  if (visitando) await registrarAcao({ userId: conta.user.id, empresaId: emp.id, acao: `entrou na rede ${emp.nome} como auditor (só leitura)`, tabela: 'funcao:empresas', alvo: emp.id });
+  return json(200, { ok: true, nome: emp.nome });
+}
+
 async function atualizar(body: Record<string, unknown>, origem: string) {
   const id = texto(body.id, 60);
   const { data: atual } = await admin.from('empresas').select('id,nome,status').eq('id', id).maybeSingle();
@@ -382,6 +406,7 @@ Deno.serve(async req => {
       case 'salvar_plano': return await salvarPlano(body);
       case 'criar_para': return await criarPara(body, conta);
       case 'mover_conta': return await moverConta(body, conta);
+      case 'visitar': return await visitar(body, conta);
       case 'aceitar_pedido':
       case 'recusar_pedido': {
         const res = await responderPedido({
