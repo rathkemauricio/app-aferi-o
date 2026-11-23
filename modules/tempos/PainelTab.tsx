@@ -6,6 +6,9 @@ import { useUsuarioLogado } from '../../lib/auth';
 import { useIdentidade } from '../../lib/identidade';
 import { imprimirHtml } from '../../lib/util';
 import { relatorioTemposHtml } from './relatorio';
+import { OpcoesImpressao } from './OpcoesImpressao';
+import type { OpcoesRelatorio } from './relatorio';
+
 import { ultimaAnaliseDaFilial } from './AnaliseIA';
 import { type Filtro, indicadores } from './calc';
 import { FilialPicker, PageHead } from './ColetasTab';
@@ -30,12 +33,13 @@ export function PainelTab({ data }: { data: TmData }) {
   const marca = useIdentidade();
   const usuario = useUsuarioLogado();
   const [gerando, setGerando] = useState(false);
-  const gerarPdf = async () => {
+  const [opcoes, setOpcoes] = useState(false);
+  const gerarPdf = async (o: OpcoesRelatorio) => {
     setGerando(true);
     try {
       // Com uma filial escolhida, o relatório completo leva a última análise com IA e o dimensionamento dela.
       const extra = f.filialId ? await ultimaAnaliseDaFilial(f.filialId) : undefined;
-      await imprimirHtml(relatorioTemposHtml(data, f, marca, usuario, extra), `Tempos e Movimentos ${filial ? filial.nome : 'rede'}`);
+      await imprimirHtml(relatorioTemposHtml(data, f, marca, usuario, { ...extra, opcoes: o }), `Tempos e Movimentos ${filial ? filial.nome : 'rede'}`);
     }
     catch (e) { notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'); }
     finally { setGerando(false); }
@@ -43,7 +47,8 @@ export function PainelTab({ data }: { data: TmData }) {
 
   return <>
     <PageHead title="Painel" subtitle={`${r.coletas} coleta(s) no filtro`}
-      action={<Button title={gerando ? 'Gerando…' : 'Relatório em PDF'} icon={FilePdfIcon} variant="secondary" size="sm" disabled={gerando || !r.coletas} onPress={() => void gerarPdf()} />} />
+      action={<Button title={gerando ? 'Gerando…' : 'Relatório em PDF'} icon={FilePdfIcon} variant="secondary" size="sm" disabled={gerando || !r.coletas} onPress={() => setOpcoes(true)} />} />
+    {opcoes ? <OpcoesImpressao onClose={() => setOpcoes(false)} onGerar={o => void gerarPdf(o)} /> : null}
     <Card>
       <View style={s.row}>
         <Text style={[t.label, s.flex]}>Filial: {filial ? `${filial.codigo} · ${filial.nome}` : 'todas'}</Text>

@@ -117,3 +117,5 @@ export const ImageIcon: Icon = require('phosphor-react-native/src/icons/Image').
 export const CubeIcon: Icon = require('phosphor-react-native/src/icons/Cube').CubeIcon;
 export const BroadcastIcon: Icon = require('phosphor-react-native/src/icons/Broadcast').BroadcastIcon;
 export const SwapIcon: Icon = require('phosphor-react-native/src/icons/Swap').SwapIcon;
+export const DotsSixVerticalIcon: Icon = require('phosphor-react-native/src/icons/DotsSixVertical').DotsSixVerticalIcon;
+export const ArrowsDownUpIcon: Icon = require('phosphor-react-native/src/icons/ArrowsDownUp').ArrowsDownUpIcon;

@@ -1,6 +1,6 @@
 import { esc } from '../../lib/util';
 import { type Filtro, coletasFiltradas, atendimentosDe, indicadores, ociosidade, progressoFilial } from './calc';
-import { ciclosMinimos, dataBR, fmtMin, num, TIPOS_OPERACAO } from './model';
+import { ciclosMinimos, dataBR, fmtDur, fmtMin, horaBR, num, pausaSeg, TIPOS_OPERACAO } from './model';
 import { statusDaFilial, tipoDe, type TmData } from './store';
 
 /** Análise com IA salva (tm_analises_ia) e o dimensionamento da planilha enviado junto. */
@@ -21,6 +21,11 @@ export type DimParaRelatorio = {
   blocos: { bloco: string; fator_cobertura: number; horas_por_funcionario_mes: number; horas_mes: number; funcionarios: number }[];
 };
 
+/** Ordem das atividades no relatório: como foram executadas na unidade, a do cadastro (setas) ou por tempo gasto. */
+export type OrdemAtividades = 'cronologica' | 'cadastro' | 'tempo';
+export const ROTULO_ORDEM: Record<OrdemAtividades, string> = { cronologica: 'Ordem cronológica (como foram executadas)', cadastro: 'Ordem do cadastro', tempo: 'Mais tempo gasto primeiro' };
+export type OpcoesRelatorio = { ordem: OrdemAtividades; linhaDoTempo: boolean };
+
 const n1 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '—');
 const itens = (v: unknown) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
 const ul = (v: unknown) => { const xs = itens(v); return xs.length ? `<ul>${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="muted">—</p>'; };
@@ -40,7 +45,7 @@ const SITUACAO: Record<string, [string, string]> = {
 const barra = (v: number, max: number, cor = '#174b78') =>
   `<div class="bar"><span style="width:${max > 0 ? Math.max(2, Math.round((v / max) * 100)) : 0}%;background:${cor}"></span></div>`;
 
-export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string; logo: string | null }, quem: string, extra?: { ia?: AnaliseParaRelatorio | null; dim?: DimParaRelatorio | null }) {
+export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string; logo: string | null }, quem: string, extra?: { ia?: AnaliseParaRelatorio | null; dim?: DimParaRelatorio | null; opcoes?: OpcoesRelatorio }) {
   const r = indicadores(d, f);
   const oc = ociosidade(d, f);
   const ia = extra?.ia?.resultado ? extra.ia : null;
@@ -51,6 +56,7 @@ export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string;
     `<tr><td>${esc(nome)}</td><td class="num">${fmtMin(x.observadoSeg)}</td><td class="num">${fmtMin(x.ativoSeg)}</td><td class="num">${fmtMin(x.ociosoSeg)}</td><td class="num"><b>${num(x.pct)}%</b></td><td class="num">${num(x.minPorHora)}</td><td>${barra(x.pct, Math.max(maxOc, 1), x.pct > 25 ? '#b45309' : '#15803d')}</td></tr>`;
   // As 3 respostas que o gestor procura: quanto leva cada atividade, quanto fica ocioso, quantos funcionários precisa.
   const topAtv = [...r.atividades].sort((a, b) => b.totalSeg - a.totalSeg).slice(0, 5);
+  const ordem: OrdemAtividades = extra?.opcoes?.ordem ?? 'cronologica';
   const necessarios = A?.funcionarios_necessarios ?? null;
   const cs = [...coletasFiltradas(d, f)].sort((a, b) => a.data.localeCompare(b.data));
   const ats = atendimentosDe(d, cs);
@@ -58,6 +64,37 @@ export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string;
   // Centro de distribuição: ciclo completo (pedido/carga) e quantidade movimentada no lugar de atendimento e litros.
   const ehCd = !!filial && tipoDe(d, filial.id) === 'cd';
   const ciclo = ehCd ? TIPOS_OPERACAO.cd.ciclo.nome.toLowerCase() : 'atendimento';
+  // Primeira vez que cada atividade foi executada (início da etapa) e, no empate, a posição média dentro do ciclo.
+  const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
+  const primeira = new Map<string, number>();
+  const posicao = new Map<string, number[]>();
+  ats.forEach(a => a.etapas.forEach((e, k) => {
+    const t0 = ms(e.inicio);
+    if (Number.isFinite(t0) && t0 < (primeira.get(e.atividade_id) ?? Infinity)) primeira.set(e.atividade_id, t0);
+    posicao.set(e.atividade_id, [...(posicao.get(e.atividade_id) ?? []), k]);
+  }));
+  const media = (xs: number[] = []) => (xs.length ? xs.reduce((x, y) => x + y, 0) / xs.length : 99);
+  const indiceCadastro = new Map(d.atividades.map((a, i) => [a.id, i]));
+  const atividadesOrdenadas = [...r.atividades].sort((a, b) =>
+    ordem === 'tempo' ? b.totalSeg - a.totalSeg
+      : ordem === 'cadastro' ? (indiceCadastro.get(a.id) ?? 1e9) - (indiceCadastro.get(b.id) ?? 1e9)
+        : (primeira.get(a.id) ?? Infinity) - (primeira.get(b.id) ?? Infinity) || media(posicao.get(a.id)) - media(posicao.get(b.id)));
+  const nomeAtv = (id: string) => d.atividades.find(x => x.id === id)?.nome ?? 'Atividade removida';
+  // Linha do tempo: todas as tarefas cronometradas, coleta por coleta, na ordem em que foram executadas.
+  const linhaDoTempo = !extra?.opcoes?.linhaDoTempo ? '' : (() => {
+    const blocos = cs.map(c => {
+      const doColeta = ats.filter(a => a.coleta_id === c.id);
+      const completos = doColeta.filter(a => a.tipo === 'completo').sort((x, y) => ms(x.inicio) - ms(y.inicio));
+      const linhas = doColeta.flatMap(a => a.etapas.map(e => ({ a, e }))).sort((x, y) => (ms(x.e.inicio) || 0) - (ms(y.e.inicio) || 0));
+      return { c, linhas, completos, inicio: Math.min(...linhas.map(x => ms(x.e.inicio)).filter(Number.isFinite), Infinity) };
+    }).filter(b => b.linhas.length).sort((x, y) => x.c.data.localeCompare(y.c.data) || x.inicio - y.inicio);
+    if (!blocos.length) return '';
+    return `<h3>Linha do tempo: tarefas na ordem em que foram executadas</h3>
+${blocos.map(({ c, linhas, completos }) => `<p style="margin:12px 0 4px"><b>${esc(dataBR(c.data))}${filial ? '' : ` · ${esc(nomeFilial(c.filial_id))}`} · ${esc(c.setor)}</b> <span class="muted">· ${esc(c.turno)}, ${esc(c.demanda.toLowerCase())}${c.auditor ? ` · auditor ${esc(c.auditor)}` : ''}</span></p>
+<table class="t"><tr><th>Início</th><th>Fim</th><th class="num">Duração</th><th>Atividade</th><th>Registro</th><th>Funcionário</th></tr>
+${linhas.map(({ a, e }) => `<tr><td>${esc(horaBR(e.inicio))}</td><td>${esc(horaBR(e.fim))}</td><td class="num">${esc(fmtDur(e.duracao_s))}${pausaSeg(e) > 0 ? `<br><span class="muted">pausa ${esc(fmtDur(pausaSeg(e)))}</span>` : ''}</td><td>${esc(nomeAtv(e.atividade_id))}</td><td>${a.tipo === 'completo' ? `${esc(ehCd ? 'Ciclo' : 'Atendimento')} ${completos.indexOf(a) + 1}` : 'Atividade individual'}</td><td>${esc(a.funcionario || '—')}</td></tr>`).join('')}
+</table>`).join('')}`;
+  })();
   const nomeFilial = (id: string) => { const x = d.filiais.find(y => y.id === id); return x ? `${x.codigo} · ${x.nome}` : 'Filial removida'; };
   const periodo = cs.length ? (cs[0].data === cs[cs.length - 1].data ? dataBR(cs[0].data) : `${dataBR(cs[0].data)} a ${dataBR(cs[cs.length - 1].data)}`) : '—';
   const auditores = [...new Set(cs.map(c => c.auditor).filter(Boolean))].join(', ') || 'Não informado';
@@ -138,9 +175,9 @@ ${r.porClasse.length ? `<h3>Tempo por classe</h3>
 ${r.porClasse.map(([c, v]) => `<tr><td>${esc(c)}</td><td class="num">${fmtMin(v)}</td><td class="num">${totalClasse ? num((v / totalClasse) * 100) : '0'}%</td><td>${barra(v, maxClasse, c === 'Espera' || c === 'Retrabalho' ? '#b45309' : '#174b78')}</td></tr>`).join('')}
 </table>` : ''}
 
-${r.atividades.length ? `<h3>Indicadores por atividade</h3>
+${r.atividades.length ? `<h3>Indicadores por atividade</h3><p class="nota">${esc(ROTULO_ORDEM[ordem])}.</p>
 <table class="t"><tr><th>Atividade</th><th class="num">Ciclos</th><th class="num">Média (min)</th><th class="num">Ref. (min)</th><th class="num">Padrão (min)</th><th>Situação</th><th style="width:18%"></th></tr>
-${r.atividades.map(a => { const [rot, cor] = SITUACAO[a.situacao]; return `<tr><td>${esc(a.nome)}</td><td class="num">${a.ciclos}</td><td class="num">${fmtMin(a.mediaSeg)}</td><td class="num">${a.ref ? num(a.ref) : '—'}</td><td class="num">${a.padraoSeg !== null ? fmtMin(a.padraoSeg) : '—'}</td><td style="color:${cor};font-weight:700">${rot}</td><td>${barra(a.mediaSeg, maxAtv, cor)}</td></tr>`; }).join('')}
+${atividadesOrdenadas.map(a => { const [rot, cor] = SITUACAO[a.situacao]; return `<tr><td>${esc(a.nome)}</td><td class="num">${a.ciclos}</td><td class="num">${fmtMin(a.mediaSeg)}</td><td class="num">${a.ref ? num(a.ref) : '—'}</td><td class="num">${a.padraoSeg !== null ? fmtMin(a.padraoSeg) : '—'}</td><td style="color:${cor};font-weight:700">${rot}</td><td>${barra(a.mediaSeg, maxAtv, cor)}</td></tr>`; }).join('')}
 </table>` : ''}
 
 ${r.porVeiculo.length ? `<h3>Tempo médio por tipo de veículo</h3>
@@ -168,6 +205,8 @@ ${dim.blocos.map(b => `<tr><td>${esc(b.bloco)}</td><td class="num">${n1(b.horas_
 <tr><td><b>Total</b></td><td></td><td></td><td></td><td class="num"><b>${n1(dim.total_funcionarios_planilha)}</b></td></tr>
 </table>
 <p class="nota">Quadro atual informado: ${n1(dim.quadro_atual)} · ${dim.dias} dias no mês.</p>` : ''}
+
+${linhaDoTempo}
 
 ${cs.length ? `<h3>Coletas realizadas</h3>
 <table class="t"><tr><th>Data</th>${filial ? '' : '<th>Filial</th>'}<th>Setor</th><th>Turno</th><th>Demanda</th><th>Auditor</th><th class="num">Registros</th><th class="num">Min</th></tr>

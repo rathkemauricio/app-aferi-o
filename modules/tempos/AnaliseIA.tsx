@@ -6,7 +6,8 @@ import { imprimirHtml } from '../../lib/util';
 import { PrinterIcon, SparkleIcon } from '../../ui/icons';
 import { Button, Card, notify, StatusPill } from '../../ui/kit';
 import { atendimentosDe, indicadores, ociosidade } from './calc';
-import { type AnaliseParaRelatorio, relatorioTemposHtml } from './relatorio';
+import { type AnaliseParaRelatorio, type OpcoesRelatorio, relatorioTemposHtml } from './relatorio';
+import { OpcoesImpressao } from './OpcoesImpressao';
 import { useIdentidade } from '../../lib/identidade';
 import { useUsuarioLogado } from '../../lib/auth';
 import { DEMANDAS, fmtMin, num, TIPOS_OPERACAO, TURNOS } from './model';
@@ -93,6 +94,7 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
   const [pedido, setPedido] = useState<Registro | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [analisando, setAnalisando] = useState(false);
+  const [pdf, setPdf] = useState(false);
   const vivo = useRef(true);
   useEffect(() => () => { vivo.current = false; }, []);
 
@@ -207,7 +209,8 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
         {bloco('Recomendações', a.recomendacoes)}
         {bloco('Dados que faltam', a.dados_faltantes)}
         <Text style={t.caption}>{ultima ? `${new Date(ultima.updated_at).toLocaleString('pt-BR')}${ultima.usuario_nome ? ` · pedida por ${ultima.usuario_nome}` : ''} · ${ultima.modelo ?? ''}` : ''} · Gerada por IA: confira antes de decidir.</Text>
-        <Button title="Relatório completo (PDF)" icon={PrinterIcon} variant="secondary" size="sm" style={s.alignStart} onPress={() => { if (ultima) void imprimirHtml(relatorioTemposHtml(data, { filialId: filial.id, setor: '', demanda: '' }, marca, usuario, { ia: ultima, dim }), `Tempos e Movimentos ${filial.nome}`).catch(e => notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.')); }} />
+        <Button title="Relatório completo (PDF)" icon={PrinterIcon} variant="secondary" size="sm" style={s.alignStart} onPress={() => setPdf(true)} />
+        {pdf && ultima ? <OpcoesImpressao onClose={() => setPdf(false)} onGerar={(o: OpcoesRelatorio) => void imprimirHtml(relatorioTemposHtml(data, { filialId: filial.id, setor: '', demanda: '' }, marca, usuario, { ia: ultima, dim, opcoes: o }), `Tempos e Movimentos ${filial.nome}`).catch(e => notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'))} /> : null}
       </> : null}
       {pedido?.status === 'erro' && !analisando ? (
         <View style={{ gap: 4, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.danger }}>

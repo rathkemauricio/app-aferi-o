@@ -4,6 +4,9 @@ import { useAtividade } from '../../lib/presenca';
 import { useIdentidade } from '../../lib/identidade';
 import { imprimirHtml } from '../../lib/util';
 import { relatorioTemposHtml } from './relatorio';
+import { OpcoesImpressao } from './OpcoesImpressao';
+import type { OpcoesRelatorio } from './relatorio';
+
 import { ultimaAnaliseDaFilial } from './AnaliseIA';
 import { ehSomenteLeitura } from '../../lib/sync';
 import { type ReactNode, useMemo, useState } from 'react';
@@ -82,6 +85,7 @@ export function ColetasHome({ data, nav, setFilialId }: { data: TmData; nav: Nav
 export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; filialId: string }) {
   const { s, t, colors } = useLook();
   const [form, setForm] = useState<ColetaForm | null>(null);
+  const [pdf, setPdf] = useState(false);
   const usuario = useUsuarioLogado();
   const marca = useIdentidade();
   const filial = data.filiais.find(f => f.id === filialId) ?? null;
@@ -109,15 +113,15 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
   };
 
   const sim = (ok: boolean) => (ok ? '✓' : '✗');
-  const gerarPdf = async () => {
-    try { await imprimirHtml(relatorioTemposHtml(data, { filialId, setor: '', demanda: '' }, marca, usuario, await ultimaAnaliseDaFilial(filialId)), `Tempos e Movimentos ${filial.nome}`); }
+  const gerarPdf = async (o: OpcoesRelatorio) => {
+    try { await imprimirHtml(relatorioTemposHtml(data, { filialId, setor: '', demanda: '' }, marca, usuario, { ...(await ultimaAnaliseDaFilial(filialId)), opcoes: o }), `Tempos e Movimentos ${filial.nome}`); }
     catch (e) { notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'); }
   };
   return <>
     <Button title="Filiais" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={nav.pop} />
     <PageHead title={`${filial.codigo} · ${filial.nome}`} subtitle={fim ? `Coletas finalizadas em ${new Date(fim).toLocaleString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : 'Em coleta'}
       action={<View style={[s.row, { flexWrap: 'wrap', justifyContent: 'flex-end' }]}>
-        {pr.coletas ? <IconButton icon={FilePdfIcon} label="Relatório em PDF" onPress={() => void gerarPdf()} /> : null}
+        {pr.coletas ? <IconButton icon={FilePdfIcon} label="Relatório em PDF" onPress={() => setPdf(true)} /> : null}
         {!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario, setores))} /> : null}
       </View>} />
 
@@ -176,6 +180,7 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
         action={!fim ? { label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario, setores)) } : undefined} />
     )}
 
+    {pdf ? <OpcoesImpressao onClose={() => setPdf(false)} onGerar={o => void gerarPdf(o)} /> : null}
     {form && (
       <ColetaSheet title="Nova coleta" form={form} setForm={setForm} onClose={() => setForm(null)} setores={setores} tipo={tipo}
         onSave={() => {
