@@ -19,7 +19,7 @@ import { emailValido, enviarEmail, separarEmails } from '../../lib/email';
 import { CroquiCanvas } from '../croqui/Canvas';
 import { Bico3D, BicoFlutuante, Brilho } from './BicoEmFoco';
 import { bombaDoItem, type CroquiDoc, espelharBombas, type Item as ItemCroqui, PALETA_CLARA, PALETA_ESCURA, T as TIPOS_CROQUI, tipoDoCombustivel } from '../croqui/model';
-import { docId, docsCol, filiaisCol, ordenarFiliais, saveFilialDoc } from '../../lib/data';
+import { docId, docsCol, ehCD, filiaisCol, ordenarFiliais, saveFilialDoc } from '../../lib/data';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { imprimirHtml, pdfBase64 } from '../../lib/util';
 import { Collection, combinedStatus, isSyncEnabled, type SyncRow, useCollection } from '../../lib/sync';
@@ -84,7 +84,8 @@ export default function AfericoesModule() {
   const docsSnap = useCollection(docsCol);
   const auditsSnap = useCollection(auditsCol);
   const data = useMemo<DashboardData>(() => ({
-    branches: [...filiaisSnap.list].sort(ordenarFiliais).map(f => ({
+    // Centro de distribuição não tem bombas: fica fora das aferições.
+    branches: [...filiaisSnap.list].filter(f => !ehCD(f)).sort(ordenarFiliais).map(f => ({
       id: f.id, code: f.codigo, name: f.nome, city: f.cidade, state: f.uf,
       pumps: (docsSnap.list.find(d => d.id === docId(f.id, 'equipamentos'))?.payload as Equipamentos | undefined)?.pumps ?? [],
     })),

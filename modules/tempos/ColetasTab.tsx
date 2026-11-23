@@ -15,14 +15,14 @@ import {
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import {
   type Atendimento, type Atividade, type Coleta, DEMANDAS, FAIXAS, dataBR, duracaoAtendimento, duracaoEtapa, etapaAberta, etapaPausada, fmtCrono, fmtDur, hoje,
-  horaBR, pausaSeg, SEQUENCIA_PISTA, SETORES, TURNOS,
+  horaBR, pausaSeg, TIPOS_OPERACAO, type TipoOperacao, TURNOS,
 } from './model';
 import { radius } from '../../ui/theme';
 import { Roleta } from '../afericoes/Roleta';
 import { Deslizavel } from './Deslizavel';
 import { ops } from './ops';
 import { progressoFilial } from './calc';
-import { type ColetasView, finalizarFilial, finalizada, reabrirFilial, statusDaFilial, type TmData } from './store';
+import { type ColetasView, finalizarFilial, finalizada, reabrirFilial, setoresDoTipo, statusDaFilial, tipoDe, type TmData } from './store';
 import { ActivityPicker, useLook, useNow } from './ui';
 
 type Nav = { push: (v: ColetasView) => void; pop: () => void };
@@ -84,6 +84,8 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
   const usuario = useUsuarioLogado();
   const marca = useIdentidade();
   const filial = data.filiais.find(f => f.id === filialId) ?? null;
+  const tipo = tipoDe(data, filialId);
+  const setores = setoresDoTipo(data, tipo);
   const st = statusDaFilial(data, filialId);
   const fim = st?.finalizado_em ?? null;
   const pr = progressoFilial(data, filialId);
@@ -115,8 +117,15 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
     <PageHead title={`${filial.codigo} · ${filial.nome}`} subtitle={fim ? `Coletas finalizadas em ${new Date(fim).toLocaleString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : 'Em coleta'}
       action={<View style={[s.row, { flexWrap: 'wrap', justifyContent: 'flex-end' }]}>
         {pr.coletas ? <IconButton icon={FilePdfIcon} label="Relatório em PDF" onPress={() => void gerarPdf()} /> : null}
-        {!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario))} /> : null}
+        {!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario, setores))} /> : null}
       </View>} />
+
+    {tipo === 'cd' ? (
+      <Card>
+        <View style={s.row}><Text style={[t.section, s.flex]}>Centro de distribuição</Text><StatusPill label="Critérios de CD" tone="accent" /></View>
+        <Text style={t.caption}>Setores: {setores.join(', ')}. As atividades e os setores do CD ficam em Gestão → Cadastros. A classificação vem do cadastro da unidade (campo bandeira).</Text>
+      </Card>
+    ) : null}
 
     {/* Progresso pela meta padrão (Gestão → Cadastros → Parâmetros) */}
     <Card>
@@ -163,11 +172,11 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
       </View>
     )) : (
       <EmptyState icon={CalendarBlankIcon} title="Nenhuma coleta nesta filial" text="Abra uma coleta para registrar atendimentos e atividades com cronômetro."
-        action={!fim ? { label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario)) } : undefined} />
+        action={!fim ? { label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario, setores)) } : undefined} />
     )}
 
     {form && (
-      <ColetaSheet title="Nova coleta" form={form} setForm={setForm} onClose={() => setForm(null)}
+      <ColetaSheet title="Nova coleta" form={form} setForm={setForm} onClose={() => setForm(null)} setores={setores} tipo={tipo}
         onSave={() => {
           if (!/^\d{4}-\d{2}-\d{2}$/.test(form.data)) { notify('Data inválida', 'Use o formato AAAA-MM-DD.'); return; }
           const id = ops.criarColeta({ filial_id: filial.id, ...form });
@@ -188,6 +197,8 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
   const abertos = data.rascunhos.filter(a => a.coleta_id === coletaId);
   const now = useNow(abertos.length > 0);
   if (!c) return <Missing onBack={nav.pop} />;
+  const tipoColeta = tipoDe(data, c.filial_id);
+  const ciclo = TIPOS_OPERACAO[tipoColeta].ciclo;
 
   const feitos = data.atendimentos.filter(a => a.coleta_id === coletaId).sort((x, y) => (y.inicio ?? '').localeCompare(x.inicio ?? ''));
   const completos = [...feitos].reverse().filter(a => a.tipo === 'completo');
@@ -212,7 +223,7 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
     {abertos.map(a => {
       const etapa = etapaAberta(a);
       const pausado = !!etapa && etapaPausada(etapa);
-      const nome = a.tipo === 'completo' ? 'Atendimento' : 'Atividade individual';
+      const nome = a.tipo === 'completo' ? ciclo.nome : 'Atividade individual';
       return (
         <Deslizavel key={a.id}
           direita={{ rotulo: 'Encerrar e gravar', cor: colors.success, icone: FlagCheckeredIcon, habilitada: a.etapas.length > 0 }}
@@ -236,7 +247,7 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
 
     <View style={s.twoCol}>
       {finalizada(data, c.filial_id) ? <Text style={[t.caption, s.flex]}>As coletas desta filial foram finalizadas. Para registrar mais, reabra na tela da filial.</Text> : <>
-      <Button title="Atendimento completo" icon={PlayIcon} style={s.flex} onPress={() => iniciar('completo')} />
+      <Button title={`${ciclo.nome} completo`} icon={PlayIcon} style={s.flex} onPress={() => iniciar('completo')} />
       <Button title="Atividade individual" icon={TimerIcon} variant="secondary" style={s.flex} onPress={() => iniciar('isolada')} />
       </>}
     </View>
@@ -247,19 +258,19 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
         {feitos.map((a, i) => (
           <ListRow key={a.id} style={i > 0 && s.divided}
             icon={a.tipo === 'completo' ? ListBulletsIcon : TimerIcon} tint={a.tipo === 'completo' ? 'indigo' : 'slate'}
-            title={a.tipo === 'completo' ? `Atendimento ${completos.indexOf(a) + 1}` : nomeAtv(data, a.etapas[0]?.atividade_id ?? '')}
+            title={a.tipo === 'completo' ? `${ciclo.nome} ${completos.indexOf(a) + 1}` : nomeAtv(data, a.etapas[0]?.atividade_id ?? '')}
             subtitle={`${a.inicio ? horaBR(a.inicio).slice(0, 5) : 'Importado'} · ${a.tipo === 'completo' ? resumoEtapas(data, a) : 'Atividade individual'}${nomeVeiculo(data, a.veiculo) ? ` · ${nomeVeiculo(data, a.veiculo)}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`}
             right={<Text style={s.clockSmall}>{fmtDur(a.duracao_s)}</Text>}
             onPress={() => nav.push({ name: 'atendimento', coletaId, atendimentoId: a.id })} />
         ))}
       </Card>
-    ) : <EmptyState icon={TimerIcon} title="Nenhum registro finalizado" text="Atendimento completo cronometra as etapas de um cliente; atividade individual cronometra uma tarefa avulsa." />}
+    ) : <EmptyState icon={TimerIcon} title="Nenhum registro finalizado" text={tipoColeta === 'cd' ? 'Ciclo completo cronometra as etapas de um pedido ou de uma carga; atividade individual cronometra uma tarefa avulsa.' : 'Atendimento completo cronometra as etapas de um cliente; atividade individual cronometra uma tarefa avulsa.'} />}
 
     <Button title="Excluir coleta" icon={TrashIcon} variant="danger" size="sm"
       onPress={() => confirmAction('Excluir coleta?', `Os ${feitos.length + abertos.length} registro(s) desta coleta também serão excluídos.`, 'Excluir', () => { ops.excluirColeta(c, data.atendimentos); nav.pop(); })} />
 
     {form && (
-      <ColetaSheet title="Editar coleta" form={form} setForm={setForm} onClose={() => setForm(null)}
+      <ColetaSheet title="Editar coleta" form={form} setForm={setForm} onClose={() => setForm(null)} setores={setoresDoTipo(data, tipoColeta)} tipo={tipoColeta}
         onSave={() => {
           if (!/^\d{4}-\d{2}-\d{2}$/.test(form.data)) { notify('Data inválida', 'Use o formato AAAA-MM-DD.'); return; }
           ops.editarColeta({ ...c, ...form }); setForm(null);
@@ -292,8 +303,10 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
 
   const emAndamento = !!rascunho;
   const lista = atividadesDaColeta(data, c);
-  const sequencia = a.tipo === 'completo' && c.setor === SETORES[0]
-    ? SEQUENCIA_PISTA.map(n => lista.find(x => x.nome === n)).filter((x): x is Atividade => !!x)
+  // Ciclo completo com ordem sugerida: no posto, o atendimento na pista; no CD, as etapas são escolhidas livremente.
+  const cicloTipo = TIPOS_OPERACAO[tipoDe(data, c.filial_id)].ciclo;
+  const sequencia = a.tipo === 'completo' && cicloTipo.setor === c.setor
+    ? cicloTipo.etapas.map(nome => lista.find(x => x.nome === nome)).filter((x): x is Atividade => !!x)
     : [];
   const outras = lista.filter(x => !sequencia.includes(x));
   const atalhos = outras.filter(x => x.classe === 'Espera' || x.classe === 'Retrabalho');
@@ -312,10 +325,11 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
 
   return <>
     <Button title="Voltar à coleta" icon={ArrowLeftIcon} variant="ghost" size="sm" style={s.alignStart} onPress={nav.pop} />
-    <PageHead title={a.tipo === 'completo' ? `Atendimento ${n}` : 'Atividade individual'} subtitle={a.inicio ? `Início ${horaBR(a.inicio)}` : 'Registro importado'}
+    <PageHead title={a.tipo === 'completo' ? `${cicloTipo.nome} ${n}` : 'Atividade individual'} subtitle={a.inicio ? `Início ${horaBR(a.inicio)}` : 'Registro importado'}
       action={<StatusPill label={emAndamento ? (pausada ? 'Pausado' : 'Em andamento') : 'Finalizado'} tone={emAndamento ? (pausada ? 'warning' : 'accent') : 'success'} icon={emAndamento ? undefined : CheckIcon} />} />
 
-    <Card>
+    {/* CD não atende veículos na pista. */}
+    {tipoDe(data, c.filial_id) === 'posto' ? <Card>
       <Text style={t.label}>Tipo de veículo</Text>
       {(() => {
         const ativos = data.veiculos.filter(v => v.ativo !== false);
@@ -323,7 +337,7 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
         const opcoes = atual && atual.ativo === false ? [...ativos, atual] : ativos;
         return <ChoiceChips value={atual?.nome ?? ''} options={opcoes.map(v => v.nome)} onChange={nome => { const v = opcoes.find(x => x.nome === nome); editar({ veiculo: v && v.id !== a.veiculo ? v.id : '' }); }} />;
       })()}
-    </Card>
+    </Card> : null}
 
     <Card>
       <Text style={t.caption}>Tempo total{a.tipo === 'completo' ? ' (soma das etapas, sem pausas)' : ''}</Text>
@@ -380,7 +394,12 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
 
     <Card>
       <Field label="Funcionário observado" value={a.funcionario} placeholder="Opcional" onChangeText={v => editar({ funcionario: v })} />
-      {/* Volume por faixa na roleta (≥ 10, ≤ 10, ≥ 20 … L, as mesmas do Dimensionamento): deslizar dentro do campo gira a roleta. */}
+      {/* CD: quantidade movimentada (itens, volumes ou caixas). Posto: volume por faixa na roleta (≥ 10, ≤ 10, ≥ 20 … L,
+          as mesmas do Dimensionamento): deslizar dentro do campo gira a roleta. */}
+      {tipoDe(data, c.filial_id) === 'cd' ? (
+        <Field estavel label="Quantidade movimentada" helper="Itens, volumes ou caixas deste registro (opcional)" keyboardType="numeric" placeholder="Qtd."
+          value={a.volume === null ? '' : String(a.volume)} onChangeText={v => editar({ volume: numero(v), volume_faixa: '' })} />
+      ) : <>
       <View style={[s.row, { justifyContent: 'space-between' }]}>
         <Text style={t.label}>Volume (faixa em litros)</Text>
         {a.volume !== null
@@ -391,13 +410,14 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
         <Roleta rotulo="Faixa de volume em litros" valores={valoresVolume(a)} valor={chaveVolume(a)} vazio={a.volume === null}
           formatar={rotuloVolume} onChange={v => { const f = deChave(v); editar({ volume: f.l, volume_faixa: f.op }); }} altura={42} visiveis={3} />
       </View>
+      </>}
       <Field estavel label="Deslocamentos" keyboardType="numeric" placeholder="Qtd." value={a.deslocamentos === null ? '' : String(a.deslocamentos)} onChangeText={v => editar({ deslocamentos: numero(v) })} />
-      <Field label="Observações" multiline value={a.obs} placeholder="Ocorrências, dificuldades, espera do cliente" onChangeText={v => editar({ obs: v })} />
+      <Field label="Observações" multiline value={a.obs} placeholder={tipoDe(data, c.filial_id) === 'cd' ? 'Ocorrências, falta de produto, espera por equipamento' : 'Ocorrências, dificuldades, espera do cliente'} onChangeText={v => editar({ obs: v })} />
     </Card>
 
     {emAndamento ? (
       <View style={s.group}>
-        {a.tipo === 'completo' && <Button title="Finalizar atendimento" icon={FlagCheckeredIcon} disabled={!a.etapas.length} onPress={() => ops.finalizar(a.id)} />}
+        {a.tipo === 'completo' && <Button title={`Finalizar ${cicloTipo.nome.toLowerCase()}`} icon={FlagCheckeredIcon} disabled={!a.etapas.length} onPress={() => ops.finalizar(a.id)} />}
         <Text style={t.caption}>O atendimento fica salvo neste aparelho enquanto está em andamento e é enviado ao servidor ao finalizar.</Text>
         <Button title="Descartar" icon={TrashIcon} variant="ghost" size="sm" style={s.alignStart} onPress={descartar} />
       </View>
@@ -423,17 +443,17 @@ const valoresVolume = (a: Atendimento) => {
 
 type ColetaForm = { data: string; setor: string; funcao: string; turno: string; demanda: string; auditor: string };
 /** Nova coleta: o auditor já vem com o usuário logado (dá para editar). */
-const novaColetaForm = (auditor = ''): ColetaForm => ({ data: hoje(), setor: SETORES[0], funcao: '', turno: TURNOS[0], demanda: DEMANDAS[1], auditor });
+const novaColetaForm = (auditor: string, setores: string[]): ColetaForm => ({ data: hoje(), setor: setores[0] ?? '', funcao: '', turno: TURNOS[0], demanda: DEMANDAS[1], auditor });
 
-function ColetaSheet({ title, form, setForm, onClose, onSave }: { title: string; form: ColetaForm; setForm: (f: ColetaForm) => void; onClose: () => void; onSave: () => void }) {
+function ColetaSheet({ title, form, setForm, onClose, onSave, setores, tipo }: { title: string; form: ColetaForm; setForm: (f: ColetaForm) => void; onClose: () => void; onSave: () => void; setores: string[]; tipo: TipoOperacao }) {
   const { s, t } = useLook();
   const set = (k: keyof ColetaForm) => (v: string) => setForm({ ...form, [k]: v });
   return (
     <Sheet title={title} onClose={onClose}
       footer={<View style={s.twoCol}><Button title="Cancelar" variant="secondary" style={s.flex} onPress={onClose} /><Button title="Salvar" icon={CheckIcon} style={s.flex} onPress={onSave} /></View>}>
       <Field label="Data" icon={CalendarBlankIcon} helper="Formato AAAA-MM-DD" value={form.data} onChangeText={set('data')} />
-      <View style={s.group}><Text style={t.label}>Setor</Text><ChoiceChips value={form.setor} options={[...SETORES]} onChange={set('setor')} /></View>
-      <Field label="Função observada" value={form.funcao} onChangeText={set('funcao')} placeholder="Frentista, caixa, gerente" />
+      <View style={s.group}><Text style={t.label}>Setor</Text><ChoiceChips value={form.setor} options={form.setor && !setores.includes(form.setor) ? [form.setor, ...setores] : setores} onChange={set('setor')} /></View>
+      <Field label="Função observada" value={form.funcao} onChangeText={set('funcao')} placeholder={tipo === 'cd' ? 'Conferente, separador, operador de empilhadeira' : 'Frentista, caixa, gerente'} />
       <View style={s.group}><Text style={t.label}>Turno</Text><ChoiceChips value={form.turno} options={[...TURNOS]} onChange={set('turno')} /></View>
       <View style={s.group}><Text style={t.label}>Condição de demanda</Text><ChoiceChips value={form.demanda} options={[...DEMANDAS]} onChange={set('demanda')} /></View>
       <Field label="Auditor" value={form.auditor} onChangeText={set('auditor')} placeholder="Nome de quem está cronometrando" />

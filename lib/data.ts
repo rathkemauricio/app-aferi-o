@@ -10,6 +10,14 @@ export type Filial = SyncRow & {
   /** Contagens desta filial: com leitor de código (coletor) ou celular sem leitor (câmera, digitação ou lista). Padrão: com leitor. */
   contagem_leitor?: boolean;
 };
+/**
+ * Centro de distribuição: classificação no campo da bandeira (pedido do usuário, 23/11/2026). CD não tem croqui,
+ * bombas nem tanques: fica fora do Croqui, das Aferições e da Conferência de Estoque, e o Tempos e Movimentos mede
+ * pelos critérios de CD.
+ */
+export const BANDEIRA_CD = 'cd';
+export const NOME_CD = 'Centro de distribuição (CD)';
+export const ehCD = (f: Pick<Filial, 'bandeira'> | null | undefined) => f?.bandeira === BANDEIRA_CD;
 export type DocTipo = 'equipamentos' | 'croqui' | 'dimensionamento';
 export type FilialDoc<P = unknown> = SyncRow & { filial_id: string; tipo: DocTipo; payload: P };
 export type ConfigRow<V = unknown> = SyncRow & { valor: V };

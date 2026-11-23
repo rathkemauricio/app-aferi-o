@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { Text, View } from 'react-native';
 import { bandeirasAtivas, nomeBandeira, useBandeiras } from '../lib/bandeiras';
-import { filiaisCol } from '../lib/data';
+import { BANDEIRA_CD, filiaisCol, NOME_CD } from '../lib/data';
 import { ChoiceChips, Field } from '../ui/kit';
 import { createTypography, space, ThemeContext } from '../ui/theme';
 
@@ -22,7 +22,9 @@ export function FilialFields({ form, setForm, editavel }: { form: FilialForm; se
   const set = (k: keyof FilialForm) => (v: string) => setForm({ ...form, [k]: v });
   const bandeiras = useBandeiras();
   const atual = bandeiras.find(b => b.id === form.bandeira);
-  const opcoes = atual && atual.ativo === false ? [...bandeirasAtivas(bandeiras), atual] : bandeirasAtivas(bandeiras);
+  const ativas = atual && atual.ativo === false ? [...bandeirasAtivas(bandeiras), atual] : bandeirasAtivas(bandeiras);
+  // CD não é bandeira de posto: é uma classificação fixa (sem croqui, bombas nem tanques).
+  const opcoes = [...ativas, { id: BANDEIRA_CD, nome: NOME_CD }];
   return <>
     <View style={{ flexDirection: 'row', gap: space.md }}>
       <Field label="Código" style={{ width: 110 }} value={form.codigo} onChangeText={set('codigo')} editable={editavel} placeholder="05" />

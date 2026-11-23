@@ -9,8 +9,8 @@ import { atendimentosDe, indicadores, ociosidade } from './calc';
 import { type AnaliseParaRelatorio, relatorioTemposHtml } from './relatorio';
 import { useIdentidade } from '../../lib/identidade';
 import { useUsuarioLogado } from '../../lib/auth';
-import { DEMANDAS, fmtMin, num, SETORES, TURNOS } from './model';
-import type { TmData } from './store';
+import { DEMANDAS, fmtMin, num, TIPOS_OPERACAO, TURNOS } from './model';
+import { setoresDoTipo, tipoDe, type TmData } from './store';
 import { useLook } from './ui';
 
 // Análise com IA (Gemini) do dimensionamento da filial. O app monta um resumo dos tempos (sem nomes de pessoas),
@@ -43,7 +43,7 @@ function montarDados(d: TmData, filial: Filial, dim: ResumoDimensionamento) {
   };
   const classeDe = new Map(d.atividades.map(a => [a.id, a.classe]));
   return {
-    perfil: 'posto_combustivel',
+    perfil: TIPOS_OPERACAO[tipoDe(d, filial.id)].perfilIa, tipo_de_operacao: TIPOS_OPERACAO[tipoDe(d, filial.id)].nome,
     unidade: { codigo: filial.codigo, nome: filial.nome, cidade: filial.cidade, uf: filial.uf, bandeira: filial.bandeira },
     periodo: { de: datas[0] ?? null, ate: datas[datas.length - 1] ?? null, dias_com_coleta: datas.length },
     totais: {
@@ -54,7 +54,7 @@ function montarDados(d: TmData, filial: Filial, dim: ResumoDimensionamento) {
     },
     por_turno: TURNOS.map(tu => ({ ...grupo('turno', c => c.turno === tu), turno: tu })).filter(x => x.coletas),
     por_demanda: DEMANDAS.map(de => ({ ...grupo('demanda', c => c.demanda === de), demanda: de })).filter(x => x.coletas),
-    por_setor: SETORES.map(se => ({ ...grupo('setor', c => c.setor === se), setor: se })).filter(x => x.coletas),
+    por_setor: setoresDoTipo(d, tipoDe(d, filial.id)).map(se => ({ ...grupo('setor', c => c.setor === se), setor: se })).filter(x => x.coletas),
     por_veiculo: ind.porVeiculo.map(([veiculo, seg, n]) => ({ veiculo, atendimentos: n, media_min: r1(seg / 60) })),
     tempo_por_classe_h: Object.fromEntries(ind.porClasse.map(([c, seg]) => [c, r1(seg / 3600)])),
     atividades: ind.atividades.slice(0, 30).map(a => ({
@@ -133,7 +133,7 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
   const analisar = async () => {
     if (!supabase) return;
     setAnalisando(true); setPedido(null);
-    const { data: r, error } = await supabase.functions.invoke('analise-ia', { body: { acao: 'tempos', filial_id: filial.id, perfil: 'posto_combustivel', dados: montarDados(data, filial, dim) } });
+    const { data: r, error } = await supabase.functions.invoke('analise-ia', { body: { acao: 'tempos', filial_id: filial.id, perfil: TIPOS_OPERACAO[tipoDe(data, filial.id)].perfilIa, dados: montarDados(data, filial, dim) } });
     if (error) {
       setAnalisando(false);
       let msg = 'Não foi possível falar com o servidor. Verifique a conexão.';

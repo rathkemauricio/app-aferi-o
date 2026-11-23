@@ -1,6 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { BANDEIRAS, saveConfig, useConfig } from './data';
+import { BANDEIRA_CD, BANDEIRAS, NOME_CD, saveConfig, useConfig } from './data';
 
 // Catálogo de bandeiras (app_config 'bandeiras'), editável pelo administrador.
 // Usado no cadastro da filial e no croqui (totem de preços e selo da bandeira).
@@ -19,7 +19,7 @@ export function useBandeiras() {
 }
 export const bandeirasAtivas = (lista: Bandeira[]) => lista.filter(b => b.ativo !== false);
 export const salvarBandeiras = (lista: Bandeira[]) => saveConfig(CFG_BANDEIRAS, { lista });
-export const nomeBandeira = (id: string) => BANDEIRAS[id]?.n ?? BANDEIRAS.branca?.n ?? 'Bandeira branca';
+export const nomeBandeira = (id: string) => (id === BANDEIRA_CD ? NOME_CD : BANDEIRAS[id]?.n ?? BANDEIRAS.branca?.n ?? 'Bandeira branca');
 
 /**
  * Escolhe o logotipo da companhia (galeria, ou arquivo no navegador) e reduz para até 320 px de largura em PNG

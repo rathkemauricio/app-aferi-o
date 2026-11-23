@@ -3,7 +3,7 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../lib/auth';
-import { filiaisCol, useFiliais, useFilialDoc } from '../../../lib/data';
+import { ehCD, filiaisCol, useFiliais, useFilialDoc } from '../../../lib/data';
 import { CroquiCanvas, useCatalogoCroqui } from '../../../modules/croqui/Canvas';
 import { type CroquiDoc, PALETA_CLARA, PALETA_ESCURA, resumo } from '../../../modules/croqui/model';
 import { ArrowLeftIcon, CheckIcon, DropIcon, GasPumpIcon, PencilSimpleIcon, StorefrontIcon, TrashIcon } from '../../../ui/icons';
@@ -66,7 +66,9 @@ export default function FilialScreen() {
             {isAdmin ? <Button title="Salvar alterações" icon={CheckIcon} disabled={!mudou} onPress={salvar} /> : <Text style={t.caption}>Somente o administrador altera os dados da filial.</Text>}
           </Card>
 
-          {podeAcessar('croqui') && <>
+          {/* Centro de distribuição não tem croqui, bombas nem tanques. */}
+          {ehCD(filial) ? <Text style={t.caption}>Centro de distribuição: sem croqui, bombas e tanques. No Tempos e Movimentos, usa os setores e as atividades do CD.</Text> : null}
+          {podeAcessar('croqui') && !ehCD(filial) && <>
           <SectionHeader title="Croqui" action={itens.length ? 'Abrir' : undefined} onPress={() => router.push(`/croqui?filial=${filial.id}`)} />
           {itens.length ? <>
             <CroquiCanvas items={itens} bandeira={filial.bandeira} mostrarNomes={false} paleta={{ ...(mode === 'dark' ? PALETA_ESCURA : PALETA_CLARA), accent: colors.accent }} />
@@ -82,7 +84,7 @@ export default function FilialScreen() {
 
           </>}
 
-          {podeAcessar('afericoes') && <>
+          {podeAcessar('afericoes') && !ehCD(filial) && <>
           <SectionHeader title="Equipamentos (Aferições)" action="Gerenciar" onPress={() => router.push('/afericoes')} />
           <Card>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>

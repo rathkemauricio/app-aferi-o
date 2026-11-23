@@ -9,8 +9,8 @@ import { relatorioTemposHtml } from './relatorio';
 import { ultimaAnaliseDaFilial } from './AnaliseIA';
 import { type Filtro, indicadores } from './calc';
 import { FilialPicker, PageHead } from './ColetasTab';
-import { ciclosMinimos, DEMANDAS, fmtMin, num, SETORES } from './model';
-import type { TmData } from './store';
+import { ciclosMinimos, DEMANDAS, fmtMin, num } from './model';
+import { setoresDoTipo, tipoDe, todosSetores, type TmData } from './store';
 import { BarList, Kpi, useLook } from './ui';
 
 const TODAS = 'Todas', TODOS = 'Todos';
@@ -50,7 +50,7 @@ export function PainelTab({ data }: { data: TmData }) {
         <Button title="Trocar" icon={StorefrontIcon} variant="secondary" size="sm" onPress={() => setEscolher(true)} />
       </View>
       <View style={s.group}><Text style={t.label}>Setor</Text>
-        <ChoiceChips value={f.setor || TODOS} options={[TODOS, ...SETORES]} onChange={v => setF({ ...f, setor: v === TODOS ? '' : v })} /></View>
+        <ChoiceChips value={f.setor || TODOS} options={[TODOS, ...(f.filialId ? setoresDoTipo(data, tipoDe(data, f.filialId)) : todosSetores(data))]} onChange={v => setF({ ...f, setor: v === TODOS ? '' : v })} /></View>
       <View style={s.group}><Text style={t.label}>Demanda</Text>
         <ChoiceChips value={f.demanda || TODAS} options={[TODAS, ...DEMANDAS]} onChange={v => setF({ ...f, demanda: v === TODAS ? '' : v })} /></View>
     </Card>

@@ -6,8 +6,8 @@ import { CaretDownIcon, ChartBarIcon, CheckIcon, PlusIcon, ResetIcon, Storefront
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, Sheet, StatusPill } from '../../ui/kit';
 import { mediaObservada } from './calc';
 import { FilialPicker } from './ColetasTab';
-import { type Faixa, FAIXAS, normNome, num, rotuloFaixa, uid } from './model';
-import type { TmData } from './store';
+import { ATIVIDADES_CD, type Faixa, FAIXAS, normNome, num, rotuloFaixa, SETORES_CD, TIPOS_OPERACAO, type TipoOperacao, uid } from './model';
+import { tipoDe, type TmData } from './store';
 import { BarList, Kpi, useLook } from './ui';
 import { AnaliseIA } from './AnaliseIA';
 
@@ -41,6 +41,19 @@ const SEED: [number, string, number, Freq, number, Faixa?][] = [
 export const modeloDimensionamento = (): Dimensionamento => ({ dias: 28, quadro: 0, bl: BL.map(b => ({ f: b[1], h: b[2] })), it: SEED.map(x => ({ id: uid('dim'), b: x[0], n: x[1], m: x[2], t: x[3], v: x[4], ...(x[5] ? { fx: x[5] } : {}) })) });
 const MODELO = modeloDimensionamento(); // ids estáveis enquanto o padrão não for salvo
 
+/* ---------- Centro de distribuição (CD): blocos próprios; as atividades padrão do CD entram sem tempo nem quantidade ----------
+   O tempo vem da cronometragem (opção "Média observada") ou é digitado; a quantidade por dia (notas, pedidos, cargas…) é do CD. */
+export const CFG_DIM_PADRAO_CD = 'tm.dimensionamento.padrao.cd';
+const BL_CD: [string, number, number][] = [['Recebimento e armazenagem', 1.1, 220], ['Separação e expedição', 1.2, 220], ['Inventário, controle e apoio', 1, 220], ['Liderança e administrativo', 1, 176]];
+/** Setor do CD → bloco da planilha (setores criados depois caem em "Inventário, controle e apoio"). */
+const blocoDoSetorCd = (setor: string) => (setor === SETORES_CD[0] || setor === SETORES_CD[1] ? 0 : setor === SETORES_CD[2] ? 1 : setor === SETORES_CD[4] ? 3 : 2);
+export const modeloDimensionamentoCd = (): Dimensionamento => ({
+  dias: 26, quadro: 0, bl: BL_CD.map(b => ({ f: b[1], h: b[2] })),
+  it: ATIVIDADES_CD.map(a => ({ id: uid('dim'), b: blocoDoSetorCd(a.setor), n: a.nome, m: 0, t: 'd' as Freq, v: 0 })),
+});
+const MODELO_CD = modeloDimensionamentoCd();
+const blocosDe = (tipo: TipoOperacao) => (tipo === 'cd' ? BL_CD : BL);
+
 /** Converte nomes antigos ("Abastecimento ≤ 10 L (gasolina/etanol)", "> 10 e ≤ 20 L") para nome + faixa. */
 function migrarFaixas(d: Dimensionamento): Dimensionamento {
   if (!d.it.some(i => !i.fx && /[≤≥<>]\s*\d+\s*L/i.test(i.n))) return d;
@@ -70,7 +83,13 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
   const [faixaDe, setFaixaDe] = useState<string | null>(null); // item com o seletor de faixa aberto
   const filial = data.filiais.find(f => f.id === filialId) ?? null;
   const { payload: proprio } = useFilialDoc<Dimensionamento>(filial?.id, 'dimensionamento');
-  const padrao = migrarFaixas(useConfig<Dimensionamento>(CFG_DIM_PADRAO, MODELO));
+  const padraoPosto = migrarFaixas(useConfig<Dimensionamento>(CFG_DIM_PADRAO, MODELO));
+  const padraoCd = useConfig<Dimensionamento>(CFG_DIM_PADRAO_CD, MODELO_CD);
+  /** Padrão em edição: posto ou centro de distribuição. */
+  const [tipoPadrao, setTipoPadrao] = useState<TipoOperacao>('posto');
+  const tipo: TipoOperacao = alvo === 'padrao' ? tipoPadrao : filial ? tipoDe(data, filial.id) : 'posto';
+  const padrao = tipo === 'cd' ? padraoCd : padraoPosto;
+  const BLX = blocosDe(tipo);
   const editandoPadrao = alvo === 'padrao';
   const usaPadrao = !editandoPadrao && !!filial && !proprio;
   const D: Dimensionamento | null = editandoPadrao ? padrao : filial ? (proprio ? migrarFaixas(proprio) : padrao) : null;
@@ -78,7 +97,7 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
 
   /** No padrão grava a configuração global. Na filial, a primeira alteração cria o dimensionamento próprio dela. */
   const salvar = (next: Dimensionamento) => {
-    if (editandoPadrao) { if (isAdmin) saveConfig(CFG_DIM_PADRAO, next); return; }
+    if (editandoPadrao) { if (isAdmin) saveConfig(tipo === 'cd' ? CFG_DIM_PADRAO_CD : CFG_DIM_PADRAO, next); return; }
     if (filial) saveFilialDoc(filial.id, 'dimensionamento', next);
   };
   const voltarAoPadrao = () => {
@@ -101,6 +120,8 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
     <Card>
       {somenteFilial ? <Text style={t.section}>Análise e dimensionamento da filial</Text>
         : <ChoiceChips value={editandoPadrao ? 'Padrão da rede' : 'Por filial'} options={['Por filial', 'Padrão da rede']} onChange={v => setAlvo(v === 'Padrão da rede' ? 'padrao' : 'filial')} />}
+      {editandoPadrao ? <ChoiceChips value={TIPOS_OPERACAO[tipoPadrao].nome} options={[TIPOS_OPERACAO.posto.nome, TIPOS_OPERACAO.cd.nome]} onChange={v => setTipoPadrao(v === TIPOS_OPERACAO.cd.nome ? 'cd' : 'posto')} /> : null}
+      {!editandoPadrao && tipo === 'cd' ? <Text style={t.caption}>Centro de distribuição: os tempos vêm da cronometragem (escolha "Média observada") e as quantidades por dia são as do CD (notas, pedidos, cargas).</Text> : null}
       {editandoPadrao ? (
         <Text style={t.caption}>
           {isAdmin
@@ -128,10 +149,10 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
 
   if (!D) return <>{cabecalho}<EmptyState icon={StorefrontIcon} title="Escolha a filial" text="O dimensionamento é calculado por filial; sem dimensionamento próprio, ela usa o padrão da rede." action={{ label: 'Escolher filial', onPress: () => setEscolher(true) }} />{picker}</>;
   if (!D.it.length && editandoPadrao) return <>{cabecalho}
-    <EmptyState icon={ChartBarIcon} title="Padrão vazio" text="Recrie o padrão a partir da planilha de referência (modelo 07)."
-      action={isAdmin ? { label: 'Recriar a partir do modelo', icon: PlusIcon, onPress: () => salvar(modeloDimensionamento()) } : undefined} /></>;
+    <EmptyState icon={ChartBarIcon} title="Padrão vazio" text={tipo === 'cd' ? 'Recrie o padrão do CD a partir das atividades padrão do CD.' : 'Recrie o padrão a partir da planilha de referência (modelo 07).'}
+      action={isAdmin ? { label: 'Recriar a partir do modelo', icon: PlusIcon, onPress: () => salvar(tipo === 'cd' ? modeloDimensionamentoCd() : modeloDimensionamento()) } : undefined} /></>;
 
-  const B = BL.map((b, k) => { const it = D.it.filter(i => i.b === k), hr = it.reduce((x, i) => x + hm(i, D), 0), pg = hr * D.bl[k].f; return { k, it, hr, pg, fte: D.bl[k].h ? pg / D.bl[k].h : 0 }; });
+  const B = BLX.map((b, k) => { const it = D.it.filter(i => i.b === k), hr = it.reduce((x, i) => x + hm(i, D), 0), pg = hr * D.bl[k].f; return { k, it, hr, pg, fte: D.bl[k].h ? pg / D.bl[k].h : 0 }; });
   const H = B.reduce((x, b) => x + b.hr, 0), PG = B.reduce((x, b) => x + b.pg, 0), FT = B.reduce((x, b) => x + b.fte, 0), sd = D.quadro - FT;
   const editItem = (id: string, p: Partial<ItemDim>) => salvar({ ...D, it: D.it.map(i => (i.id === id ? { ...i, ...p } : i)) });
   const itemFaixa = faixaDe ? D.it.find(i => i.id === faixaDe) : undefined;
@@ -153,16 +174,16 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
     {filial && !editandoPadrao ? (
       <AnaliseIA data={data} filial={filial} dim={{
         dias: D.dias, quadro_atual: D.quadro, total_funcionarios_planilha: Math.round(FT * 10) / 10, usa_media_observada: usarObs,
-        blocos: B.map(b => ({ bloco: BL[b.k][0], fator_cobertura: D.bl[b.k].f, horas_por_funcionario_mes: D.bl[b.k].h, horas_mes: Math.round(b.hr * 10) / 10, funcionarios: Math.round(b.fte * 10) / 10 })),
+        blocos: B.map(b => ({ bloco: BLX[b.k][0], fator_cobertura: D.bl[b.k].f, horas_por_funcionario_mes: D.bl[b.k].h, horas_mes: Math.round(b.hr * 10) / 10, funcionarios: Math.round(b.fte * 10) / 10 })),
         maiores_cargas: D.it.map(i => ({ atividade: nomeItem(i), minutos: i.m, frequencia: FQ[i.t], quantidade: i.v, horas_mes: Math.round(hm(i, D) * 10) / 10 })).sort((a, b) => b.horas_mes - a.horas_mes).slice(0, 15),
       }} />
     ) : null}
-    <Card><Text style={t.section}>Funcionários necessários por bloco</Text><BarList items={B.map(b => [BL[b.k][0], b.fte])} /></Card>
+    <Card><Text style={t.section}>Funcionários necessários por bloco</Text><BarList items={B.map(b => [BLX[b.k][0], b.fte])} /></Card>
     <Card><Text style={t.section}>Maiores cargas (h/mês)</Text><BarList items={D.it.map(i => [nomeItem(i), hm(i, D)] as [string, number]).sort((a, b) => b[1] - a[1]).slice(0, 8)} /></Card>
 
     {B.map(b => (
       <Card key={b.k}>
-        <Text style={t.section}>{BL[b.k][0]}</Text>
+        <Text style={t.section}>{BLX[b.k][0]}</Text>
         <Text style={t.caption}>{num(b.hr)} h/mês · {num(b.fte)} funcionário(s)</Text>
         <View style={s.twoCol}>
           <Field estavel editable={podeEditar} label="Fator de cobertura" style={s.flex} keyboardType="decimal-pad" value={String(D.bl[b.k].f).replace('.', ',')} onChangeText={v => salvar({ ...D, bl: D.bl.map((x, k) => (k === b.k ? { ...x, f: n(v) } : x)) })} />

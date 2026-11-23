@@ -4,7 +4,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { bandeirasAtivas, nomeBandeira } from '../../lib/bandeiras';
-import { docsCol, filiaisCol, saveFilialDoc, useFiliais, useFilialDoc } from '../../lib/data';
+import { docsCol, ehCD, filiaisCol, saveFilialDoc, useFiliais, useFilialDoc } from '../../lib/data';
 import { isSyncEnabled, useCollection } from '../../lib/sync';
 import { imprimirHtml } from '../../lib/util';
 import {
@@ -36,7 +36,9 @@ export default function CroquiModule() {
   const paleta = useMemo(() => ({ ...(mode === 'dark' ? PALETA_ESCURA : PALETA_CLARA), accent: colors.accent }), [mode, colors.accent]);
 
   const [catalogo, bandeiras] = useCatalogoCroqui(); // combustíveis (tipos de bomba) e bandeiras cadastrados
-  const { filiais } = useFiliais();
+  const { filiais: todasFiliais } = useFiliais();
+  // Centro de distribuição não tem croqui.
+  const filiais = useMemo(() => todasFiliais.filter(f => !ehCD(f)), [todasFiliais]);
   const [filialId, setFilialId] = useState<string>(params.filial ?? '');
   const filial = filiais.find(f => f.id === filialId) ?? null;
   const { doc } = useFilialDoc<CroquiDoc>(filial?.id, 'croqui');

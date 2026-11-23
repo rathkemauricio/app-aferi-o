@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useCombustiveis } from '../../lib/combustiveis';
-import { useFiliais, useFilialDoc } from '../../lib/data';
+import { ehCD, useFiliais, useFilialDoc } from '../../lib/data';
 import { combustivelDoTanque, type CroquiDoc } from '../croqui/model';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
 import { tabelasCol } from './arqueacao';
@@ -17,7 +17,8 @@ export function useTanques() {
   const tb = useCollection(tabelasCol);
   const combustiveis = useCombustiveis();
   const medicoes = useMemo(() => [...m.list].sort((a, b) => b.data.localeCompare(a.data) || (b.updated_at ?? '').localeCompare(a.updated_at ?? '')), [m.list]);
-  return { filiais: f.filiais, medicoes, combustiveis, loaded: f.loaded && m.loaded && tq.loaded && tb.loaded, status: combinedStatus([f.status, m.status, tq.status, tb.status]) };
+  // Centro de distribuição não tem tanques: fica fora da Conferência de Estoque.
+  return { filiais: f.filiais.filter(x => !ehCD(x)), medicoes, combustiveis, loaded: f.loaded && m.loaded && tq.loaded && tb.loaded, status: combinedStatus([f.status, m.status, tq.status, tb.status]) };
 }
 
 export const linhaVazia = (tanque = '', combustivel = ''): LinhaTanque => ({ id: uid('tq'), tanque, combustivel, metragem: null, litros: null, informada: null });

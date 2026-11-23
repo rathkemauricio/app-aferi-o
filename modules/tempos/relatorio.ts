@@ -1,7 +1,7 @@
 import { esc } from '../../lib/util';
 import { type Filtro, coletasFiltradas, atendimentosDe, indicadores, ociosidade, progressoFilial } from './calc';
-import { ciclosMinimos, dataBR, fmtMin, num } from './model';
-import { statusDaFilial, type TmData } from './store';
+import { ciclosMinimos, dataBR, fmtMin, num, TIPOS_OPERACAO } from './model';
+import { statusDaFilial, tipoDe, type TmData } from './store';
 
 /** Análise com IA salva (tm_analises_ia) e o dimensionamento da planilha enviado junto. */
 export type AnaliseParaRelatorio = {
@@ -55,6 +55,9 @@ export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string;
   const cs = [...coletasFiltradas(d, f)].sort((a, b) => a.data.localeCompare(b.data));
   const ats = atendimentosDe(d, cs);
   const filial = d.filiais.find(x => x.id === f.filialId);
+  // Centro de distribuição: ciclo completo (pedido/carga) e quantidade movimentada no lugar de atendimento e litros.
+  const ehCd = !!filial && tipoDe(d, filial.id) === 'cd';
+  const ciclo = ehCd ? TIPOS_OPERACAO.cd.ciclo.nome.toLowerCase() : 'atendimento';
   const nomeFilial = (id: string) => { const x = d.filiais.find(y => y.id === id); return x ? `${x.codigo} · ${x.nome}` : 'Filial removida'; };
   const periodo = cs.length ? (cs[0].data === cs[cs.length - 1].data ? dataBR(cs[0].data) : `${dataBR(cs[0].data)} a ${dataBR(cs[cs.length - 1].data)}`) : '—';
   const auditores = [...new Set(cs.map(c => c.auditor).filter(Boolean))].join(', ') || 'Não informado';
@@ -93,7 +96,7 @@ table.t td{padding:5px 6px;border-bottom:1px solid #edf0f4;vertical-align:middle
 <h3>Conclusões principais</h3>
 <div class="conc">
 <div><h4>Quanto leva cada atividade</h4>
-${r.mediaAtendimentoSeg ? `<div class="grande">${fmtMin(r.mediaAtendimentoSeg)} min</div><div class="muted">por atendimento completo (média)</div>` : '<div class="muted">Sem atendimentos completos.</div>'}
+${r.mediaAtendimentoSeg ? `<div class="grande">${fmtMin(r.mediaAtendimentoSeg)} min</div><div class="muted">por ${ciclo} completo (média)</div>` : `<div class="muted">Sem ${ciclo}s completos.</div>`}
 ${topAtv.length ? `<ol>${topAtv.map(a => `<li>${esc(a.nome)}: <b>${fmtMin(a.mediaSeg)} min</b>${a.padraoSeg !== null ? ` (padrão ${fmtMin(a.padraoSeg)})` : ''}</li>`).join('')}</ol>` : ''}</div>
 <div><h4>Quanto fica ocioso</h4>
 ${oc.total.observadoSeg ? `<div class="grande">${num(oc.total.pct)}%</div><div class="muted">do tempo observado · ${num(oc.total.minPorHora)} min ociosos a cada hora</div>
@@ -111,9 +114,9 @@ ${A?.resumo ? `<p class="ia">${esc(A.resumo)}</p>` : ''}
 
 <h3>Resumo executivo</h3>
 <div class="grid">
-${stat(String(r.atendimentos), 'Atendimentos completos')}${stat(String(r.isoladas), 'Atividades individuais')}${stat(fmtMin(r.mediaAtendimentoSeg), 'Min por atendimento (média)')}${stat(String(r.etapas), 'Etapas cronometradas')}
+${stat(String(r.atendimentos), ehCd ? 'Ciclos completos' : 'Atendimentos completos')}${stat(String(r.isoladas), 'Atividades individuais')}${stat(fmtMin(r.mediaAtendimentoSeg), `Min por ${ciclo} (média)`)}${stat(String(r.etapas), 'Etapas cronometradas')}
 ${stat(fmtMin(r.totalSeg), 'Min em atividade')}${stat(fmtMin(r.esperaSeg), 'Min de espera')}${stat(fmtMin(r.interrupcoesSeg), 'Min de pausas')}${stat(fmtMin(r.retrabalhoSeg), 'Min de retrabalho')}
-${stat(num(r.ocupacao) + '%', 'Ocupação')}${stat(num(r.deslocamentos), 'Deslocamentos')}${stat(num(r.volume), 'Litros (pelas faixas)')}
+${stat(num(r.ocupacao) + '%', 'Ocupação')}${stat(num(r.deslocamentos), 'Deslocamentos')}${r.volume ? stat(num(r.volume), ehCd ? 'Quantidade movimentada' : 'Litros (pelas faixas)') : ''}
 </div>
 ${r.etapas ? `<p>${acima.length ? `<b>${acima.length}</b> atividade(s) com tempo médio acima da referência: ${esc(acima.map(a => a.nome).join(', '))}.` : 'Nenhuma atividade com amostra suficiente ficou acima da referência.'}</p>` : '<p>Ainda não há atendimentos ou atividades finalizados neste filtro.</p>'}
 

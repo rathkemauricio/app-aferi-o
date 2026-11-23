@@ -31,13 +31,28 @@ const PERFIS: Record<string, { nome: string; contexto: string }> = {
     contexto: [
       'Negócio: posto de combustível no Brasil (pista de abastecimento, loja de conveniência, troca de óleo, gerência).',
       'Jornada CLT de 44 h semanais (cerca de 220 h/mês por funcionário; liderança cerca de 176 h/mês); escalas típicas 6x1 ou 12x36.',
-      'A pista precisa de cobertura nos horários de pico e prontidão mínima mesmo em baixo movimento (segurança e atendimento).',
+      'A pista precisa de cobertura nos horários de pico e prontidão mínima mesmo em baixo movimento (segurança e atendimento):',
+      'nunca proponha menos que a prontidão mínima da pista em cada turno aberto.',
+      'Considere folgas, férias, faltas e intervalos ao converter horas de trabalho em quadro de pessoas.',
+    ].join(' '),
+  },
+  centro_distribuicao: {
+    nome: 'centro de distribuição',
+    contexto: [
+      'Negócio: centro de distribuição (CD) de uma rede de postos no Brasil: recebimento de mercadorias, armazenagem,',
+      'separação de pedidos (picking), conferência, embalagem/paletização, expedição e carregamento, inventário e rotinas administrativas.',
+      'Não há pista nem atendimento ao público: a cobertura mínima é dada pelas janelas de recebimento e de expedição (horário de',
+      'chegada dos fornecedores e de saída das cargas para as filiais) e pelos equipamentos (empilhadeira/paleteira exigem operador habilitado).',
+      'A carga de trabalho depende do volume: notas e volumes recebidos, pedidos e itens separados, cargas expedidas por dia;',
+      '"quantidade movimentada" nos registros são itens, volumes ou caixas. Picos costumam ocorrer antes das saídas das cargas.',
+      'Jornada CLT de 44 h semanais (cerca de 220 h/mês por funcionário; liderança cerca de 176 h/mês).',
       'Considere folgas, férias, faltas e intervalos ao converter horas de trabalho em quadro de pessoas.',
     ].join(' '),
   },
 };
 
-const SISTEMA = `Você é especialista em engenharia de métodos (tempos e movimentos) e dimensionamento de equipes de postos de combustível.
+const SISTEMA = `Você é especialista em engenharia de métodos (tempos e movimentos) e dimensionamento de equipes de redes de postos de combustível
+(postos e centros de distribuição). O tipo de unidade e as regras dele vêm no início dos dados.
 Você recebe a cronometragem de uma unidade (já calculada pelo sistema) e precisa responder, para o gestor, três perguntas:
 1) Quanto tempo um funcionário leva para fazer cada atividade (use tempo médio observado e o tempo padrão, que já inclui ritmo e tolerância).
 2) Quanto tempo o funcionário fica ocioso (use "ociosidade": % do tempo observado, minutos ociosos por hora, por turno/demanda/setor).
@@ -46,13 +61,13 @@ Como chegar ao número de funcionários:
 - Carga de trabalho = tempos padrão × quantidades/frequências do dimensionamento (planilha) e o tempo médio do atendimento completo × volume de atendimentos.
 - Compare com o quadro atual e com o cálculo da planilha; use a ociosidade observada para dizer se há folga (ociosidade alta) ou sobrecarga (ociosidade baixa, espera do cliente, retrabalho).
 - Meta saudável de ocupação: 75% a 85% (abaixo disso há ociosidade sobrando; acima, risco de fila e de fadiga).
-- Nunca proponha menos que a prontidão mínima da pista em cada turno aberto (segurança e atendimento), mesmo em baixo movimento.
+- Respeite a cobertura mínima própria do tipo de unidade (descrita no início dos dados), mesmo em baixo movimento.
 - Converta horas em pessoas pela jornada (cerca de 220 h/mês por funcionário CLT; liderança cerca de 176 h/mês) e considere folgas, férias e faltas.
 Regras:
 - Use só os dados recebidos; não invente números. Quando faltar dado, diga o que falta e trabalhe com premissas explícitas.
 - Amostras pequenas (poucos ciclos ou poucas coletas) reduzem a confiança: diga isso.
 - Não avalie pessoas individualmente: fale de funções, turnos e setores.
-- Responda em português do Brasil, de forma objetiva, para gestores de posto.
+- Responda em português do Brasil, de forma objetiva, para os gestores da unidade.
 - Responda SOMENTE com um JSON válido neste formato:
 {
   "resumo": "3 a 5 frases respondendo às três perguntas",

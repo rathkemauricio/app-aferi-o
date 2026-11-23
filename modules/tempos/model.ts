@@ -94,6 +94,41 @@ const SEED: [string, string, string, number?][] = [
   ['Espera', TODOS_SETORES, 'Espera'], ['Retrabalho', TODOS_SETORES, 'Retrabalho'],
 ];
 export const ATIVIDADES_PADRAO: Atividade[] = SEED.map(([nome, setor, classe, ref], i) => ({ id: `atv-${i}`, nome, setor, classe, ref: ref ?? null, ativo: true }));
+
+/* ---------- Tipos de operação (cada unidade é medida pelos critérios do seu tipo) ---------- */
+export type TipoOperacao = 'posto' | 'cd';
+/** Setores iniciais do centro de distribuição (CD); o administrador cria, renomeia e apaga em Cadastros (config tm.setores_cd). */
+export const SETORES_CD = ['Recebimento', 'Armazenagem', 'Separação e expedição', 'Inventário e controle', 'Administrativo do CD'];
+export const CFG_SETORES_CD = 'tm.setores_cd';
+const [CR, CA, CS, CI, CAD] = SETORES_CD;
+/**
+ * Atividades padrão do CD (sem tempo de referência: o tempo vem da cronometragem). O administrador acrescenta as
+ * próprias, edita e desativa em Cadastros (pedido do usuário, 23/11/2026: manter este padrão e cadastrar o resto).
+ */
+const SEED_CD: [string, string, string][] = [
+  ['Descarga de caminhão', CR, 'Operacional'], ['Conferência de recebimento', CR, 'Controle'], ['Lançamento da nota de entrada', CR, 'Administrativa'],
+  ['Etiquetagem', CR, 'Operacional'], ['Devolução ao fornecedor', CR, 'Operacional'],
+  ['Endereçamento e guarda', CA, 'Operacional'], ['Movimentação com paleteira/empilhadeira', CA, 'Operacional'], ['Reabastecimento do picking', CA, 'Operacional'],
+  ['Leitura do pedido', CS, 'Administrativa'], ['Separação de pedido', CS, 'Operacional'], ['Deslocamento entre endereços', CS, 'Operacional'],
+  ['Conferência da separação', CS, 'Controle'], ['Embalagem e paletização', CS, 'Operacional'], ['Carregamento', CS, 'Operacional'],
+  ['Emissão de documentos de transporte', CS, 'Administrativa'], ['Conferência de carga', CS, 'Controle'],
+  ['Contagem cíclica', CI, 'Controle'], ['Tratativa de divergências', CI, 'Controle'], ['Organização e limpeza do armazém', CI, 'Organização e apoio'],
+  ['Programação de cargas e rotas', CAD, 'Administrativa'], ['Atendimento a filiais e pedidos', CAD, 'Atendimento'], ['Lançamentos no sistema', CAD, 'Administrativa'],
+];
+export const ATIVIDADES_CD: Atividade[] = SEED_CD.map(([nome, setor, classe], i) => ({ id: `atv-cd-${i}`, nome, setor, classe, ref: null, ativo: true }));
+
+/** O que muda de um tipo de operação para outro: setores, ciclo completo, blocos da planilha e o perfil da análise com IA. */
+export const TIPOS_OPERACAO: Record<TipoOperacao, {
+  nome: string;
+  /** Ciclo completo cronometrado em sequência (no posto, o atendimento na pista; no CD, um ciclo com as etapas escolhidas na hora, ex.: um pedido ou uma carga). */
+  ciclo: { nome: string; plural: string; setor: string | null; etapas: string[] };
+  /** Perfil enviado à análise com IA (função analise-ia). */
+  perfilIa: string;
+}> = {
+  posto: { nome: 'Posto de combustível', ciclo: { nome: 'Atendimento', plural: 'atendimentos', setor: SETORES[0], etapas: SEQUENCIA_PISTA_ETAPAS() }, perfilIa: 'posto_combustivel' },
+  cd: { nome: 'Centro de distribuição', ciclo: { nome: 'Ciclo', plural: 'ciclos', setor: null, etapas: [] }, perfilIa: 'centro_distribuicao' },
+};
+function SEQUENCIA_PISTA_ETAPAS() { return ['Abordagem', 'Abastecimento', 'Limpeza de para-brisa', 'Calibragem pneu sem estepe', 'Calibragem pneu com estepe', 'Verificação de água e óleo', 'Pagamento']; }
 export const PARAMETROS_PADRAO: Parametros = { ritmo: 1, tol: 15 };
 
 /* ---------- Tipos de veículo (catálogo editável pelo administrador) ---------- */
@@ -110,4 +145,4 @@ export const CFG_ATIVIDADES = 'tm.atividades';
 export const CFG_PARAMETROS = 'tm.parametros';
 
 /** Ordem sugerida de um atendimento completo na pista. As etapas intermediárias são opcionais. */
-export const SEQUENCIA_PISTA = ['Abordagem', 'Abastecimento', 'Limpeza de para-brisa', 'Calibragem pneu sem estepe', 'Calibragem pneu com estepe', 'Verificação de água e óleo', 'Pagamento'];
+export const SEQUENCIA_PISTA = TIPOS_OPERACAO.posto.ciclo.etapas;
