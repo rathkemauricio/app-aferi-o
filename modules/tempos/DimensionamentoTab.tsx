@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useAuth } from '../../lib/auth';
-import { docId, docsCol, saveConfig, saveFilialDoc, useConfig, useFilialDoc } from '../../lib/data';
+import { configCol, docId, docsCol, saveConfig, saveFilialDoc, useConfig, useFilialDoc } from '../../lib/data';
+import { useCollection } from '../../lib/sync';
 import { CaretDownIcon, ChartBarIcon, CheckIcon, PlusIcon, ResetIcon, StorefrontIcon, XIcon } from '../../ui/icons';
-import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, Sheet, StatusPill } from '../../ui/kit';
+import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, Sheet, StatusPill } from '../../ui/kit';
 import { mediaObservada } from './calc';
 import { FilialPicker } from './ColetasTab';
 import { ATIVIDADES_CD, type Faixa, FAIXAS, normNome, num, rotuloFaixa, SETORES_CD, TIPOS_OPERACAO, type TipoOperacao, uid } from './model';
@@ -91,7 +92,10 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
   const padrao = tipo === 'cd' ? padraoCd : padraoPosto;
   const BLX = blocosDe(tipo);
   const editandoPadrao = alvo === 'padrao';
-  const usaPadrao = !editandoPadrao && !!filial && !proprio;
+  // CD começa SEM padrão: o dimensionamento da 1ª unidade é dela, e o administrador decide se vira o padrão da rede.
+  const cfgSnap = useCollection(configCol);
+  const semPadrao = tipo === 'cd' && !cfgSnap.list.some(r => r.id === CFG_DIM_PADRAO_CD && !r.deleted_at);
+  const usaPadrao = !editandoPadrao && !!filial && !proprio && !semPadrao;
   const D: Dimensionamento | null = editandoPadrao ? padrao : filial ? (proprio ? migrarFaixas(proprio) : padrao) : null;
   const podeEditar = !editandoPadrao || isAdmin;
 
@@ -99,6 +103,18 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
   const salvar = (next: Dimensionamento) => {
     if (editandoPadrao) { if (isAdmin) saveConfig(tipo === 'cd' ? CFG_DIM_PADRAO_CD : CFG_DIM_PADRAO, next); return; }
     if (filial) saveFilialDoc(filial.id, 'dimensionamento', next);
+  };
+  /** Usa o dimensionamento desta unidade como padrão da rede (para as unidades do mesmo tipo sem dimensionamento próprio). */
+  const definirComoPadrao = () => {
+    if (!filial || !D) return;
+    const nomeTipo = TIPOS_OPERACAO[tipo].nome.toLowerCase();
+    confirmAction(`Definir como padrão de ${nomeTipo}?`,
+      `O dimensionamento de ${filial.nome} passa a ser o padrão da rede para ${tipo === 'cd' ? 'os centros de distribuição' : 'os postos'}. As unidades sem dimensionamento próprio passam a usá-lo; as que têm o próprio não mudam.`,
+      'Definir como padrão', () => {
+        saveConfig(tipo === 'cd' ? CFG_DIM_PADRAO_CD : CFG_DIM_PADRAO, { ...D, quadro: 0 });
+        if (!proprio) saveFilialDoc(filial.id, 'dimensionamento', D); // a unidade fica com o dela (igual ao padrão)
+        notify('Padrão definido', `${filial.nome} é a referência de ${nomeTipo} da rede.`);
+      });
   };
   const voltarAoPadrao = () => {
     if (!filial) return;
@@ -131,7 +147,7 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
       ) : (
         <View style={s.row}>
           <Text style={[t.label, s.flex]}>Filial: {filial ? `${filial.codigo} · ${filial.nome}` : 'escolha a filial'}</Text>
-          {filial ? <StatusPill label={usaPadrao ? 'Usa o padrão' : 'Próprio'} tone={usaPadrao ? 'accent' : 'neutral'} /> : null}
+          {filial ? <StatusPill label={semPadrao ? 'Sem padrão ainda' : usaPadrao ? 'Usa o padrão' : 'Próprio'} tone={usaPadrao ? 'accent' : semPadrao ? 'warning' : 'neutral'} /> : null}
           {!somenteFilial ? <Button title="Trocar" icon={StorefrontIcon} variant="secondary" size="sm" onPress={() => setEscolher(true)} /> : null}
         </View>
       )}
@@ -142,12 +158,16 @@ export function DimensionamentoTab({ data, filialId, setFilialId, somenteFilial 
         </View>
       )}
       {usaPadrao ? <Text style={t.caption}>Esta filial usa o dimensionamento padrão da rede. Ao alterar qualquer valor, ela passa a ter um dimensionamento próprio.</Text> : null}
-      {!editandoPadrao && filial && proprio ? <Button title="Voltar ao padrão da rede" icon={ResetIcon} variant="ghost" size="sm" style={s.alignStart} onPress={voltarAoPadrao} /> : null}
+      {!editandoPadrao && filial && semPadrao ? <Text style={t.caption}>Ainda não existe dimensionamento padrão para centro de distribuição. O desta unidade é próprio: faça as coletas, ajuste a planilha e, se quiser, defina-o como padrão da rede.</Text> : null}
+      {!editandoPadrao && filial && proprio && !semPadrao ? <Button title="Voltar ao padrão da rede" icon={ResetIcon} variant="ghost" size="sm" style={s.alignStart} onPress={voltarAoPadrao} /> : null}
+      {!editandoPadrao && filial && isAdmin && (proprio || semPadrao) ? <Button title="Definir como padrão da rede" icon={CheckIcon} variant="secondary" size="sm" style={s.alignStart} onPress={definirComoPadrao} /> : null}
     </Card>
   );
   const picker = escolher ? <FilialPicker data={data} atual={filialId} onClose={() => setEscolher(false)} onPick={id => { setFilialId(id); setEscolher(false); }} /> : null;
 
   if (!D) return <>{cabecalho}<EmptyState icon={StorefrontIcon} title="Escolha a filial" text="O dimensionamento é calculado por filial; sem dimensionamento próprio, ela usa o padrão da rede." action={{ label: 'Escolher filial', onPress: () => setEscolher(true) }} />{picker}</>;
+  if (editandoPadrao && semPadrao) return <>{cabecalho}
+    <EmptyState icon={ChartBarIcon} title="Sem padrão de centro de distribuição" text="O padrão do CD nasce de uma unidade: em Por filial, escolha o CD, faça o dimensionamento dele e toque em Definir como padrão da rede." /></>;
   if (!D.it.length && editandoPadrao) return <>{cabecalho}
     <EmptyState icon={ChartBarIcon} title="Padrão vazio" text={tipo === 'cd' ? 'Recrie o padrão do CD a partir das atividades padrão do CD.' : 'Recrie o padrão a partir da planilha de referência (modelo 07).'}
       action={isAdmin ? { label: 'Recriar a partir do modelo', icon: PlusIcon, onPress: () => salvar(tipo === 'cd' ? modeloDimensionamentoCd() : modeloDimensionamento()) } : undefined} /></>;

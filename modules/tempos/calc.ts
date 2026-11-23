@@ -50,6 +50,10 @@ export function indicadores(d: TmData, f: Filtro) {
 
   const completos = ats.filter(a => a.tipo === 'completo');
   const total = etapas.reduce((s, e) => s + e.duracao_s, 0);
+  // Unidades classificadas como centro de distribuição (bandeira 'cd', ver lib/data BANDEIRA_CD).
+  const cdIds = new Set(d.filiais.filter(f => f.bandeira === 'cd').map(f => f.id));
+  const coletaCd = new Set(cs.filter(c => cdIds.has(c.filial_id)).map(c => c.id));
+  const atsPosto = ats.filter(a => !coletaCd.has(a.coleta_id));
   const espera = porClasse.get('Espera') ?? 0;
   const pausas = etapas.reduce((s, e) => s + pausaSeg(e), 0);
 
@@ -66,8 +70,8 @@ export function indicadores(d: TmData, f: Filtro) {
     deslocamentos: ats.reduce((s, a) => s + (a.deslocamentos ?? 0), 0),
     ocupacao: total + pausas ? ((total - espera) / (total + pausas)) * 100 : 0,
     volume: ats.reduce((s, a) => s + (a.volume ?? 0), 0),
-    // Tempo médio do atendimento por tipo de veículo (só atendimentos com veículo informado).
-    porVeiculo: d.veiculos.map(v => { const xs = ats.filter(a => a.veiculo === v.id); return [v.nome, xs.length ? xs.reduce((s, a) => s + a.duracao_s, 0) / xs.length : 0, xs.length] as [string, number, number]; }).filter(([, , n]) => n > 0),
+    // Tempo médio do atendimento por tipo de veículo (só atendimentos com veículo informado; nunca do CD, que não atende veículos).
+    porVeiculo: d.veiculos.map(v => { const xs = atsPosto.filter(a => a.veiculo === v.id); return [v.nome, xs.length ? xs.reduce((s, a) => s + a.duracao_s, 0) / xs.length : 0, xs.length] as [string, number, number]; }).filter(([, , n]) => n > 0),
     porClasse: CLASSES.map(c => [c, porClasse.get(c) ?? 0] as [string, number]).filter(([, v]) => v > 0),
     atividades,
   };

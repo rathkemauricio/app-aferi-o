@@ -9,6 +9,7 @@ import { BotaoVoltar } from '../../ui/voltar';
 import { CadastrosTab } from './CadastrosTab';
 import { AtendimentoScreen, ColetaScreen, ColetasHome, FilialScreen } from './ColetasTab';
 import { DimensionamentoTab } from './DimensionamentoTab';
+import { SetoresAtividades } from './SetoresAtividades';
 import { HistoricoTab } from './HistoricoTab';
 import { PainelTab } from './PainelTab';
 import { PlanoTab } from './PlanoTab';
@@ -24,6 +25,8 @@ export default function TemposModule() {
   const { s, colors } = useLook();
   const { data, loaded, status } = useTm();
   const [ui, setUiState] = useState<UiState | null>(null);
+  /** Gestão → Dimensionamento: cadastro de setores e atividades ou cálculo da equipe. */
+  const [dimAba, setDimAba] = useState<'setores' | 'calculo'>('setores');
 
   // Restaura o lugar onde o usuário estava (aba, coleta, atendimento) e grava a cada mudança.
   useEffect(() => { void loadUi().then(setUiState); void sincronizarModulo(); }, []);
@@ -66,8 +69,12 @@ export default function TemposModule() {
     if (tab === 'gestao') return <>
       <ChoiceChips value={GESTAO.find(g => g[0] === ui.gestao)?.[1] ?? 'Dimensionamento'} options={GESTAO.map(g => g[1])} onChange={v => setUi(u => ({ ...u, gestao: GESTAO.find(g => g[1] === v)?.[0] ?? 'dimensionamento' }))} />
       {ui.gestao === 'plano' ? <PlanoTab data={data} filialId={ui.filialId} />
-        : ui.gestao === 'cadastros' ? <CadastrosTab data={data} />
-        : <DimensionamentoTab data={data} filialId={ui.filialId} setFilialId={setFilialId} />}
+        : ui.gestao === 'cadastros' ? <CadastrosTab data={data} onSetores={() => { setDimAba('setores'); setUi(u => ({ ...u, gestao: 'dimensionamento' })); }} />
+        : <>
+          {/* Dimensionamento: cadastro de setores e atividades (posto e CD) e o cálculo da equipe. */}
+          <ChoiceChips value={dimAba === 'setores' ? 'Setores e atividades' : 'Cálculo da equipe'} options={['Setores e atividades', 'Cálculo da equipe']} onChange={v => setDimAba(v === 'Setores e atividades' ? 'setores' : 'calculo')} />
+          {dimAba === 'setores' ? <SetoresAtividades data={data} /> : <DimensionamentoTab data={data} filialId={ui.filialId} setFilialId={setFilialId} />}
+        </>}
     </>;
     const nav = { push, pop };
     // Fluxo: filial → coletas → finalizar → análise e dimensionamento da filial.

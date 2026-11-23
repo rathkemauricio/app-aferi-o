@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMemo, useSyncExternalStore } from 'react';
 import { type ConfigRow, configCol, ehCD, useConfig, useFiliais } from '../../lib/data';
 import { Collection, combinedStatus, useCollection } from '../../lib/sync';
-import { type Atendimento, ATIVIDADES_CD, ATIVIDADES_PADRAO, type Atividade, CFG_ATIVIDADES, CFG_SETORES_CD, SETORES, SETORES_CD, type TipoOperacao, CFG_PARAMETROS, CFG_VEICULOS, type Coleta, type Parametros, PARAMETROS_PADRAO, type StatusFilial, type Veiculo, VEICULOS_PADRAO } from './model';
+import { type Atendimento, ATIVIDADES_CD, ATIVIDADES_PADRAO, type Atividade, CFG_ATIVIDADES, CFG_SETORES_CD, CFG_SETORES_POSTO, SETORES, SETORES_CD, type TipoOperacao, CFG_PARAMETROS, CFG_VEICULOS, type Coleta, type Parametros, PARAMETROS_PADRAO, type StatusFilial, type Veiculo, VEICULOS_PADRAO } from './model';
 
 /* ---------- Coleções sincronizadas ---------- */
 export const coletasCol = new Collection<Coleta>({ table: 'tm_coletas', storageKey: 'nevoeiro.tempos.coletas.v2' });
@@ -61,18 +61,20 @@ export type TmData = {
   veiculos: Veiculo[];
   /** Situação das coletas por filial (finalizada por quem e quando). */
   statusFiliais: StatusFilial[];
-  /** Setores do centro de distribuição (editáveis em Cadastros). */
+  /** Setores do centro de distribuição (editáveis em Gestão → Dimensionamento → Setores e atividades). */
   setoresCd: string[];
+  /** Setores do posto (editáveis no mesmo lugar). */
+  setoresPosto: string[];
 };
 
 /** Tipo de operação da unidade: CD quando classificada como "Centro de distribuição" no cadastro da filial. */
 export const tipoDe = (d: Pick<TmData, 'filiais'>, filialId: string): TipoOperacao => (ehCD(d.filiais.find(f => f.id === filialId)) ? 'cd' : 'posto');
 /** Setores do tipo de operação (posto: fixos; CD: os cadastrados). */
-export const setoresDoTipo = (d: Pick<TmData, 'setoresCd'>, tipo: TipoOperacao): string[] => (tipo === 'cd' ? d.setoresCd : [...SETORES]);
-/** Todos os setores (filtros do Painel e cadastro de atividades). */
-export const todosSetores = (d: Pick<TmData, 'setoresCd'>) => [...SETORES, ...d.setoresCd.filter(x => !(SETORES as readonly string[]).includes(x))];
-/** Tipo de operação a que o setor pertence. */
-export const tipoDoSetor = (d: Pick<TmData, 'setoresCd'>, setor: string): TipoOperacao => (d.setoresCd.includes(setor) && !(SETORES as readonly string[]).includes(setor) ? 'cd' : 'posto');
+export const setoresDoTipo = (d: Pick<TmData, 'setoresCd' | 'setoresPosto'>, tipo: TipoOperacao): string[] => (tipo === 'cd' ? d.setoresCd : d.setoresPosto);
+/** Todos os setores (filtros do Painel). */
+export const todosSetores = (d: Pick<TmData, 'setoresCd' | 'setoresPosto'>) => [...d.setoresPosto, ...d.setoresCd.filter(x => !d.setoresPosto.includes(x))];
+/** Setor do ciclo completo com ordem sugerida: no posto, o 1º setor (pista); no CD não há ordem fixa. */
+export const setorDoCiclo = (d: Pick<TmData, 'setoresPosto'>, tipo: TipoOperacao) => (tipo === 'posto' ? d.setoresPosto[0] ?? null : null);
 
 export function useTm() {
   const f = useFiliais();
@@ -86,6 +88,7 @@ export function useTm() {
   const parametros = useConfig<Parametros>(CFG_PARAMETROS, PARAMETROS_PADRAO);
   const veiculosCfg = useConfig<{ lista: Veiculo[] }>(CFG_VEICULOS, { lista: VEICULOS_PADRAO });
   const setoresCdCfg = useConfig<{ lista: string[] }>(CFG_SETORES_CD, { lista: SETORES_CD });
+  const setoresPostoCfg = useConfig<{ lista: string[] }>(CFG_SETORES_POSTO, { lista: [...SETORES] });
   const data = useMemo<TmData>(() => ({
     filiais: f.filiais,
     coletas: [...c.list].sort((x, y) => y.data.localeCompare(x.data)),
@@ -98,7 +101,8 @@ export function useTm() {
     veiculos: veiculosCfg.lista,
     statusFiliais: st.list,
     setoresCd: Array.isArray(setoresCdCfg.lista) ? setoresCdCfg.lista : SETORES_CD,
-  }), [f.filiais, c.list, a.list, d.list, atvCfg, parametros, p.list, veiculosCfg, st.list, setoresCdCfg]);
+    setoresPosto: Array.isArray(setoresPostoCfg.lista) && setoresPostoCfg.lista.length ? setoresPostoCfg.lista : [...SETORES],
+  }), [f.filiais, c.list, a.list, d.list, atvCfg, parametros, p.list, veiculosCfg, st.list, setoresCdCfg, setoresPostoCfg]);
   return {
     data,
     loaded: c.loaded && a.loaded && p.loaded && cfg.loaded && d.loaded && f.loaded && st.loaded,
@@ -108,8 +112,8 @@ export function useTm() {
 
 export const salvarAtividades = (lista: Atividade[]) => configCol.put({ id: CFG_ATIVIDADES, valor: { lista } } as ConfigRow);
 export const salvarVeiculos = (lista: Veiculo[]) => configCol.put({ id: CFG_VEICULOS, valor: { lista } } as ConfigRow);
-/** Grava a lista de setores do CD. */
-export const salvarSetoresCd = (lista: string[]) => configCol.put({ id: CFG_SETORES_CD, valor: { lista } } as ConfigRow);
+/** Grava a lista de setores do tipo de operação. */
+export const salvarSetores = (tipo: TipoOperacao, lista: string[]) => configCol.put({ id: tipo === 'cd' ? CFG_SETORES_CD : CFG_SETORES_POSTO, valor: { lista } } as ConfigRow);
 export const salvarParametros = (v: Parametros) => configCol.put({ id: CFG_PARAMETROS, valor: v } as ConfigRow);
 export const sincronizarModulo = () => Promise.all([coletasCol.sync(), atendimentosCol.sync(), planoCol.sync(), configCol.sync(), statusCol.sync()]);
 

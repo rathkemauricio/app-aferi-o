@@ -46,7 +46,7 @@ export function HistoricoTab({ data, open }: { data: TmData; open: (v: ColetasVi
       <ListRow key={a.id} style={i > 0 && s.divided}
         icon={a.tipo === 'completo' ? ListBulletsIcon : TimerIcon} tint={a.tipo === 'completo' ? 'indigo' : 'slate'}
         title={a.tipo === 'completo' ? a.etapas.map(e => nome(e.atividade_id)).join(' › ') : nome(a.etapas[0]?.atividade_id ?? '')}
-        subtitle={`${dataBR(c.data)}${a.inicio ? ` ${horaBR(a.inicio).slice(0, 5)}` : ''} · ${filialNome(c.filial_id)}, ${c.setor}${a.veiculo ? ` · ${data.veiculos.find(v => v.id === a.veiculo)?.nome ?? ''}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`}
+        subtitle={`${dataBR(c.data)}${a.inicio ? ` ${horaBR(a.inicio).slice(0, 5)}` : ''} · ${filialNome(c.filial_id)}, ${c.setor}${a.veiculo && data.filiais.find(f => f.id === c.filial_id)?.bandeira !== 'cd' ? ` · ${data.veiculos.find(v => v.id === a.veiculo)?.nome ?? ''}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`}
         right={<Text style={s.clockSmall}>{fmtDur(a.duracao_s)}</Text>}
         onPress={() => open({ name: 'atendimento', coletaId: c.id, atendimentoId: a.id })} />
     ))}</Card> : <EmptyState icon={ClockCounterClockwiseIcon} title="Nada encontrado" text="Ajuste os filtros ou registre atendimentos na aba Coletas." />}

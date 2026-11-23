@@ -22,7 +22,7 @@ import { Roleta } from '../afericoes/Roleta';
 import { Deslizavel } from './Deslizavel';
 import { ops } from './ops';
 import { progressoFilial } from './calc';
-import { type ColetasView, finalizarFilial, finalizada, reabrirFilial, setoresDoTipo, statusDaFilial, tipoDe, type TmData } from './store';
+import { type ColetasView, finalizarFilial, finalizada, reabrirFilial, setorDoCiclo, setoresDoTipo, statusDaFilial, tipoDe, type TmData } from './store';
 import { ActivityPicker, useLook, useNow } from './ui';
 
 type Nav = { push: (v: ColetasView) => void; pop: () => void };
@@ -48,6 +48,7 @@ export function ColetasHome({ data, nav, setFilialId }: { data: TmData; nav: Nav
     return lista.sort((a, b) => (qtd(b.id) ? 1 : 0) - (qtd(a.id) ? 1 : 0) || String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true }));
   }, [data.filiais, data.coletas, busca]);
   const abrir = (id: string) => { setFilialId(id); nav.push({ name: 'filial', filialId: id }); };
+  const cd = (id: string) => tipoDe(data, id) === 'cd';
 
   if (!data.filiais.length) {
     return <>
@@ -65,8 +66,8 @@ export function ColetasHome({ data, nav, setFilialId }: { data: TmData; nav: Nav
         return (
           <ListRow key={f.id} style={i > 0 && s.divided} icon={StorefrontIcon} tint={fim ? 'emerald' : pr.coletas ? 'indigo' : 'slate'}
             title={`${f.codigo} · ${f.nome}`}
-            subtitle={fim ? `Coletas finalizadas em ${new Date(fim).toLocaleDateString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : pr.coletas ? `${pr.coletas} de ${pr.meta} coletas · ${pr.atendimentos} atendimento(s)` : 'Sem coletas ainda'}
-            right={fim ? <StatusPill label="Finalizada" tone="success" /> : pr.coletas ? <StatusPill label={`${Math.round(pr.pct * 100)}%`} tone={pr.completo ? 'success' : 'accent'} /> : undefined}
+            subtitle={`${cd(f.id) ? 'Centro de distribuição · ' : ''}${fim ? `Coletas finalizadas em ${new Date(fim).toLocaleDateString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : pr.coletas ? `${pr.coletas} de ${pr.meta} coletas · ${pr.atendimentos} ${cd(f.id) ? 'ciclo(s)' : 'atendimento(s)'}` : 'Sem coletas ainda'}`}
+            right={fim ? <StatusPill label="Finalizada" tone="success" /> : pr.coletas ? <StatusPill label={`${Math.round(pr.pct * 100)}%`} tone={pr.completo ? 'success' : 'accent'} /> : cd(f.id) ? <StatusPill label="CD" tone="accent" /> : undefined}
             onPress={() => abrir(f.id)} />
         );
       })}
@@ -237,7 +238,7 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
               <Text style={[t.bodyStrong, s.flex]}>{`${nome} ${pausado ? (a.tipo === 'completo' ? 'pausado' : 'pausada') : 'em andamento'}`}</Text>
               <Text style={[s.clockSmall, pausado && { color: colors.warning }]}>{fmtCrono(duracaoAtendimento(a, now))}</Text>
             </View>
-            <Text style={t.caption}>{[nomeVeiculo(data, a.veiculo), resumoEtapas(data, a)].filter(Boolean).join(' · ')}</Text>
+            <Text style={t.caption}>{[tipoColeta === 'cd' ? '' : nomeVeiculo(data, a.veiculo), resumoEtapas(data, a)].filter(Boolean).join(' · ')}</Text>
             <Button title="Continuar" icon={PlayIcon} onPress={() => nav.push({ name: 'atendimento', coletaId, atendimentoId: a.id })} />
           </Card>
         </Deslizavel>
@@ -259,7 +260,7 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
           <ListRow key={a.id} style={i > 0 && s.divided}
             icon={a.tipo === 'completo' ? ListBulletsIcon : TimerIcon} tint={a.tipo === 'completo' ? 'indigo' : 'slate'}
             title={a.tipo === 'completo' ? `${ciclo.nome} ${completos.indexOf(a) + 1}` : nomeAtv(data, a.etapas[0]?.atividade_id ?? '')}
-            subtitle={`${a.inicio ? horaBR(a.inicio).slice(0, 5) : 'Importado'} · ${a.tipo === 'completo' ? resumoEtapas(data, a) : 'Atividade individual'}${nomeVeiculo(data, a.veiculo) ? ` · ${nomeVeiculo(data, a.veiculo)}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`}
+            subtitle={`${a.inicio ? horaBR(a.inicio).slice(0, 5) : 'Importado'} · ${a.tipo === 'completo' ? resumoEtapas(data, a) : 'Atividade individual'}${tipoColeta !== 'cd' && nomeVeiculo(data, a.veiculo) ? ` · ${nomeVeiculo(data, a.veiculo)}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`}
             right={<Text style={s.clockSmall}>{fmtDur(a.duracao_s)}</Text>}
             onPress={() => nav.push({ name: 'atendimento', coletaId, atendimentoId: a.id })} />
         ))}
@@ -305,7 +306,7 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
   const lista = atividadesDaColeta(data, c);
   // Ciclo completo com ordem sugerida: no posto, o atendimento na pista; no CD, as etapas são escolhidas livremente.
   const cicloTipo = TIPOS_OPERACAO[tipoDe(data, c.filial_id)].ciclo;
-  const sequencia = a.tipo === 'completo' && cicloTipo.setor === c.setor
+  const sequencia = a.tipo === 'completo' && setorDoCiclo(data, tipoDe(data, c.filial_id)) === c.setor
     ? cicloTipo.etapas.map(nome => lista.find(x => x.nome === nome)).filter((x): x is Atividade => !!x)
     : [];
   const outras = lista.filter(x => !sequencia.includes(x));
@@ -471,8 +472,9 @@ export function FilialPicker({ data, atual, onClose, onPick, incluirTodas = fals
       <Card style={s.listCard}>
         {incluirTodas && <ListRow icon={StorefrontIcon} tint="slate" title="Todas as filiais" right={!atual ? <StatusPill label="Atual" tone="accent" /> : undefined} onPress={() => onPick('')} />}
         {lista.map((f, i) => (
-          <ListRow key={f.id} style={(i > 0 || incluirTodas) && s.divided} icon={StorefrontIcon} tint="sky" title={`${f.codigo} · ${f.nome}`} subtitle={[f.cidade, f.uf].filter(Boolean).join(', ')}
-            right={f.id === atual ? <StatusPill label="Atual" tone="accent" /> : undefined} onPress={() => onPick(f.id)} />
+          <ListRow key={f.id} style={(i > 0 || incluirTodas) && s.divided} icon={StorefrontIcon} tint={tipoDe(data, f.id) === 'cd' ? 'amber' : 'sky'} title={`${f.codigo} · ${f.nome}`}
+            subtitle={[tipoDe(data, f.id) === 'cd' ? 'Centro de distribuição' : '', f.cidade, f.uf].filter(Boolean).join(' · ')}
+            right={f.id === atual ? <StatusPill label="Atual" tone="accent" /> : tipoDe(data, f.id) === 'cd' ? <StatusPill label="CD" tone="accent" /> : undefined} onPress={() => onPick(f.id)} />
         ))}
         {!lista.length && <Text style={[t.caption, { padding: 12 }]}>Nenhuma filial encontrada.</Text>}
       </Card>

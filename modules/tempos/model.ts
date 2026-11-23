@@ -100,6 +100,8 @@ export type TipoOperacao = 'posto' | 'cd';
 /** Setores iniciais do centro de distribuição (CD); o administrador cria, renomeia e apaga em Cadastros (config tm.setores_cd). */
 export const SETORES_CD = ['Recebimento', 'Armazenagem', 'Separação e expedição', 'Inventário e controle', 'Administrativo do CD'];
 export const CFG_SETORES_CD = 'tm.setores_cd';
+/** Setores do posto (editáveis em Gestão → Dimensionamento → Setores e atividades); padrão = SETORES. */
+export const CFG_SETORES_POSTO = 'tm.setores_posto';
 const [CR, CA, CS, CI, CAD] = SETORES_CD;
 /**
  * Atividades padrão do CD (sem tempo de referência: o tempo vem da cronometragem). O administrador acrescenta as
