@@ -7,7 +7,7 @@ import { CheckIcon, ClockIcon, PencilSimpleIcon, PrinterIcon, ResetIcon, XIcon }
 import { Button, Card, ChoiceChips, confirmAction, IconButton, notify } from '../../ui/kit';
 import { PageHead } from './ColetasTab';
 import { ListaArrastavel } from './ListaArrastavel';
-import { type Atividade, TIPOS_OPERACAO, type TipoOperacao } from './model';
+import { type Atividade, TIPOS_OPERACAO, type TipoOperacao, TODOS_SETORES } from './model';
 import { salvarAtividades, salvarSequencia, sequenciaDe, tipoDe, type TmData } from './store';
 import { useLook } from './ui';
 
@@ -17,6 +17,8 @@ import { useLook } from './ui';
  * e o cronômetro não muda. Uma sequência para posto e outra para centro de distribuição.
  */
 const chave = (a: Atividade) => a.id;
+/** Setor da atividade, para mostrar na lista (as que valem para todos os setores: "Todos os setores"). */
+const nomeSetor = (a: Atividade) => (a.setor === TODOS_SETORES ? 'Todos os setores' : a.setor);
 
 function sequenciaHtml(lista: Atividade[], tipoNome: string, marca: { nome: string; logo: string | null }, quem: string) {
   const agora = new Date();
@@ -26,12 +28,12 @@ function sequenciaHtml(lista: Atividade[], tipoNome: string, marca: { nome: stri
 .head{border-bottom:4px solid #f4c542;padding-bottom:12px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
 .marca{font-weight:900;color:#174b78;letter-spacing:1px;font-size:12px}h1{margin:4px 0;font-size:22px}.muted{color:#66788a}
 ol{margin:18px 0 0;padding:0;list-style:none;counter-reset:n}li{display:flex;gap:12px;align-items:center;padding:8px 10px;border-bottom:1px solid #edf0f4;break-inside:avoid}
-.qh{margin-left:auto;font-size:11px;font-weight:700;color:#9a5b00;background:#fdf1d8;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.setor{display:block;font-size:11px;color:#66788a}.qh{margin-left:auto;font-size:11px;font-weight:700;color:#9a5b00;background:#fdf1d8;border-radius:999px;padding:2px 8px;white-space:nowrap}
 li b{min-width:28px;text-align:right;color:#174b78;font-size:14px}.nota{font-size:10.5px;color:#66788a;margin-top:14px}
 </style></head><body>
 <div class="head"><div>${marca.logo ? `<img src="${marca.logo}" alt="${esc(marca.nome)}" style="max-height:44px;max-width:180px;object-fit:contain;display:block;margin-bottom:6px">` : ''}<div class="marca">${esc(marca.nome.toUpperCase())}</div><h1>Sequência das atividades</h1><div class="muted">${esc(tipoNome)} · ordem cronológica dos fatos</div></div>
 <div style="text-align:right"><b>${lista.length} atividade(s)</b><div class="muted">${esc(agora.toLocaleDateString('pt-BR'))}</div></div></div>
-<ol>${lista.map((a, i) => `<li><b>${i + 1}</b><span>${esc(a.nome)}</span>${a.qualquerHora ? '<span class="qh">⏱ a qualquer hora do dia</span>' : ''}</li>`).join('')}</ol>
+<ol>${lista.map((a, i) => `<li><b>${i + 1}</b><span>${esc(a.nome)}<span class="setor">${esc(nomeSetor(a))}</span></span>${a.qualquerHora ? '<span class="qh">⏱ a qualquer hora do dia</span>' : ''}</li>`).join('')}</ol>
 ${lista.some(a => a.qualquerHora) ? '<p class="nota">⏱ A qualquer hora do dia: atividade que pode acontecer em qualquer momento (ex.: entrega, descarga de caminhão); a posição na lista é só uma referência.</p>' : ''}
 <p class="nota">Sequência informativa, montada na ordem em que os fatos e as tarefas acontecem. A coleta de tempos pode ser feita em qualquer ordem. Gerado por ${esc(quem || 'EasyAudit')} em ${esc(agora.toLocaleDateString('pt-BR'))} às ${esc(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))}.</p>
 </body></html>`;
@@ -91,8 +93,10 @@ export function SequenciaAtividades({ data }: { data: TmData }) {
               <IconButton icon={XIcon} label="Cancelar" onPress={() => setEditando(null)} />
             </> : <>
               <View style={s.flex}>
-                <Text style={t.bodyStrong} numberOfLines={a.qualquerHora ? 1 : 2}>{a.nome}</Text>
-                {a.qualquerHora ? <Text style={[t.caption, { color: colors.warning }]} numberOfLines={1}>A qualquer hora do dia</Text> : null}
+                <Text style={t.bodyStrong} numberOfLines={1}>{a.nome}</Text>
+                <Text style={t.caption} numberOfLines={1}>
+                  {nomeSetor(a)}{a.qualquerHora ? <Text style={{ color: colors.warning, fontWeight: '700' }}> · a qualquer hora do dia</Text> : null}
+                </Text>
               </View>
               {/* Relógio: pode acontecer a qualquer momento do dia (entrega, descarga…). Aceso = marcado. */}
               <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!a.qualquerHora, disabled: !isAdmin }} disabled={!isAdmin}
