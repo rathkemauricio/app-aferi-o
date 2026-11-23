@@ -4,6 +4,7 @@ import { useAtividade } from '../../lib/presenca';
 import { useIdentidade } from '../../lib/identidade';
 import { imprimirHtml } from '../../lib/util';
 import { relatorioTemposHtml } from './relatorio';
+import { ultimaAnaliseDaFilial } from './AnaliseIA';
 import { ehSomenteLeitura } from '../../lib/sync';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -106,7 +107,7 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
 
   const sim = (ok: boolean) => (ok ? '✓' : '✗');
   const gerarPdf = async () => {
-    try { await imprimirHtml(relatorioTemposHtml(data, { filialId, setor: '', demanda: '' }, marca, usuario), `Tempos e Movimentos ${filial.nome}`); }
+    try { await imprimirHtml(relatorioTemposHtml(data, { filialId, setor: '', demanda: '' }, marca, usuario, await ultimaAnaliseDaFilial(filialId)), `Tempos e Movimentos ${filial.nome}`); }
     catch (e) { notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'); }
   };
   return <>

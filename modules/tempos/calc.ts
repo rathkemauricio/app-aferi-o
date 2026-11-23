@@ -117,3 +117,89 @@ export function csvEtapas(d: TmData, cs: Coleta[]) {
   });
   return [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
 }
+
+/* =====================================================================
+   Ociosidade: quanto do tempo observado o funcionário fica parado
+   ===================================================================== */
+
+/** Intervalo entre dois atendimentos acima disto conta como "sem observação" (o auditor parou), não como ócio. */
+export const LACUNA_MAXIMA_S = 20 * 60;
+
+export type Ocio = {
+  /** Tempo observado: do início do 1º ao fim do último registro de cada funcionário em cada coleta (sem as lacunas longas). */
+  observadoSeg: number;
+  /** Trabalhando (etapas fora da classe Espera). */
+  ativoSeg: number;
+  /** Etapas cronometradas como Espera (aguardando cliente, sem tarefa). */
+  esperaSeg: number;
+  /** Intervalos entre um atendimento e outro (até LACUNA_MAXIMA_S): parado esperando o próximo cliente. */
+  intervalosSeg: number;
+  /** Pausas e interrupções dentro das etapas. */
+  pausasSeg: number;
+  /** Ocioso = espera + intervalos. */
+  ociosoSeg: number;
+  /** % do tempo observado que ficou ocioso. */
+  pct: number;
+  /** Minutos ociosos a cada hora de trabalho observada. */
+  minPorHora: number;
+  /** Funcionário × coleta observados. */
+  observacoes: number;
+};
+
+const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
+
+function somar(xs: Omit<Ocio, 'pct' | 'minPorHora'>[]): Ocio {
+  const t = xs.reduce((a, x) => ({
+    observadoSeg: a.observadoSeg + x.observadoSeg, ativoSeg: a.ativoSeg + x.ativoSeg, esperaSeg: a.esperaSeg + x.esperaSeg,
+    intervalosSeg: a.intervalosSeg + x.intervalosSeg, pausasSeg: a.pausasSeg + x.pausasSeg, ociosoSeg: a.ociosoSeg + x.ociosoSeg, observacoes: a.observacoes + x.observacoes,
+  }), { observadoSeg: 0, ativoSeg: 0, esperaSeg: 0, intervalosSeg: 0, pausasSeg: 0, ociosoSeg: 0, observacoes: 0 });
+  const pct = t.observadoSeg ? (t.ociosoSeg / t.observadoSeg) * 100 : 0;
+  return { ...t, pct, minPorHora: (pct / 100) * 60 };
+}
+
+/**
+ * Ociosidade observada nas coletas do filtro. Para cada funcionário em cada coleta, os atendimentos e atividades
+ * isoladas são postos em ordem; o tempo entre eles (até 20 min) e as etapas de Espera contam como ociosos.
+ * Devolve o total e a divisão por turno, demanda e setor.
+ */
+export function ociosidade(d: TmData, f: Filtro) {
+  const cs = coletasFiltradas(d, f);
+  const classe = new Map(d.atividades.map(a => [a.id, a.classe]));
+  const porColeta = new Map(cs.map(c => [c.id, c]));
+  const grupos = new Map<string, Atendimento[]>();
+  d.atendimentos.filter(a => porColeta.has(a.coleta_id)).forEach(a => {
+    const k = `${a.coleta_id}|${(a.funcionario || '').trim().toLowerCase()}`;
+    grupos.set(k, [...(grupos.get(k) ?? []), a]);
+  });
+  const linhas: (Omit<Ocio, 'pct' | 'minPorHora'> & { coleta: Coleta })[] = [];
+  grupos.forEach((ats, k) => {
+    const coleta = porColeta.get(k.split('|')[0])!;
+    // Começo e fim de cada registro (pelo atendimento ou, sem ele, pelas etapas).
+    const blocos = ats.map(a => {
+      const ini = Math.min(...[ms(a.inicio), ...a.etapas.map(e => ms(e.inicio))].filter(Number.isFinite));
+      const fim = Math.max(...[ms(a.fim), ...a.etapas.map(e => ms(e.fim))].filter(Number.isFinite));
+      return { a, ini, fim };
+    }).filter(b => Number.isFinite(b.ini) && Number.isFinite(b.fim) && b.fim >= b.ini).sort((x, y) => x.ini - y.ini);
+    if (!blocos.length) return;
+    let ativo = 0, espera = 0, pausas = 0, intervalos = 0, dentro = 0, fimAnterior = blocos[0].ini;
+    blocos.forEach(b => {
+      b.a.etapas.forEach(e => {
+        if (classe.get(e.atividade_id) === 'Espera') espera += e.duracao_s; else ativo += e.duracao_s;
+        pausas += pausaSeg(e);
+      });
+      const lacuna = (b.ini - fimAnterior) / 1000;
+      if (lacuna > 0 && lacuna <= LACUNA_MAXIMA_S) intervalos += lacuna;
+      dentro += (b.fim - b.ini) / 1000;
+      fimAnterior = Math.max(fimAnterior, b.fim);
+    });
+    // Observado = tempo dentro dos registros + intervalos curtos (o tempo cronometrado nunca fica menor que as etapas).
+    const observado = Math.max(dentro, ativo + espera + pausas) + intervalos;
+    linhas.push({ coleta, observadoSeg: observado, ativoSeg: ativo, esperaSeg: espera, intervalosSeg: intervalos, pausasSeg: pausas, ociosoSeg: espera + intervalos, observacoes: 1 });
+  });
+  const por = (campo: 'turno' | 'demanda' | 'setor') => {
+    const m = new Map<string, typeof linhas>();
+    linhas.forEach(l => m.set(l.coleta[campo] || '—', [...(m.get(l.coleta[campo] || '—') ?? []), l]));
+    return [...m.entries()].map(([nome, xs]) => ({ nome, ...somar(xs) })).sort((a, b) => b.pct - a.pct);
+  };
+  return { total: somar(linhas), porTurno: por('turno'), porDemanda: por('demanda'), porSetor: por('setor') };
+}

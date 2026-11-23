@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import type { Filial } from '../../lib/data';
 import { supabase } from '../../lib/supabase';
-import { esc, imprimirHtml, rotuloFilial } from '../../lib/util';
+import { imprimirHtml } from '../../lib/util';
 import { PrinterIcon, SparkleIcon } from '../../ui/icons';
 import { Button, Card, notify, StatusPill } from '../../ui/kit';
-import { atendimentosDe, indicadores } from './calc';
-import { DEMANDAS, SETORES, TURNOS } from './model';
+import { atendimentosDe, indicadores, ociosidade } from './calc';
+import { type AnaliseParaRelatorio, relatorioTemposHtml } from './relatorio';
+import { useIdentidade } from '../../lib/identidade';
+import { useUsuarioLogado } from '../../lib/auth';
+import { DEMANDAS, fmtMin, num, SETORES, TURNOS } from './model';
 import type { TmData } from './store';
 import { useLook } from './ui';
 
@@ -20,12 +23,7 @@ export type ResumoDimensionamento = {
   maiores_cargas: { atividade: string; minutos: number; frequencia: string; quantidade: number; horas_mes: number }[];
 };
 
-type Analise = {
-  resumo?: string; funcionarios_necessarios?: number; faixa?: { minimo?: number; maximo?: number };
-  comparacao?: { quadro_atual?: number | null; planilha?: number | null; diferenca_para_quadro?: number | null; comentario?: string };
-  por_turno_setor?: { turno?: string; setor?: string; funcionarios?: number; observacao?: string }[];
-  justificativa?: string[]; riscos?: string[]; recomendacoes?: string[]; dados_faltantes?: string[]; confianca?: string;
-};
+type Analise = NonNullable<AnaliseParaRelatorio['resultado']>;
 type Registro = { id: string; modelo: string | null; resultado: Analise | null; usuario_nome: string; updated_at: string; status?: 'processando' | 'pronta' | 'erro'; erro?: string | null };
 const CAMPOS = 'id,modelo,resultado,usuario_nome,updated_at,status,erro';
 
@@ -63,31 +61,33 @@ function montarDados(d: TmData, filial: Filial, dim: ResumoDimensionamento) {
       atividade: a.nome, classe: classeDe.get(a.id) ?? '', ciclos: a.ciclos, media_min: r1(a.mediaSeg / 60),
       tempo_padrao_min: a.padraoSeg === null ? null : r1(a.padraoSeg / 60), referencia_min: a.ref, situacao: a.situacao,
     })),
-    parametros: { ritmo: d.parametros.ritmo, tolerancia_pct: d.parametros.tol },
+    // Ociosidade calculada pelo sistema (não pela IA): espera + intervalos entre atendimentos no tempo observado.
+    ociosidade: (() => {
+      const o = ociosidade(d, { filialId: filial.id, setor: '', demanda: '' });
+      const g = (x: { nome?: string; pct: number; minPorHora: number; observadoSeg: number; ativoSeg: number; ociosoSeg: number; observacoes: number }) => ({
+        ...(x.nome ? { grupo: x.nome } : {}), percentual: r1(x.pct), minutos_ociosos_por_hora: r1(x.minPorHora), horas_observadas: r1(x.observadoSeg / 3600), horas_trabalhando: r1(x.ativoSeg / 3600), horas_ociosas: r1(x.ociosoSeg / 3600), funcionarios_observados: x.observacoes,
+      });
+      return { como_calcula: 'ocioso = etapas de Espera + intervalos de até 20 min entre registros do mesmo funcionário na coleta', total: g(o.total), por_turno: o.porTurno.map(g), por_demanda: o.porDemanda.map(g), por_setor: o.porSetor.map(g) };
+    })(),
+    parametros: { ritmo: d.parametros.ritmo, tolerancia_pct: d.parametros.tol, meta_ocupacao_pct: '75 a 85' },
     dimensionamento: dim,
   };
 }
 
-function relatorioHtml(filial: Filial, reg: Registro) {
-  const a: Analise = reg.resultado ?? {};
-  const li = (xs: unknown) => lista(xs).map(x => `<li>${esc(x)}</li>`).join('') || '<li>—</li>';
-  const linhas = (a.por_turno_setor ?? []).map(x => `<tr><td>${esc(x.turno)}</td><td>${esc(x.setor)}</td><td class="n">${nf(x.funcionarios)}</td><td>${esc(x.observacao)}</td></tr>`).join('');
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Análise com IA · ${esc(filial.nome)}</title><style>
-@page{size:A4;margin:12mm}body{font:11px Arial,sans-serif;color:#1b2230;margin:0}h1{font-size:17px;margin:0 0 2px}.sub{color:#5b6475;margin-bottom:8px}
-h2{font-size:12.5px;margin:12px 0 4px}.kpis{display:flex;gap:8px}.kpis div{flex:1;background:#f2f4f7;border-radius:6px;padding:7px}.kpis b{display:block;font-size:17px}
-table{width:100%;border-collapse:collapse}th{background:#102a46;color:#fff;text-align:left;padding:3px 5px}td{border-bottom:1px solid #e3e6ec;padding:3px 5px}.n{text-align:right}
-ul{margin:0;padding-left:16px}.aviso{margin-top:10px;color:#5b6475;font-size:10px}</style></head><body>
-<h1>Análise de dimensionamento com IA · ${esc(rotuloFilial(filial))}</h1>
-<div class="sub">${new Date(reg.updated_at).toLocaleString('pt-BR')} · pedida por ${esc(reg.usuario_nome || '—')} · modelo ${esc(reg.modelo)} · confiança ${esc(a.confianca ?? '—')}</div>
-<div class="kpis"><div><b>${nf(a.funcionarios_necessarios)}</b>Funcionários necessários (IA)</div><div><b>${nf(a.faixa?.minimo)} a ${nf(a.faixa?.maximo)}</b>Faixa</div><div><b>${nf(a.comparacao?.planilha)}</b>Cálculo da planilha</div><div><b>${nf(a.comparacao?.quadro_atual)}</b>Quadro atual</div></div>
-<h2>Resumo</h2><p>${esc(a.resumo ?? '')}</p>${a.comparacao?.comentario ? `<p>${esc(a.comparacao.comentario)}</p>` : ''}
-${linhas ? `<h2>Por turno e setor</h2><table><tr><th>Turno</th><th>Setor</th><th class="n">Funcionários</th><th>Observação</th></tr>${linhas}</table>` : ''}
-<h2>Justificativa</h2><ul>${li(a.justificativa)}</ul><h2>Riscos</h2><ul>${li(a.riscos)}</ul><h2>Recomendações</h2><ul>${li(a.recomendacoes)}</ul><h2>Dados que faltam</h2><ul>${li(a.dados_faltantes)}</ul>
-<div class="aviso">Análise gerada por inteligência artificial (Google Gemini) a partir dos tempos cronometrados no EasyAudit. Confira antes de decidir.</div></body></html>`;
+/** Última análise pronta da filial e o dimensionamento enviado com ela (para o relatório completo em PDF). */
+export async function ultimaAnaliseDaFilial(filialId: string) {
+  if (!supabase) return { ia: null, dim: null };
+  const { data: rows } = await supabase.from('tm_analises_ia').select('modelo,resultado,usuario_nome,updated_at,status,dados').eq('filial_id', filialId).is('deleted_at', null).order('updated_at', { ascending: false }).limit(10);
+  const x = (rows ?? []).find(r => (r.status ?? 'pronta') === 'pronta' && r.resultado) as (AnaliseParaRelatorio & { dados?: { dimensionamento?: ResumoDimensionamento } }) | undefined;
+  return { ia: x ?? null, dim: x?.dados?.dimensionamento ?? null };
 }
 
 export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial; dim: ResumoDimensionamento }) {
   const { s, t, colors } = useLook();
+  const marca = useIdentidade();
+  const usuario = useUsuarioLogado();
+  const oc = ociosidade(data, { filialId: filial.id, setor: '', demanda: '' });
+  const ind = indicadores(data, { filialId: filial.id, setor: '', demanda: '' });
   const [ultima, setUltima] = useState<Registro | null>(null);
   /** Pedido em andamento ou que falhou por último (mostra a situação e o motivo). */
   const [pedido, setPedido] = useState<Registro | null>(null);
@@ -159,6 +159,25 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
         {a?.confianca ? <StatusPill label={`Confiança ${a.confianca}`} tone={a.confianca === 'alta' ? 'success' : a.confianca === 'media' ? 'warning' : 'danger'} /> : null}
       </View>
       <Text style={t.caption}>A IA analisa os tempos cronometrados desta filial ({coletas} coleta{coletas === 1 ? '' : 's'}) e o dimensionamento abaixo e diz quantos funcionários são realmente necessários. Nenhum nome de funcionário é enviado.</Text>
+      {/* As 3 respostas: quanto leva cada atividade, quanto fica ocioso e quantos funcionários são necessários. */}
+      <View style={[s.row, { gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }]}>
+        <View style={{ flexGrow: 1, flexBasis: 200, backgroundColor: colors.campo, borderRadius: 10, padding: 10, gap: 2 }}>
+          <Text style={t.caption}>Atendimento completo (média)</Text>
+          <Text style={[t.section, { fontSize: 20 }]}>{ind.mediaAtendimentoSeg ? `${fmtMin(ind.mediaAtendimentoSeg)} min` : '—'}</Text>
+          {[...ind.atividades].sort((x, y) => y.totalSeg - x.totalSeg).slice(0, 3).map(x => <Text key={x.id} style={t.caption} numberOfLines={1}>{x.nome}: {fmtMin(x.mediaSeg)} min{x.padraoSeg !== null ? ` (padrão ${fmtMin(x.padraoSeg)})` : ''}</Text>)}
+        </View>
+        <View style={{ flexGrow: 1, flexBasis: 200, backgroundColor: colors.campo, borderRadius: 10, padding: 10, gap: 2 }}>
+          <Text style={t.caption}>Tempo ocioso</Text>
+          <Text style={[t.section, { fontSize: 20 }]}>{oc.total.observadoSeg ? `${num(oc.total.pct)}%` : '—'}</Text>
+          <Text style={t.caption}>{oc.total.observadoSeg ? `${num(oc.total.minPorHora)} min parados a cada hora` : 'Sem tempo observado'}</Text>
+          {oc.porTurno.length > 1 ? <Text style={t.caption} numberOfLines={2}>{oc.porTurno.map(x => `${x.nome} ${num(x.pct)}%`).join(' · ')}</Text> : null}
+        </View>
+        <View style={{ flexGrow: 1, flexBasis: 200, backgroundColor: colors.campo, borderRadius: 10, padding: 10, gap: 2 }}>
+          <Text style={t.caption}>Funcionários necessários</Text>
+          <Text style={[t.section, { fontSize: 20 }]}>{a?.funcionarios_necessarios !== undefined ? nf(a.funcionarios_necessarios) : nf(dim.total_funcionarios_planilha)}</Text>
+          <Text style={t.caption}>{a?.funcionarios_necessarios !== undefined ? `pela IA · planilha ${nf(dim.total_funcionarios_planilha)} · quadro ${nf(dim.quadro_atual)}` : `pela planilha · quadro atual ${nf(dim.quadro_atual)}`}</Text>
+        </View>
+      </View>
       {carregando && !ultima ? <ActivityIndicator color={colors.textMuted} /> : null}
       {a ? <>
         <View style={[s.row, { gap: 8, flexWrap: 'wrap' }]}>
@@ -170,6 +189,13 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
         </View>
         {a.resumo ? <Text style={t.body}>{a.resumo}</Text> : null}
         {a.comparacao?.comentario ? <Text style={t.body}>{a.comparacao.comentario}</Text> : null}
+        {a.ociosidade?.leitura ? <Text style={t.body}><Text style={{ fontWeight: '800' }}>Ociosidade: </Text>{a.ociosidade.leitura}</Text> : null}
+        {(a.tempo_por_atividade ?? []).length ? (
+          <View style={{ gap: 4 }}>
+            <Text style={t.bodyStrong}>Tempo por atividade</Text>
+            {(a.tempo_por_atividade ?? []).slice(0, 10).map((x, i) => <Text key={i} style={t.body}>• {x.atividade}: <Text style={{ fontWeight: '800' }}>{nf(x.media_min)} min</Text>{typeof x.padrao_min === 'number' ? ` (padrão ${nf(x.padrao_min)})` : ''}{x.leitura ? ` — ${x.leitura}` : ''}</Text>)}
+          </View>
+        ) : null}
         {(a.por_turno_setor ?? []).length ? (
           <View style={{ gap: 4 }}>
             <Text style={t.bodyStrong}>Por turno e setor</Text>
@@ -181,7 +207,7 @@ export function AnaliseIA({ data, filial, dim }: { data: TmData; filial: Filial;
         {bloco('Recomendações', a.recomendacoes)}
         {bloco('Dados que faltam', a.dados_faltantes)}
         <Text style={t.caption}>{ultima ? `${new Date(ultima.updated_at).toLocaleString('pt-BR')}${ultima.usuario_nome ? ` · pedida por ${ultima.usuario_nome}` : ''} · ${ultima.modelo ?? ''}` : ''} · Gerada por IA: confira antes de decidir.</Text>
-        <Button title="Imprimir / PDF" icon={PrinterIcon} variant="secondary" size="sm" style={s.alignStart} onPress={() => { if (ultima) void imprimirHtml(relatorioHtml(filial, ultima), `Análise IA ${filial.nome}`); }} />
+        <Button title="Relatório completo (PDF)" icon={PrinterIcon} variant="secondary" size="sm" style={s.alignStart} onPress={() => { if (ultima) void imprimirHtml(relatorioTemposHtml(data, { filialId: filial.id, setor: '', demanda: '' }, marca, usuario, { ia: ultima, dim }), `Tempos e Movimentos ${filial.nome}`).catch(e => notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.')); }} />
       </> : null}
       {pedido?.status === 'erro' && !analisando ? (
         <View style={{ gap: 4, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.danger }}>

@@ -37,16 +37,28 @@ const PERFIS: Record<string, { nome: string; contexto: string }> = {
   },
 };
 
-const SISTEMA = `Você é especialista em engenharia de métodos (tempos e movimentos) e dimensionamento de equipes.
-Analise os dados de cronometragem e o dimensionamento de uma unidade e diga quantos funcionários são realmente necessários.
+const SISTEMA = `Você é especialista em engenharia de métodos (tempos e movimentos) e dimensionamento de equipes de postos de combustível.
+Você recebe a cronometragem de uma unidade (já calculada pelo sistema) e precisa responder, para o gestor, três perguntas:
+1) Quanto tempo um funcionário leva para fazer cada atividade (use tempo médio observado e o tempo padrão, que já inclui ritmo e tolerância).
+2) Quanto tempo o funcionário fica ocioso (use "ociosidade": % do tempo observado, minutos ociosos por hora, por turno/demanda/setor).
+3) Quantos funcionários são necessários para manter o posto funcionando.
+Como chegar ao número de funcionários:
+- Carga de trabalho = tempos padrão × quantidades/frequências do dimensionamento (planilha) e o tempo médio do atendimento completo × volume de atendimentos.
+- Compare com o quadro atual e com o cálculo da planilha; use a ociosidade observada para dizer se há folga (ociosidade alta) ou sobrecarga (ociosidade baixa, espera do cliente, retrabalho).
+- Meta saudável de ocupação: 75% a 85% (abaixo disso há ociosidade sobrando; acima, risco de fila e de fadiga).
+- Nunca proponha menos que a prontidão mínima da pista em cada turno aberto (segurança e atendimento), mesmo em baixo movimento.
+- Converta horas em pessoas pela jornada (cerca de 220 h/mês por funcionário CLT; liderança cerca de 176 h/mês) e considere folgas, férias e faltas.
 Regras:
 - Use só os dados recebidos; não invente números. Quando faltar dado, diga o que falta e trabalhe com premissas explícitas.
-- Compare o resultado com o cálculo da planilha (dimensionamento.total_funcionarios_planilha) e com o quadro atual.
-- Separe a necessidade por turno e por setor quando os dados permitirem.
+- Amostras pequenas (poucos ciclos ou poucas coletas) reduzem a confiança: diga isso.
+- Não avalie pessoas individualmente: fale de funções, turnos e setores.
 - Responda em português do Brasil, de forma objetiva, para gestores de posto.
 - Responda SOMENTE com um JSON válido neste formato:
 {
-  "resumo": "2 a 4 frases com a conclusão",
+  "resumo": "3 a 5 frases respondendo às três perguntas",
+  "tempo_por_atividade": [ { "atividade": "texto", "media_min": número, "padrao_min": número ou null, "leitura": "texto curto" } ],
+  "atendimento_completo_min": número ou null,
+  "ociosidade": { "percentual": número, "minutos_por_hora": número, "horas_por_funcionario_dia": número ou null, "leitura": "texto", "por_turno": [ { "turno": "texto", "percentual": número, "leitura": "texto" } ] },
   "funcionarios_necessarios": número (pode ter casa decimal),
   "faixa": { "minimo": número, "maximo": número },
   "comparacao": { "quadro_atual": número ou null, "planilha": número ou null, "diferenca_para_quadro": número ou null, "comentario": "texto" },

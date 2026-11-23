@@ -6,6 +6,7 @@ import { useUsuarioLogado } from '../../lib/auth';
 import { useIdentidade } from '../../lib/identidade';
 import { imprimirHtml } from '../../lib/util';
 import { relatorioTemposHtml } from './relatorio';
+import { ultimaAnaliseDaFilial } from './AnaliseIA';
 import { type Filtro, indicadores } from './calc';
 import { FilialPicker, PageHead } from './ColetasTab';
 import { ciclosMinimos, DEMANDAS, fmtMin, num, SETORES } from './model';
@@ -31,7 +32,11 @@ export function PainelTab({ data }: { data: TmData }) {
   const [gerando, setGerando] = useState(false);
   const gerarPdf = async () => {
     setGerando(true);
-    try { await imprimirHtml(relatorioTemposHtml(data, f, marca, usuario), `Tempos e Movimentos ${filial ? filial.nome : 'rede'}`); }
+    try {
+      // Com uma filial escolhida, o relatório completo leva a última análise com IA e o dimensionamento dela.
+      const extra = f.filialId ? await ultimaAnaliseDaFilial(f.filialId) : undefined;
+      await imprimirHtml(relatorioTemposHtml(data, f, marca, usuario, extra), `Tempos e Movimentos ${filial ? filial.nome : 'rede'}`);
+    }
     catch (e) { notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'); }
     finally { setGerando(false); }
   };
