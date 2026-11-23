@@ -6,8 +6,8 @@ import { useAuth } from '../../lib/auth';
 import { acompanhar, type Atividade, estaOnline, nomeDaTela, type Presenca } from '../../lib/presenca';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
-import { BroadcastIcon, EyeIcon, LockSimpleIcon, UserCircleIcon } from '../../ui/icons';
-import { Button, Card, EmptyState, notify, SectionHeader, Skeleton, StatusPill } from '../../ui/kit';
+import { BroadcastIcon, EyeIcon, LockSimpleIcon, PencilSimpleIcon, UserCircleIcon } from '../../ui/icons';
+import { Button, Card, confirmAction, EmptyState, notify, SectionHeader, Skeleton, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 import { BotaoVoltar } from '../../ui/voltar';
 
@@ -75,12 +75,12 @@ export default function OnlineScreen() {
   const voltar = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
   /** Abre a coleta da pessoa. Dono e rede diferente da que está usando: entra antes como auditor (só leitura). */
-  const acompanharColeta = async (p: Presenca) => {
+  const acompanharColeta = async (p: Presenca, administrar = false) => {
     const destino = (p.atividade?.abrir || MODULES.find(m => m.id === p.atividade?.modulo)?.route || '/') as Href;
     if (p.empresa_id && p.empresa_id !== empresa?.id) {
       if (!dono) return;
       setEntrando(true);
-      const e = await visitar(p.empresa_id);
+      const e = await visitar(p.empresa_id, administrar);
       setEntrando(false);
       if (e) { notify('Não deu para entrar na rede', e); return; }
     }
@@ -120,8 +120,13 @@ export default function OnlineScreen() {
           </View>
         ) : null}
         {p.user_id !== userId ? (
-          <Button title={p.empresa_id !== empresa?.id ? 'Acompanhar (entra como auditor)' : 'Acompanhar'} icon={EyeIcon} size="sm" style={{ alignSelf: 'flex-start' }}
-            disabled={entrando} onPress={() => void acompanharColeta(p)} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+            <Button title={p.empresa_id !== empresa?.id ? 'Acompanhar (só ver)' : 'Acompanhar'} icon={EyeIcon} size="sm" disabled={entrando} onPress={() => void acompanharColeta(p)} />
+            {dono && p.empresa_id !== empresa?.id ? (
+              <Button title="Entrar e administrar" icon={PencilSimpleIcon} variant="secondary" size="sm" disabled={entrando}
+                onPress={() => confirmAction('Entrar e administrar?', 'Você entra na rede como administrador dela e pode alterar os dados (cada alteração fica no registro de ações em seu nome).', 'Administrar', () => void acompanharColeta(p, true))} />
+            ) : null}
+          </View>
         ) : null}
       </View>
     );

@@ -37,6 +37,12 @@ export class Collection<T extends SyncRow> {
   private listeners = new Set<() => void>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private pulling: Promise<void> | null = null;
+  /**
+   * Muda a cada limpeza do cache (outra rede entrou no aparelho). Uma leitura que estava em andamento na hora da troca
+   * descarta o que trouxe: senão gravaria linhas e o cursor da rede anterior, e a rede nova perderia os registros
+   * mais antigos que esse cursor (foi o que fez as filiais sumirem ao entrar em outra rede, em 23/11/2026).
+   */
+  private epoca = 0;
   private version = 0;
   private snapshot: { list: T[]; version: number; loaded: boolean; status: SyncStatus; pending: number } =
     { list: [], version: 0, loaded: false, status: 'local', pending: 0 };
@@ -113,6 +119,8 @@ export class Collection<T extends SyncRow> {
   }
   /** Apaga o cache deste aparelho (outra empresa entrou): a próxima leitura traz tudo do servidor de novo. */
   reset() {
+    this.epoca++;
+    this.pulling = null;
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     this.items.clear(); this.outbox.clear(); this.cursor = null; this.cursorId = null; this.pulledOnce = false;
     this.save(); this.emit();
@@ -147,12 +155,16 @@ export class Collection<T extends SyncRow> {
   /* ---------- Leitura incremental ---------- */
   pull() {
     if (!syncEnabled || !supabase) return Promise.resolve();
-    if (!this.pulling) this.pulling = this.doPull().finally(() => { this.pulling = null; });
+    if (!this.pulling) {
+      const p: Promise<void> = this.doPull(this.epoca).finally(() => { if (this.pulling === p) this.pulling = null; });
+      this.pulling = p;
+    }
     return this.pulling;
   }
-  private async doPull() {
+  private async doPull(epoca: number) {
     if (!supabase) return;
     await this.loading;
+    if (epoca !== this.epoca) return;
     this.setStatus('syncing');
     try {
       for (;;) {
@@ -164,6 +176,7 @@ export class Collection<T extends SyncRow> {
         else if (this.cursor) q = q.gt('updated_at', this.cursor);
         if (this.opts.filter) q = this.opts.filter(q);
         const { data, error } = await q;
+        if (epoca !== this.epoca) return; // o cache foi limpo (troca de rede) enquanto lia: descarta
         if (error) throw error;
         const rows = (data ?? []) as T[];
         rows.forEach(r => {
@@ -178,7 +191,7 @@ export class Collection<T extends SyncRow> {
       this.status = 'ok';
       this.emit();
     } catch {
-      this.setStatus('error');
+      if (epoca === this.epoca) this.setStatus('error');
     }
   }
 

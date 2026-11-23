@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { registrarEvento } from './rastro';
 import { supabase } from './supabase';
 import { sairPresenca } from './presenca';
-import { flushAll, resetAll, setSomenteLeitura } from './sync';
+import { flushAll, isSyncEnabled, resetAll, setSomenteLeitura, syncAll } from './sync';
 
 /** Contas que já registraram a entrada nesta abertura do app. */
 const JA_ENTROU = new Set<string>();
@@ -136,6 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if ((anterior ?? EMPRESA_ANTES_DO_REGISTRO) !== empId || limpo !== empId) {
         await resetAll();
         await AsyncStorage.setItem(LIMPEZA_V2, empId).catch(() => undefined);
+        // Troca de rede com a área logada já aberta (ex.: dono entrando em outra rede): busca tudo de novo na hora.
+        if (isSyncEnabled()) void syncAll();
       }
       if (anterior !== empId) await AsyncStorage.setItem(EMPRESA_DO_APARELHO, empId).catch(() => undefined);
     }
