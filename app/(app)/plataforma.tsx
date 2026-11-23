@@ -4,9 +4,10 @@ import { Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { ONLINE_MS } from '../../lib/presenca';
+import { TrocarRede, useEntrarNaRede } from '../../components/TrocarRede';
 import { supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
-import { BroadcastIcon, EyeIcon, ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, PencilSimpleIcon, StorefrontIcon, UserCircleIcon } from '../../ui/icons';
+import { BroadcastIcon, EyeIcon, SwapIcon, ArrowLeftIcon, CheckIcon, EnvelopeIcon, LockSimpleIcon, PencilSimpleIcon, StorefrontIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, notify, SectionHeader, Sheet, Skeleton, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, radius, space, ThemeContext } from '../../ui/theme';
 import { BotaoVoltar } from '../../ui/voltar';
@@ -46,7 +47,9 @@ async function chamar(body: Record<string, unknown>): Promise<{ ok: true; data: 
 /** Painel do dono da plataforma: empresas (liberar, suspender, plano, limite, módulos) e planos (preço, limite, módulos). */
 export default function PlataformaScreen() {
   const router = useRouter();
-  const { dono, visitar, visita, empresa: minhaRede } = useAuth();
+  const { dono, visita, visitaEdita, empresa: minhaRede } = useAuth();
+  const { pedir: entrarNaRede, entrando } = useEntrarNaRede();
+  const [trocar, setTrocar] = useState(false);
   const { colors } = useContext(ThemeContext);
   const t = useMemo(() => createTypography(colors), [colors]);
   const [aba, setAba] = useState<'Empresas' | 'Planos'>('Empresas');
@@ -74,17 +77,6 @@ export default function PlataformaScreen() {
     (p?.data ?? []).forEach((x: { empresa_id: string | null }) => { if (x.empresa_id) n[x.empresa_id] = (n[x.empresa_id] ?? 0) + 1; });
     setOnline(n);
   }, []);
-  /** Entra na rede como auditor (só leitura) para ver os módulos dela. */
-  const entrarComoAuditor = async (e: Empresa) => {
-    setSalvando(true);
-    const erroVisita = await visitar(e.id);
-    setSalvando(false);
-    if (erroVisita) { notify('Não deu para entrar na rede', erroVisita); return; }
-    notify(`Você está na ${e.nome} como auditor`, 'Pode abrir qualquer módulo para ver. Nada é alterado. Para voltar, toque em "Sair da visita" no alto.');
-    router.replace('/');
-  };
-  useEffect(() => { if (dono) void carregar(); }, [dono, carregar]);
-
   const atualizar = async (body: Record<string, unknown>, ok: string) => {
     setSalvando(true);
     const r = await chamar({ acao: 'atualizar', ...body });
@@ -183,10 +175,10 @@ export default function PlataformaScreen() {
         <Button title="Plano, limite e módulos" icon={PencilSimpleIcon} variant="secondary" size="sm"
           onPress={() => setEdEmp({ e, plano_id: e.plano_id, limite: String(e.limite_contas), modulos: [...e.modulos] })} />
         <Button title="Quem está online" icon={BroadcastIcon} variant="ghost" size="sm" onPress={() => router.push(`/online?rede=${encodeURIComponent(e.id)}`)} />
-        {e.status === 'ativa' && e.id !== minhaRede?.id ? (
-          <Button title={visita?.id === e.id ? 'Você está nesta rede' : 'Entrar como auditor'} icon={EyeIcon} variant="ghost" size="sm" disabled={salvando || visita?.id === e.id}
-            onPress={() => confirmAction('Entrar como auditor?', `Você passa a ver os módulos da ${e.nome} (contagens, aferições, auditorias…) sem poder alterar nada. A entrada fica registrada na rastreabilidade.`, 'Entrar', () => void entrarComoAuditor(e))} />
-        ) : null}
+        {e.status === 'ativa' && (e.id !== minhaRede?.id || visita) ? <>
+          <Button title="Ver dados" icon={EyeIcon} variant="ghost" size="sm" disabled={salvando || entrando || (visita?.id === e.id && !visitaEdita)} onPress={() => entrarNaRede(e, false)} />
+          <Button title="Administrar" icon={PencilSimpleIcon} variant="ghost" size="sm" disabled={salvando || entrando || (visita?.id === e.id && visitaEdita)} onPress={() => entrarNaRede(e, true)} />
+        </> : null}
         <Button title={`${contasAbertas[e.id] ? 'Esconder contas' : 'Contas'} (${e.contas.length})`} icon={UserCircleIcon} variant="ghost" size="sm"
           onPress={() => setContasAbertas(a => ({ ...a, [e.id]: !a[e.id] }))} />
       </View>
@@ -214,6 +206,7 @@ export default function PlataformaScreen() {
           <Text style={{ fontSize: 15.5, fontWeight: '800', color: colors.text }}>Empresas e planos</Text>
           <Text style={t.caption}>Clientes do EasyAudit, liberação e planos</Text>
         </View>
+        {dono ? <Button title="Trocar de rede" icon={SwapIcon} variant="secondary" size="sm" onPress={() => setTrocar(true)} /> : null}
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, width: '100%', maxWidth: pageMaxWidth(820), alignSelf: 'center', paddingBottom: 56 }}
         refreshControl={<RefreshControl refreshing={atualizando} onRefresh={() => { setAtualizando(true); void carregar().finally(() => setAtualizando(false)); }} />}>
@@ -265,6 +258,7 @@ export default function PlataformaScreen() {
           </>}
       </ScrollView>
 
+      {trocar ? <TrocarRede onClose={() => setTrocar(false)} /> : null}
       {edEmp && (
         <Sheet title={edEmp.e.nome} onClose={() => !salvando && setEdEmp(null)}
           footer={<Button title={salvando ? 'Salvando…' : 'Salvar'} icon={CheckIcon} disabled={salvando} onPress={() => void (async () => {

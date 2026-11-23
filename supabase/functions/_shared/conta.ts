@@ -6,7 +6,7 @@ import type { SupabaseClient, User } from 'npm:@supabase/supabase-js@2.57.0';
 export type Empresa = { id: string; nome: string; status: 'aguardando' | 'ativa' | 'suspensa'; modulos: string[]; limite_contas: number; plano_id: string };
 export type Conta = {
   user: User;
-  perfil: { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; empresa_id: string | null; filial_id: string | null; visitando?: string | null } | null;
+  perfil: { user_id: string; email: string; nome: string | null; papel: 'admin' | 'usuario'; ativo: boolean; modulos: string[]; empresa_id: string | null; filial_id: string | null; visitando?: string | null; visita_edita?: boolean } | null;
   empresa: Empresa | null;
   /** Conta ativa, empresa ativa e módulo no plano da empresa (administrador: todos do plano; usuário: os liberados). */
   libera: (modulo: string) => boolean;
@@ -28,13 +28,19 @@ export async function contaDe(admin: SupabaseClient, req: Request): Promise<Cont
   const { data: u, error } = await admin.auth.getUser(token);
   if (error || !u.user) return null;
   const { data: p } = await admin.from('profiles')
-    .select('user_id,email,nome,papel,ativo,modulos,empresa_id,filial_id,visitando,empresas(id,nome,status,modulos,limite_contas,plano_id)')
+    .select('user_id,email,nome,papel,ativo,modulos,empresa_id,filial_id,visitando,visita_edita,empresas(id,nome,status,modulos,limite_contas,plano_id)')
     .eq('user_id', u.user.id).maybeSingle();
   // deno-lint-ignore no-explicit-any
-  const empresa = ((p as any)?.empresas ?? null) as Empresa | null;
+  let empresa = ((p as any)?.empresas ?? null) as Empresa | null;
   const perfil = p ? { ...p, modulos: (p.modulos as string[] | null) ?? [] } as Conta['perfil'] : null;
-  // Dono visitando outra rede (só leitura): as funções não gravam nada em nome dele até sair da visita.
-  const ok = !!perfil?.ativo && empresa?.status === 'ativa' && !(perfil?.visitando && ehDono(u.user));
+  // Dono visitando outra rede: "só ver" → as funções não fazem nada em nome dele; "administrar" → a empresa de quem
+  // chamou passa a ser a rede visitada, e o dono age como administrador dela.
+  const visita = !!perfil?.visitando && ehDono(u.user);
+  let ok = !!perfil?.ativo && empresa?.status === 'ativa' && !visita;
+  if (visita && perfil?.visita_edita && perfil.ativo) {
+    const { data: v } = await admin.from('empresas').select('id,nome,status,modulos,limite_contas,plano_id').eq('id', perfil.visitando!).maybeSingle();
+    if (v?.status === 'ativa') { empresa = v as Empresa; perfil.papel = 'admin'; ok = true; }
+  }
   const filial = perfil?.filial_id ?? null;
   return {
     user: u.user, perfil, empresa, filial,
