@@ -104,7 +104,7 @@ export function SetoresAtividades({ data, onSequencia }: { data: TmData; onSeque
         {' '}O tipo vem do cadastro da unidade ({nUnidades('posto')} posto(s), {nUnidades('cd')} CD).
       </Text>
       <View style={[s.row, { flexWrap: 'wrap' }]}>
-        <Button title="Sequência das atividades" icon={ArrowsDownUpIcon} variant="secondary" size="sm" onPress={onSequencia} />
+        <Button title="Lista de atividades (ordem e impressão)" icon={ArrowsDownUpIcon} variant="secondary" size="sm" onPress={onSequencia} />
         {isAdmin ? <Button title="Novo setor" icon={PlusIcon} size="sm" onPress={() => setSetor({ nome: '' })} /> : null}
       </View>
     </Card>

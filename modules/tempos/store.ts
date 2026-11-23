@@ -39,7 +39,7 @@ export const useDrafts = () => useSyncExternalStore(drafts.subscribe, drafts.get
 
 /* ---------- Estado da tela (volta exatamente onde o usuário estava) ---------- */
 export type ColetasView = { name: 'home' } | { name: 'filial'; filialId: string } | { name: 'analise'; filialId: string } | { name: 'coleta'; coletaId: string } | { name: 'atendimento'; coletaId: string; atendimentoId: string };
-export type Tab = 'coletas' | 'painel' | 'historico' | 'gestao';
+export type Tab = 'coletas' | 'atividades' | 'painel' | 'historico' | 'gestao';
 export type GestaoAba = 'dimensionamento' | 'sequencia' | 'plano' | 'cadastros';
 export type UiState = { tab: Tab; stack: ColetasView[]; filialId: string; gestao: GestaoAba };
 const UI_KEY = 'nevoeiro.tempos.ui.v2';

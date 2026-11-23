@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, TextInput, View } from 'react-native';
 import { useAuth, useUsuarioLogado } from '../../lib/auth';
 import { useIdentidade } from '../../lib/identidade';
 import { esc, imprimirHtml } from '../../lib/util';
-import { PrinterIcon, ResetIcon } from '../../ui/icons';
-import { Button, Card, ChoiceChips, confirmAction, notify } from '../../ui/kit';
+import { CheckIcon, PencilSimpleIcon, PrinterIcon, ResetIcon, XIcon } from '../../ui/icons';
+import { Button, Card, ChoiceChips, confirmAction, IconButton, notify } from '../../ui/kit';
 import { PageHead } from './ColetasTab';
 import { ListaArrastavel } from './ListaArrastavel';
 import { type Atividade, TIPOS_OPERACAO, type TipoOperacao } from './model';
-import { salvarSequencia, sequenciaDe, tipoDe, type TmData } from './store';
+import { salvarAtividades, salvarSequencia, sequenciaDe, tipoDe, type TmData } from './store';
 import { useLook } from './ui';
 
 /**
@@ -45,17 +45,30 @@ export function SequenciaAtividades({ data }: { data: TmData }) {
   const nome = TIPOS_OPERACAO[tipo].nome;
   const imprimir = () => void imprimirHtml(sequenciaHtml(lista, nome, marca, usuario), `Sequência das atividades ${nome}`)
     .catch(e => notify('Não deu para imprimir', e instanceof Error ? e.message : 'Tente de novo.'));
+  /** Nome em edição direto no bloco (vale para a atividade em todo o módulo: cronômetro, relatórios e histórico). */
+  const [editando, setEditando] = useState<{ id: string; nome: string } | null>(null);
+  const salvarNome = () => {
+    if (!editando) return;
+    const nomeNovo = editando.nome.trim().replace(/\s+/g, ' ');
+    const atual = data.atividades.find(a => a.id === editando.id);
+    if (!atual) { setEditando(null); return; }
+    if (!nomeNovo) { notify('Informe o nome da atividade'); return; }
+    if (nomeNovo === atual.nome) { setEditando(null); return; }
+    if (lista.some(a => a.id !== atual.id && a.nome.toLowerCase() === nomeNovo.toLowerCase())) { notify('Já existe uma atividade com esse nome', 'Use outro nome para não confundir nos relatórios.'); return; }
+    salvarAtividades(data.atividades.map(a => (a.id === atual.id ? { ...a, nome: nomeNovo } : a)));
+    setEditando(null);
+  };
   const recomecar = () => confirmAction('Recomeçar a sequência?', 'A lista volta para a ordem do cadastro das atividades.', 'Recomeçar', () => salvarSequencia(tipo, []));
 
   return <>
-    <PageHead title="Sequência das atividades" subtitle="Ordem cronológica dos fatos, independente do setor · só informativa"
-      action={<Button title="Imprimir" icon={PrinterIcon} variant="secondary" size="sm" disabled={!lista.length} onPress={imprimir} />} />
+    <PageHead title="Atividades" subtitle="Todas as atividades numa lista só, na ordem que você quiser · só informativa" />
     <Card>
       <ChoiceChips value={nome} options={[TIPOS_OPERACAO.posto.nome, TIPOS_OPERACAO.cd.nome]} onChange={v => setTipo(v === TIPOS_OPERACAO.cd.nome ? 'cd' : 'posto')} />
       <Text style={t.caption}>
-        {isAdmin ? 'Arraste os blocos pelo puxador (⋮⋮) até a ordem em que as tarefas acontecem. Cada soltura já fica gravada. ' : ''}
+        {isAdmin ? 'Arraste os blocos pelo puxador (⋮⋮) até a ordem em que as tarefas acontecem; o lápis edita o nome da atividade (vale em todo o módulo). Cada mudança já fica gravada. ' : ''}
         Esta sequência serve para consulta e impressão: a coleta pode ser feita em qualquer ordem e o cronômetro não muda.
       </Text>
+      <Button title="Imprimir a lista" icon={PrinterIcon} disabled={!lista.length} onPress={imprimir} />
       {isAdmin && data.sequencias[tipo].length ? <Button title="Recomeçar pela ordem do cadastro" icon={ResetIcon} variant="ghost" size="sm" style={s.alignStart} onPress={recomecar} /> : null}
     </Card>
     {lista.length ? (
@@ -65,9 +78,20 @@ export function SequenciaAtividades({ data }: { data: TmData }) {
         render={(a, i) => (
           <View style={s.row}>
             <Text style={[t.bodyStrong, { width: 30, color: colors.accentText }]}>{i + 1}</Text>
-            <Text style={[t.bodyStrong, s.flex]} numberOfLines={2}>{a.nome}</Text>
+            {editando?.id === a.id ? <>
+              <TextInput value={editando.nome} onChangeText={v => setEditando({ id: a.id, nome: v })} autoFocus selectTextOnFocus
+                onSubmitEditing={salvarNome} returnKeyType="done" accessibilityLabel={`Novo nome de ${a.nome}`}
+                style={[{ flex: 1, height: 38, borderWidth: 1, borderColor: colors.accent, borderRadius: 8, paddingHorizontal: 10, color: colors.text, backgroundColor: colors.campo, fontSize: 15 },
+                  Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null]} />
+              <IconButton icon={CheckIcon} label="Salvar o nome" onPress={salvarNome} />
+              <IconButton icon={XIcon} label="Cancelar" onPress={() => setEditando(null)} />
+            </> : <>
+              <Text style={[t.bodyStrong, s.flex]} numberOfLines={2}>{a.nome}</Text>
+              {isAdmin ? <IconButton icon={PencilSimpleIcon} label={`Editar o nome de ${a.nome}`} onPress={() => setEditando({ id: a.id, nome: a.nome })} /> : null}
+            </>}
           </View>
         )} />
-    ) : <Text style={t.caption}>Nenhuma atividade cadastrada para {nome.toLowerCase()}. Cadastre em Dimensionamento → Setores e atividades.</Text>}
+    ) : <Text style={t.caption}>Nenhuma atividade cadastrada para {nome.toLowerCase()}. Cadastre em Gestão → Dimensionamento → Setores e atividades.</Text>}
+    {lista.length > 8 ? <Button title="Imprimir a lista" icon={PrinterIcon} variant="secondary" onPress={imprimir} /> : null}
   </>;
 }
