@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { eventoDoSite } from '../lib/analytics';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeInDown, useReducedMotion } from 'react-native-reanimated';
@@ -58,6 +59,7 @@ function Formulario() {
       }, email);
       if (erro) { setErro(erro); return; }
       setEnviadoPara(email);
+      eventoDoSite('sign_up', { method: 'site' }); // conversão: rede cadastrada pelo site
     } catch {
       setErro('Sem conexão com o servidor. Verifique a internet e tente de novo.');
     } finally {

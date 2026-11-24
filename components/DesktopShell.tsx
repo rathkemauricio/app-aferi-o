@@ -9,7 +9,7 @@ import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
 import { Alvo } from '../tutoriais';
-import { BroadcastIcon, CaretLeftIcon, DropIcon, GearIcon, GraduationCapIcon, HouseIcon, ListMagnifyingGlassIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
+import { ChartLineUpIcon, BroadcastIcon, CaretLeftIcon, DropIcon, GearIcon, GraduationCapIcon, HouseIcon, ListMagnifyingGlassIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
 import { confirmAction } from '../ui/kit';
 import { ThemeContext, type ThemeColors } from '../ui/theme';
 
@@ -152,7 +152,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
       ...(isAdmin ? [{ label: 'Usuários e permissões', route: '/usuarios' as Href, icon: UserCircleIcon }] : []),
       { label: 'Quem está online', route: '/online' as Href, icon: BroadcastIcon },
     ] }] : []),
-    ...(dono ? [{ titulo: 'PLATAFORMA', itens: [{ label: 'Empresas e planos', route: '/plataforma' as Href, icon: SquaresFourIcon }, { label: 'Rastreabilidade', route: '/rastro' as Href, icon: ListMagnifyingGlassIcon }] }] : []),
+    ...(dono ? [{ titulo: 'PLATAFORMA', itens: [{ label: 'Empresas e planos', route: '/plataforma' as Href, icon: SquaresFourIcon }, { label: 'Rastreabilidade', route: '/rastro' as Href, icon: ListMagnifyingGlassIcon }, { label: 'Análises do site', route: '/analises' as Href, icon: ChartLineUpIcon }] }] : []),
     { titulo: 'PREFERÊNCIAS', itens: [{ label: 'Configurações', route: '/configuracoes', icon: GearIcon }, { label: 'Tutoriais', route: '/tutoriais' as Href, icon: GraduationCapIcon }] },
   ];
   const chaveAtiva = grupos.flatMap(g => g.itens).find(i => isActive(String(i.route)))?.route;

@@ -15,6 +15,7 @@ import { ThemeContext, ThemeProvider } from '../ui/theme';
 import { Zoom } from '../ui/zoom';
 import { AvisoAtualizacao } from '../components/AvisoAtualizacao';
 import { SemServidor } from '../components/SemServidor';
+import { AnalyticsDoSite } from '../components/site/AnalyticsDoSite';
 
 // Evita que o navegador trate a página como inglês e ofereça/aplique tradução automática.
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -97,6 +98,8 @@ export default function RootLayout() {
               <AvisosHost />
               {/* Faixa "Sincronizando… N s" no alto: mostra se o app está trabalhando ou travado. */}
               <BarraSincronizacao />
+              {/* Site público: Google Analytics com aviso de cookies (só web, só as páginas do site). */}
+              <AnalyticsDoSite />
             </Zoom>
             </Tutoriais>
           </KeyboardAvoidingView>

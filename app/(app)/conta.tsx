@@ -9,7 +9,7 @@ import { useAuth } from '../../lib/auth';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { MODULES } from '../../modules/registry';
 import { rotuloVersao } from '../../lib/versao';
-import { BroadcastIcon, ArrowLeftIcon, CheckIcon, EnvelopeIcon, GearIcon, ListMagnifyingGlassIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SquaresFourIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
+import { ChartLineUpIcon, BroadcastIcon, ArrowLeftIcon, CheckIcon, EnvelopeIcon, GearIcon, ListMagnifyingGlassIcon, LockSimpleIcon, MoonIcon, PencilSimpleIcon, SignOutIcon, SquaresFourIcon, SunIcon, TrashIcon, UserCircleIcon } from '../../ui/icons';
 import { Button, Card, confirmAction, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import { createTypography, pageMaxWidth, space, ThemeContext } from '../../ui/theme';
 import { BotaoVoltar } from '../../ui/voltar';
@@ -109,6 +109,7 @@ export default function ContaScreen() {
           {(isAdmin || dono) && isSupabaseConfigured ? <ListRow style={isAdmin && divisor} icon={BroadcastIcon} tint="emerald" title="Quem está online" subtitle="Quem está ativo agora e o que está coletando" onPress={() => router.push('/online')} /> : null}
           {dono ? <ListRow icon={SquaresFourIcon} tint="sky" title="Empresas e planos" subtitle="Clientes do EasyAudit, liberação e planos" onPress={() => router.push('/plataforma')} /> : null}
           {dono ? <ListRow icon={ListMagnifyingGlassIcon} tint="slate" title="Rastreabilidade" subtitle="O que cada conta fez no sistema" onPress={() => router.push('/rastro')} /> : null}
+          {dono ? <ListRow icon={ChartLineUpIcon} tint="indigo" title="Análises do site" subtitle="Google Analytics: visitas, origem e cadastros" onPress={() => router.push('/analises')} /> : null}
           <ListRow style={isAdmin && isSupabaseConfigured && divisor} icon={GearIcon} tint="slate" title="Configurações" subtitle="Tema, tamanho das letras, sons, teclado, padrões e atualizações" onPress={() => router.push('/configuracoes')} />
           <ListRow style={divisor} icon={mode === 'dark' ? SunIcon : MoonIcon} tint="slate" title={mode === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onPress={toggleTheme} />
         </Card>

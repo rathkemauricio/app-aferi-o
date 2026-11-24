@@ -120,3 +120,6 @@ export const SwapIcon: Icon = require('phosphor-react-native/src/icons/Swap').Sw
 export const DotsSixVerticalIcon: Icon = require('phosphor-react-native/src/icons/DotsSixVertical').DotsSixVerticalIcon;
 export const ArrowsDownUpIcon: Icon = require('phosphor-react-native/src/icons/ArrowsDownUp').ArrowsDownUpIcon;
 export const ListNumbersIcon: Icon = require('phosphor-react-native/src/icons/ListNumbers').ListNumbersIcon;
+export const ChartLineUpIcon: Icon = require('phosphor-react-native/src/icons/ChartLineUp').ChartLineUpIcon;
+export const TrendDownIcon: Icon = require('phosphor-react-native/src/icons/TrendDown').TrendDownIcon;
+export const GlobeIcon: Icon = require('phosphor-react-native/src/icons/Globe').GlobeIcon;
