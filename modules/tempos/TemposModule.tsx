@@ -18,6 +18,10 @@ import { PainelTab } from './PainelTab';
 import { PlanoTab } from './PlanoTab';
 import { type ColetasView, type GestaoAba, loadUi, saveUi, sincronizarModulo, type Tab, UI_PADRAO, type UiState, useTm } from './store';
 import { useLook } from './ui';
+import { cronometroDe, type Cronometro } from './AoVivo';
+import { fmtDur } from './model';
+import { useAtividade } from '../../lib/presenca';
+import { ehSomenteLeitura } from '../../lib/sync';
 
 const NAV: [Tab, Icon, string][] = [['coletas', TimerIcon, 'Coletas'], ['atividades', ListNumbersIcon, 'Atividades'], ['painel', ChartBarIcon, 'Painel'], ['historico', ClockCounterClockwiseIcon, 'Histórico'], ['gestao', GearIcon, 'Gestão']];
 const GESTAO: [GestaoAba, string][] = [['dimensionamento', 'Dimensionamento'], ['plano', 'Plano de ação'], ['cadastros', 'Cadastros']];
@@ -34,6 +38,21 @@ export default function TemposModule() {
   const rolagemOffset = useScrollOffset(rolagemRef);
   const conteudoRolagem = useSharedValue(0);
   const rolagem = useMemo(() => ({ ref: rolagemRef, offset: rolagemOffset, conteudo: conteudoRolagem }), [rolagemRef, rolagemOffset, conteudoRolagem]);
+
+  // Quem está online / ao vivo: os cronômetros abertos neste aparelho vão na presença enquanto o módulo está aberto
+  // (em qualquer aba), e as outras contas veem pela função tempos_ao_vivo.
+  const cronometros = useMemo(() => data.rascunhos.map(a => cronometroDe(data, a)).filter((c): c is Cronometro => !!c), [data]);
+  const principal = cronometros.find(c => c.desde && !c.pausada) ?? cronometros[0];
+  const nomeFilial = (id: string) => { const f = data.filiais.find(x => x.id === id); return f ? `${f.codigo} · ${f.nome}` : ''; };
+  useAtividade(principal && !ehSomenteLeitura() ? {
+    modulo: 'tempos',
+    titulo: `Cronometragem · ${cronometros.length > 1 ? `${cronometros.length} registros abertos` : principal.tipo === 'completo' ? 'atendimento completo' : 'atividade individual'}`,
+    filial: nomeFilial(principal.filial),
+    detalhe: [principal.setor, `${principal.etapas} etapa(s)`, principal.atividade ? `agora: ${principal.atividade}${principal.pausada ? ' (pausada)' : ''}` : '', principal.funcionario].filter(Boolean).join(' · '),
+    recentes: [...(principal.atividade ? [`${principal.atividade} (em andamento)`] : []), ...[...principal.ultimas].reverse().map(([n, seg]) => `${n} · ${fmtDur(seg)}`)],
+    abrir: '/tempos',
+    dados: { cronometros },
+  } : null);
 
   // Restaura o lugar onde o usuário estava (aba, coleta, atendimento) e grava a cada mudança.
   useEffect(() => { void loadUi().then(setUiState); void sincronizarModulo(); }, []);

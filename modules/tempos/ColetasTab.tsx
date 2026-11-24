@@ -1,6 +1,5 @@
 import { useRouter } from 'expo-router';
 import { useUsuarioLogado } from '../../lib/auth';
-import { useAtividade } from '../../lib/presenca';
 import { useIdentidade } from '../../lib/identidade';
 import { imprimirHtml } from '../../lib/util';
 import { relatorioTemposHtml } from './relatorio';
@@ -8,9 +7,8 @@ import { OpcoesImpressao } from './OpcoesImpressao';
 import type { OpcoesRelatorio } from './relatorio';
 
 import { ultimaAnaliseDaFilial } from './AnaliseIA';
-import { ehSomenteLeitura } from '../../lib/sync';
 import { type ReactNode, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text, useWindowDimensions, View } from 'react-native';
 import {
   ArrowLeftIcon, CalendarBlankIcon, ChartBarIcon, CheckIcon, FilePdfIcon, FlagCheckeredIcon, ListBulletsIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlayIcon, PlusIcon,
   QueueIcon, ResetIcon, StopIcon, StorefrontIcon, TimerIcon, TrashIcon, XIcon,
@@ -22,6 +20,7 @@ import {
 } from './model';
 import { radius, space } from '../../ui/theme';
 import { CardEmColeta, CardFilial, corDaFilial, Grade, useFotos } from './FiliaisCards';
+import { type AoVivo, EtiquetaAoVivo, LinhaAoVivo, useAoVivo, useSegundo } from './AoVivo';
 import { Roleta } from '../afericoes/Roleta';
 import { Deslizavel } from './Deslizavel';
 import { ops } from './ops';
@@ -53,21 +52,22 @@ export function ColetasHome({ data, nav, setFilialId }: { data: TmData; nav: Nav
   const router = useRouter();
   const [busca, setBusca] = useState('');
   const foto = useFotos(data.coletas.map(c => c.auditor));
+  const vivos = useAoVivo(data);
   // 1º passo: a filial. Cards agrupados: em coleta (escuros, com a meta e os auditores), finalizadas e sem coletas (cor sólida).
   const g = useMemo(() => {
     const q = busca.trim().toLowerCase();
     const itens = data.filiais.filter(f => !q || `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(q))
       .map(f => ({ f, fim: statusDaFilial(data, f.id)?.finalizado_em ?? null, pr: progressoFilial(data, f.id), cd: tipoDe(data, f.id) === 'cd' }));
     const porCodigo = (a: (typeof itens)[number], b: (typeof itens)[number]) => String(a.f.codigo).localeCompare(String(b.f.codigo), 'pt-BR', { numeric: true });
-    // Cronômetro rodando neste aparelho: o ícone do card gira.
-    const aoVivo = new Set(data.rascunhos.map(a => data.coletas.find(c => c.id === a.coleta_id)?.filial_id).filter(Boolean));
+    // Cronômetro aberto na filial (neste aparelho ou em outro): o ícone do card gira.
+    const aoVivo = new Set(vivos.filter(v => !v.pausada).map(v => v.filial));
     return {
       emColeta: itens.filter(i => !i.fim && i.pr.coletas).sort((a, b) => b.pr.ultimaData.localeCompare(a.pr.ultimaData) || porCodigo(a, b)),
       finalizadas: itens.filter(i => i.fim).sort((a, b) => String(b.fim).localeCompare(String(a.fim))),
       semColetas: itens.filter(i => !i.fim && !i.pr.coletas).sort(porCodigo),
       aoVivo, total: itens.length,
     };
-  }, [data, busca]);
+  }, [data, busca, vivos]);
   const abrir = (id: string) => { setFilialId(id); nav.push({ name: 'filial', filialId: id }); };
   const local = (f: (typeof data.filiais)[number]) => [f.cidade, f.uf].filter(Boolean).join('/');
 
@@ -138,12 +138,22 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
   const fim = st?.finalizado_em ?? null;
   const pr = progressoFilial(data, filialId);
   const emAndamento = data.rascunhos.filter(a => data.coletas.some(c => c.id === a.coleta_id && c.filial_id === filialId)).length;
+  // Ao vivo: cronômetros abertos nesta filial (deste aparelho e dos outros), com o relógio correndo.
+  const vivos = useAoVivo(data).filter(v => v.filial === filialId);
+  const agora = useSegundo(vivos.length > 0);
+  const fotoDe = useFotos(vivos.filter(v => !v.meu).map(v => v.quem));
+  const vivosDa = (id: string) => vivos.filter(v => v.coleta === id);
+  // No celular a linha ao vivo ocupa a largura toda; no computador fica alinhada ao título da coleta.
+  const recuo = useWindowDimensions().width < 600 ? 12 : 64;
 
+  const comVivo = vivos.map(v => v.coleta).join('|');
   const porData = useMemo(() => {
     const m = new Map<string, Coleta[]>();
+    // No mesmo dia, as coletas com cronômetro aberto vêm primeiro.
+    const vivas = new Set(comVivo.split('|'));
     data.coletas.filter(c => c.filial_id === filialId).forEach(c => m.set(c.data, [...(m.get(c.data) ?? []), c]));
-    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [data.coletas, filialId]);
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([dia, cs]) => [dia, [...cs].sort((x, y) => (vivas.has(y.id) ? 1 : 0) - (vivas.has(x.id) ? 1 : 0))] as const);
+  }, [data.coletas, filialId, comVivo]);
 
   if (!filial) return <Missing onBack={nav.pop} />;
 
@@ -156,6 +166,10 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
   };
 
   const sim = (ok: boolean) => (ok ? '✓' : '✗');
+  // O meu cronômetro abre direto no registro; o de outra pessoa abre a coleta.
+  const abrirVivo = (v: AoVivo) => (v.meu
+    ? { rotuloAbrir: 'Continuar cronômetro', onAbrir: () => { nav.push({ name: 'coleta', coletaId: v.coleta }); nav.push({ name: 'atendimento', coletaId: v.coleta, atendimentoId: v.id }); } }
+    : { rotuloAbrir: 'Abrir a coleta', onAbrir: () => nav.push({ name: 'coleta', coletaId: v.coleta }) });
   const gerarPdf = async (o: OpcoesRelatorio) => {
     try { await imprimirHtml(relatorioTemposHtml(data, { filialId, setor: '', demanda: '' }, marca, usuario, { ...(await ultimaAnaliseDaFilial(filialId)), opcoes: o }), `Tempos e Movimentos ${filial.nome}`); }
     catch (e) { notify('PDF não gerado', e instanceof Error ? e.message : 'Tente de novo.'); }
@@ -204,17 +218,27 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
 
     {porData.length ? porData.map(([dia, cs]) => (
       <View key={dia} style={s.group}>
-        <SectionHeader title={rotuloDia(dia)} />
+        <View style={s.row}>
+          <View style={s.flex}><SectionHeader title={rotuloDia(dia)} /></View>
+          {(() => { const n = vivos.filter(v => cs.some(c => c.id === v.coleta)).length; return n ? <EtiquetaAoVivo n={n} /> : null; })()}
+        </View>
         <Card style={s.listCard}>
           {cs.map((c, i) => {
-            const aberto = data.rascunhos.some(a => a.coleta_id === c.id);
+            const vv = vivosDa(c.id);
             const feitos = data.atendimentos.filter(a => a.coleta_id === c.id).length;
             return (
-              <ListRow key={c.id} style={i > 0 && s.divided} icon={QueueIcon} tint="indigo"
-                title={c.funcao ? `${c.setor} · ${c.funcao}` : c.setor}
-                subtitle={`${c.turno}, ${c.demanda.toLowerCase()} · ${feitos} registro(s)${c.auditor ? ` · ${c.auditor}` : ''}`}
-                right={aberto ? <StatusPill label="Em andamento" tone="accent" /> : undefined}
-                onPress={() => nav.push({ name: 'coleta', coletaId: c.id })} />
+              <View key={c.id} style={i > 0 && s.divided}>
+                <ListRow icon={QueueIcon} tint="indigo"
+                  title={c.funcao ? `${c.setor} · ${c.funcao}` : c.setor}
+                  subtitle={`${c.turno}, ${c.demanda.toLowerCase()} · ${feitos} registro(s)${c.auditor ? ` · ${c.auditor}` : ''}`}
+                  right={vv.length ? <EtiquetaAoVivo n={vv.length} /> : undefined}
+                  onPress={() => nav.push({ name: 'coleta', coletaId: c.id })} />
+                {vv.length ? (
+                  <View style={{ paddingLeft: recuo, paddingRight: 12, paddingBottom: 12, gap: 8 }}>
+                    {vv.map(v => <LinhaAoVivo key={v.id} v={v} agora={agora} fotoDe={fotoDe} {...abrirVivo(v)} />)}
+                  </View>
+                ) : null}
+              </View>
             );
           })}
         </Card>
@@ -246,6 +270,10 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
   const c = data.coletas.find(x => x.id === coletaId);
   const abertos = data.rascunhos.filter(a => a.coleta_id === coletaId);
   const now = useNow(abertos.length > 0);
+  // Outras pessoas cronometrando nesta mesma coleta (os deste aparelho já aparecem como cartões abaixo).
+  const deles = useAoVivo(data).filter(v => v.coleta === coletaId && !v.meu);
+  const agoraVivo = useSegundo(deles.length > 0);
+  const fotoDe = useFotos(deles.map(v => v.quem));
   if (!c) return <Missing onBack={nav.pop} />;
   const tipoColeta = tipoDe(data, c.filial_id);
   const ciclo = TIPOS_OPERACAO[tipoColeta].ciclo;
@@ -295,6 +323,13 @@ export function ColetaScreen({ data, nav, coletaId }: { data: TmData; nav: Nav; 
     })}
     {abertos.length ? <Text style={t.caption}>Deslize o cartão para a direita para encerrar e gravar, ou para a esquerda para descartar.</Text> : null}
 
+    {deles.length ? (
+      <View style={s.group}>
+        <View style={s.row}><Text style={[t.sectionBg, s.flex]}>Agora nesta coleta</Text><EtiquetaAoVivo n={deles.length} /></View>
+        {deles.map(v => <LinhaAoVivo key={v.id} v={v} agora={agoraVivo} fotoDe={fotoDe} />)}
+      </View>
+    ) : null}
+
     <View style={s.twoCol}>
       {finalizada(data, c.filial_id) ? <Text style={[t.caption, s.flex]}>As coletas desta filial foram finalizadas. Para registrar mais, reabra na tela da filial.</Text> : <>
       <Button title={`${ciclo.nome} completo`} icon={PlayIcon} style={s.flex} onPress={() => iniciar('completo')} />
@@ -341,18 +376,10 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
   const pausada = aberta ? etapaPausada(aberta) : false;
   const now = useNow(!!aberta && !pausada);
   const [verTodas, setVerTodas] = useState(false);
-  // Quem está online: cronometragem em andamento (etapa atual e quantas já foram).
-  const nomeEtapa = (id: string) => data.atividades.find(x => x.id === id)?.nome ?? 'etapa';
+  // Quem está online / ao vivo: o envio da cronometragem fica no TemposModule (vale em qualquer tela do módulo).
   // Coleta de todos os setores: o setor de cada etapa sai da atividade cronometrada.
   const setores = c && a ? setoresDasEtapas(data, c, a) : [];
   const ciclo = !!c && coletaDoCiclo(c);
-  const setorAgora = ciclo ? (setores[setores.length - 1] || 'Todos os setores') : c?.setor ?? '';
-  useAtividade(c && a && rascunho && !ehSomenteLeitura() ? {
-    modulo: 'tempos', titulo: `Cronometragem · ${a.tipo === 'completo' ? 'atendimento completo' : 'atividade individual'}`, filial: nomeFilial(data, c.filial_id),
-    detalhe: `${setorAgora} · ${a.etapas.length} etapa(s)${aberta ? ` · agora: ${nomeEtapa(aberta.atividade_id)}${pausada ? ' (pausada)' : ''}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`,
-    recentes: a.etapas.slice(-4).reverse().map(e => `${horaBR(e.inicio)} · ${nomeEtapa(e.atividade_id)}${e.fim ? '' : ' (em andamento)'}`),
-    abrir: '/tempos',
-  } : null);
   if (!c || !a) return <Missing onBack={nav.pop} />;
 
   const emAndamento = !!rascunho;

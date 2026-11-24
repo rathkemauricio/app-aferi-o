@@ -23,6 +23,8 @@ export type Atividade = {
   recentes?: string[];
   /** Rota para acompanhar (abre o mesmo registro em quem estiver olhando). */
   abrir?: string;
+  /** Dados estruturados do módulo (ex.: Tempos manda os cronômetros abertos, lidos pela função tempos_ao_vivo). */
+  dados?: Record<string, unknown>;
 };
 
 export const ONLINE_MS = 2 * 60_000;
