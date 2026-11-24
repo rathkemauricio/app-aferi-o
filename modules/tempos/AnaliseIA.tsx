@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { imprimirHtml } from '../../lib/util';
 import { PrinterIcon, SparkleIcon } from '../../ui/icons';
 import { Button, Card, notify, StatusPill } from '../../ui/kit';
-import { atendimentosDe, indicadores, ociosidade } from './calc';
+import { atendimentosDe, indicadores, ociosidade, recorte } from './calc';
 import { type AnaliseParaRelatorio, type OpcoesRelatorio, relatorioTemposHtml } from './relatorio';
 import { OpcoesImpressao } from './OpcoesImpressao';
 import { useIdentidade } from '../../lib/identidade';
@@ -37,9 +37,10 @@ function montarDados(d: TmData, filial: Filial, dim: ResumoDimensionamento) {
   const cs = d.coletas.filter(c => c.filial_id === filial.id);
   const datas = [...new Set(cs.map(c => c.data))].sort();
   const ind = indicadores(d, { filialId: filial.id, setor: '', demanda: '' });
-  const grupo = (nome: string, filtro: (c: (typeof cs)[number]) => boolean) => {
-    const sel = cs.filter(filtro);
-    const ats = atendimentosDe(d, sel), completos = ats.filter(a => a.tipo === 'completo');
+  const grupo = (nome: string, filtro: (c: (typeof cs)[number]) => boolean, recorteSetor?: ReturnType<typeof recorte>) => {
+    // Por setor, as coletas de todos os setores entram só com as etapas daquele setor.
+    const sel = recorteSetor ? recorteSetor.cs : cs.filter(filtro);
+    const ats = recorteSetor ? recorteSetor.ats : atendimentosDe(d, sel), completos = ats.filter(a => a.tipo === 'completo');
     return { [nome]: '', coletas: sel.length, atendimentos: completos.length, media_atendimento_min: completos.length ? r1(completos.reduce((s, a) => s + a.duracao_s, 0) / completos.length / 60) : null, volume_litros: r1(ats.reduce((s, a) => s + (a.volume ?? 0), 0)) };
   };
   const classeDe = new Map(d.atividades.map(a => [a.id, a.classe]));
@@ -55,7 +56,7 @@ function montarDados(d: TmData, filial: Filial, dim: ResumoDimensionamento) {
     },
     por_turno: TURNOS.map(tu => ({ ...grupo('turno', c => c.turno === tu), turno: tu })).filter(x => x.coletas),
     por_demanda: DEMANDAS.map(de => ({ ...grupo('demanda', c => c.demanda === de), demanda: de })).filter(x => x.coletas),
-    por_setor: setoresDoTipo(d, tipoDe(d, filial.id)).map(se => ({ ...grupo('setor', c => c.setor === se), setor: se })).filter(x => x.coletas),
+    por_setor: setoresDoTipo(d, tipoDe(d, filial.id)).map(se => ({ ...grupo('setor', () => false, recorte(d, { filialId: filial.id, setor: se, demanda: '' })), setor: se })).filter(x => x.coletas),
     por_veiculo: ind.porVeiculo.map(([veiculo, seg, n]) => ({ veiculo, atendimentos: n, media_min: r1(seg / 60) })),
     tempo_por_classe_h: Object.fromEntries(ind.porClasse.map(([c, seg]) => [c, r1(seg / 3600)])),
     atividades: ind.atividades.slice(0, 30).map(a => ({

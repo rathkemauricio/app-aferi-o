@@ -49,6 +49,13 @@ export type Atendimento = SyncRow & {
 /** Linha de tm_coletas. */
 export type Coleta = SyncRow & { filial_id: string; data: string; setor: string; funcao: string; turno: string; demanda: string; auditor: string };
 
+/**
+ * Coleta do ciclo completo (pedido do usuário, 24/11/2026): todas as atividades cadastradas da filial, sem escolher setor.
+ * O setor de cada registro sai sozinho da atividade cronometrada (ver `setoresDasEtapas` em calc.ts).
+ */
+export const COLETA_TODOS_SETORES = 'Todos os setores';
+export const coletaDoCiclo = (c: Pick<Coleta, 'setor'>) => c.setor === COLETA_TODOS_SETORES;
+
 /* ---------- Faixas de volume ---------- */
 /** Faixa de volume em litros: ≤ ou ≥ um valor de 10 a 1000 (passos de 10). Usada no Dimensionamento e no volume do atendimento. */
 export type Faixa = { op: '≤' | '≥'; l: number };

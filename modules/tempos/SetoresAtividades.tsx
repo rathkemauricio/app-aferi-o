@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { useAuth } from '../../lib/auth';
 import { ArrowDownIcon, ArrowsDownUpIcon, ArrowUpIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, Field, IconButton, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
-import { type Atividade, CLASSES, num, TIPOS_OPERACAO, type TipoOperacao, TODOS_SETORES, uid } from './model';
+import { type Atividade, CLASSES, COLETA_TODOS_SETORES, num, TIPOS_OPERACAO, type TipoOperacao, TODOS_SETORES, uid } from './model';
 import { coletasCol, salvarAtividades, salvarSetores, setoresDoTipo, tipoDe, type TmData } from './store';
 import { useLook } from './ui';
 
@@ -39,6 +39,7 @@ export function SetoresAtividades({ data, onSequencia }: { data: TmData; onSeque
     const nome = setor.nome.trim();
     if (!nome) { notify('Informe o nome do setor'); return; }
     if (nomeRepetido(nome, setor.de)) { notify('Esse setor já existe', 'Use outro nome (os setores do posto e do CD não podem ter o mesmo nome).'); return; }
+    if (nome.toLowerCase() === COLETA_TODOS_SETORES.toLowerCase()) { notify('Nome reservado', `"${COLETA_TODOS_SETORES}" é a coleta do ciclo completo. Use outro nome para o setor.`); return; }
     if (!setor.de) { salvarSetores(tipo, [...setores, nome]); setSetor(null); return; }
     if (nome === setor.de) { setSetor(null); return; }
     const de = setor.de;

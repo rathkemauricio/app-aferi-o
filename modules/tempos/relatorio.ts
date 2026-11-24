@@ -1,6 +1,6 @@
 import { esc } from '../../lib/util';
-import { type Filtro, coletasFiltradas, atendimentosDe, indicadores, ociosidade, progressoFilial } from './calc';
-import { ciclosMinimos, dataBR, fmtDur, fmtMin, horaBR, num, pausaSeg, TIPOS_OPERACAO } from './model';
+import { type Filtro, indicadores, ociosidade, progressoFilial, recorte, setoresDasEtapas } from './calc';
+import { ciclosMinimos, coletaDoCiclo, dataBR, fmtDur, fmtMin, horaBR, num, pausaSeg, TIPOS_OPERACAO } from './model';
 import { sequenciaDe, statusDaFilial, tipoDe, type TmData } from './store';
 
 /** Análise com IA salva (tm_analises_ia) e o dimensionamento da planilha enviado junto. */
@@ -58,8 +58,9 @@ export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string;
   const topAtv = [...r.atividades].sort((a, b) => b.totalSeg - a.totalSeg).slice(0, 5);
   const ordem: OrdemAtividades = extra?.opcoes?.ordem ?? 'cronologica';
   const necessarios = A?.funcionarios_necessarios ?? null;
-  const cs = [...coletasFiltradas(d, f)].sort((a, b) => a.data.localeCompare(b.data));
-  const ats = atendimentosDe(d, cs);
+  const rec = recorte(d, f);
+  const cs = [...rec.cs].sort((a, b) => a.data.localeCompare(b.data));
+  const ats = rec.ats;
   const filial = d.filiais.find(x => x.id === f.filialId);
   // Centro de distribuição: ciclo completo (pedido/carga) e quantidade movimentada no lugar de atendimento e litros.
   const ehCd = !!filial && tipoDe(d, filial.id) === 'cd';
@@ -86,14 +87,15 @@ export function relatorioTemposHtml(d: TmData, f: Filtro, marca: { nome: string;
     const blocos = cs.map(c => {
       const doColeta = ats.filter(a => a.coleta_id === c.id);
       const completos = doColeta.filter(a => a.tipo === 'completo').sort((x, y) => ms(x.inicio) - ms(y.inicio));
-      const linhas = doColeta.flatMap(a => a.etapas.map(e => ({ a, e }))).sort((x, y) => (ms(x.e.inicio) || 0) - (ms(y.e.inicio) || 0));
+      // Coleta de todos os setores: o setor de cada tarefa vem da atividade (aparece embaixo do nome).
+      const linhas = doColeta.flatMap(a => { const se = setoresDasEtapas(d, c, a); return a.etapas.map((e, i) => ({ a, e, setor: coletaDoCiclo(c) ? se[i] : '' })); }).sort((x, y) => (ms(x.e.inicio) || 0) - (ms(y.e.inicio) || 0));
       return { c, linhas, completos, inicio: Math.min(...linhas.map(x => ms(x.e.inicio)).filter(Number.isFinite), Infinity) };
     }).filter(b => b.linhas.length).sort((x, y) => x.c.data.localeCompare(y.c.data) || x.inicio - y.inicio);
     if (!blocos.length) return '';
     return `<h3>Linha do tempo: tarefas na ordem em que foram executadas</h3>
 ${blocos.map(({ c, linhas, completos }) => `<p style="margin:12px 0 4px"><b>${esc(dataBR(c.data))}${filial ? '' : ` · ${esc(nomeFilial(c.filial_id))}`} · ${esc(c.setor)}</b> <span class="muted">· ${esc(c.turno)}, ${esc(c.demanda.toLowerCase())}${c.auditor ? ` · auditor ${esc(c.auditor)}` : ''}</span></p>
 <table class="t"><tr><th>Início</th><th>Fim</th><th class="num">Duração</th><th>Atividade</th><th>Registro</th><th>Funcionário</th></tr>
-${linhas.map(({ a, e }) => `<tr><td>${esc(horaBR(e.inicio))}</td><td>${esc(horaBR(e.fim))}</td><td class="num">${esc(fmtDur(e.duracao_s))}${pausaSeg(e) > 0 ? `<br><span class="muted">pausa ${esc(fmtDur(pausaSeg(e)))}</span>` : ''}</td><td>${esc(nomeAtv(e.atividade_id))}</td><td>${a.tipo === 'completo' ? `${esc(ehCd ? 'Ciclo' : 'Atendimento')} ${completos.indexOf(a) + 1}` : 'Atividade individual'}</td><td>${esc(a.funcionario || '—')}</td></tr>`).join('')}
+${linhas.map(({ a, e, setor }) => `<tr><td>${esc(horaBR(e.inicio))}</td><td>${esc(horaBR(e.fim))}</td><td class="num">${esc(fmtDur(e.duracao_s))}${pausaSeg(e) > 0 ? `<br><span class="muted">pausa ${esc(fmtDur(pausaSeg(e)))}</span>` : ''}</td><td>${esc(nomeAtv(e.atividade_id))}${setor ? `<br><span class="muted">${esc(setor)}</span>` : ''}</td><td>${a.tipo === 'completo' ? `${esc(ehCd ? 'Ciclo' : 'Atendimento')} ${completos.indexOf(a) + 1}` : 'Atividade individual'}</td><td>${esc(a.funcionario || '—')}</td></tr>`).join('')}
 </table>`).join('')}`;
   })();
   const nomeFilial = (id: string) => { const x = d.filiais.find(y => y.id === id); return x ? `${x.codigo} · ${x.nome}` : 'Filial removida'; };
@@ -160,6 +162,7 @@ ${r.etapas ? `<p>${acima.length ? `<b>${acima.length}</b> atividade(s) com tempo
 
 ${prog ? `<h3>Andamento das coletas da filial</h3>
 <div class="${prog.completo ? 'ok' : 'aviso'}"><b>${prog.coletas} de ${prog.meta} coletas</b> (meta padrão) · ${prog.comAmostra} de ${prog.atividades} atividades com ${prog.minimo} ou mais ciclos.<br>
+Ciclo completo: ${prog.ciclo.cronometradas} de ${prog.ciclo.cadastradas} atividades cadastradas já cronometradas (todos os setores).<br>
 Turnos: ${prog.turnos.map(([t, n]) => `${esc(t)} ${n}`).join(' · ')} · Demandas: ${prog.demandas.map(([x, n]) => `${esc(x)} ${n}`).join(' · ')}
 ${prog.faltas.length ? `<br><b>Falta:</b> ${esc(prog.faltas.join('; '))}.` : '<br>Coletas completas pela meta.'}</div>` : ''}
 

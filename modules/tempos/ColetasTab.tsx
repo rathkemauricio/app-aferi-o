@@ -17,20 +17,29 @@ import {
 } from '../../ui/icons';
 import { Button, Card, ChoiceChips, confirmAction, EmptyState, Field, IconButton, ListRow, notify, SectionHeader, Sheet, StatusPill } from '../../ui/kit';
 import {
-  type Atendimento, type Atividade, type Coleta, DEMANDAS, FAIXAS, dataBR, duracaoAtendimento, duracaoEtapa, etapaAberta, etapaPausada, fmtCrono, fmtDur, hoje,
+  type Atendimento, type Atividade, type Coleta, COLETA_TODOS_SETORES, coletaDoCiclo, DEMANDAS, FAIXAS, dataBR, duracaoAtendimento, duracaoEtapa, etapaAberta, etapaPausada, fmtCrono, fmtDur, hoje,
   horaBR, pausaSeg, TIPOS_OPERACAO, type TipoOperacao, TURNOS,
 } from './model';
-import { radius } from '../../ui/theme';
+import { radius, space } from '../../ui/theme';
+import { CardEmColeta, CardFilial, corDaFilial, Grade, useFotos } from './FiliaisCards';
 import { Roleta } from '../afericoes/Roleta';
 import { Deslizavel } from './Deslizavel';
 import { ops } from './ops';
-import { progressoFilial } from './calc';
-import { type ColetasView, finalizarFilial, finalizada, reabrirFilial, setorDoCiclo, setoresDoTipo, statusDaFilial, tipoDe, type TmData } from './store';
+import { progressoFilial, setoresDasEtapas } from './calc';
+import { type ColetasView, finalizarFilial, finalizada, reabrirFilial, sequenciaDe, setorDoCiclo, setoresDoTipo, statusDaFilial, tipoDe, type TmData } from './store';
 import { ActivityPicker, useLook, useNow } from './ui';
 
 type Nav = { push: (v: ColetasView) => void; pop: () => void };
 
-const atividadesDaColeta = (d: TmData, c: Coleta) => d.atividades.filter(a => a.ativo !== false && (a.setor === c.setor || a.setor === ''));
+/** Atividades oferecidas na coleta: as do setor (e as que valem para todos) ou, na coleta de todos os setores, todo o ciclo da unidade. */
+const atividadesDaColeta = (d: TmData, c: Coleta) => (coletaDoCiclo(c) ? sequenciaDe(d, tipoDe(d, c.filial_id))
+  : d.atividades.filter(a => a.ativo !== false && (a.setor === c.setor || a.setor === '')));
+/** Agrupa as atividades por setor (as que valem para todos por último), mantendo a ordem recebida. */
+const porSetor = (lista: Atividade[]) => {
+  const m = new Map<string, Atividade[]>();
+  lista.forEach(a => m.set(a.setor, [...(m.get(a.setor) ?? []), a]));
+  return [...m.entries()].sort((x, y) => (x[0] === '' ? 1 : 0) - (y[0] === '' ? 1 : 0));
+};
 const nomeAtv = (d: TmData, id: string) => d.atividades.find(a => a.id === id)?.nome ?? 'Atividade removida';
 const resumoEtapas = (d: TmData, a: Atendimento) => a.etapas.map(e => nomeAtv(d, e.atividade_id)).join(' › ') || 'Sem etapas';
 const nomeVeiculo = (d: TmData, id?: string) => (id ? d.veiculos.find(v => v.id === id)?.nome ?? '' : '');
@@ -43,15 +52,24 @@ export function ColetasHome({ data, nav, setFilialId }: { data: TmData; nav: Nav
   const { s, t } = useLook();
   const router = useRouter();
   const [busca, setBusca] = useState('');
-  // 1º passo: a filial. Cada uma mostra se está em coleta (com o progresso da meta) ou com as coletas finalizadas.
-  const filiais = useMemo(() => {
+  const foto = useFotos(data.coletas.map(c => c.auditor));
+  // 1º passo: a filial. Cards agrupados: em coleta (escuros, com a meta e os auditores), finalizadas e sem coletas (cor sólida).
+  const g = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    const lista = data.filiais.filter(f => !q || `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(q));
-    const qtd = (id: string) => data.coletas.filter(c => c.filial_id === id).length;
-    return lista.sort((a, b) => (qtd(b.id) ? 1 : 0) - (qtd(a.id) ? 1 : 0) || String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true }));
-  }, [data.filiais, data.coletas, busca]);
+    const itens = data.filiais.filter(f => !q || `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(q))
+      .map(f => ({ f, fim: statusDaFilial(data, f.id)?.finalizado_em ?? null, pr: progressoFilial(data, f.id), cd: tipoDe(data, f.id) === 'cd' }));
+    const porCodigo = (a: (typeof itens)[number], b: (typeof itens)[number]) => String(a.f.codigo).localeCompare(String(b.f.codigo), 'pt-BR', { numeric: true });
+    // Cronômetro rodando neste aparelho: o ícone do card gira.
+    const aoVivo = new Set(data.rascunhos.map(a => data.coletas.find(c => c.id === a.coleta_id)?.filial_id).filter(Boolean));
+    return {
+      emColeta: itens.filter(i => !i.fim && i.pr.coletas).sort((a, b) => b.pr.ultimaData.localeCompare(a.pr.ultimaData) || porCodigo(a, b)),
+      finalizadas: itens.filter(i => i.fim).sort((a, b) => String(b.fim).localeCompare(String(a.fim))),
+      semColetas: itens.filter(i => !i.fim && !i.pr.coletas).sort(porCodigo),
+      aoVivo, total: itens.length,
+    };
+  }, [data, busca]);
   const abrir = (id: string) => { setFilialId(id); nav.push({ name: 'filial', filialId: id }); };
-  const cd = (id: string) => tipoDe(data, id) === 'cd';
+  const local = (f: (typeof data.filiais)[number]) => [f.cidade, f.uf].filter(Boolean).join('/');
 
   if (!data.filiais.length) {
     return <>
@@ -59,23 +77,48 @@ export function ColetasHome({ data, nav, setFilialId }: { data: TmData; nav: Nav
       <EmptyState icon={StorefrontIcon} title="Nenhuma filial cadastrada" text="As coletas pertencem a uma filial do cadastro único." action={{ label: 'Abrir cadastro de filiais', onPress: () => router.push('/filiais') }} />
     </>;
   }
+  const secao = (titulo: string, n: number) => (
+    <View style={[s.row, { marginTop: space.sm }]}><Text style={t.sectionBg}>{titulo}</Text><Text style={t.captionBg}>{n}</Text></View>
+  );
+  const base = g.emColeta.length ? 160 : 0;
   return <>
     <PageHead title="Coletas por filial" subtitle="Escolha a filial: faça as coletas, finalize e analise o dimensionamento" />
     <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Buscar filial por código, nome ou cidade" />
-    <Card style={s.listCard}>
-      {filiais.map((f, i) => {
-        const st = statusDaFilial(data, f.id), pr = progressoFilial(data, f.id);
-        const fim = st?.finalizado_em;
-        return (
-          <ListRow key={f.id} style={i > 0 && s.divided} icon={StorefrontIcon} tint={fim ? 'emerald' : pr.coletas ? 'indigo' : 'slate'}
-            title={`${f.codigo} · ${f.nome}`}
-            subtitle={`${cd(f.id) ? 'Centro de distribuição · ' : ''}${fim ? `Coletas finalizadas em ${new Date(fim).toLocaleDateString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : pr.coletas ? `${pr.coletas} de ${pr.meta} coletas · ${pr.atendimentos} ${cd(f.id) ? 'ciclo(s)' : 'atendimento(s)'}` : 'Sem coletas ainda'}`}
-            right={fim ? <StatusPill label="Finalizada" tone="success" /> : pr.coletas ? <StatusPill label={`${Math.round(pr.pct * 100)}%`} tone={pr.completo ? 'success' : 'accent'} /> : cd(f.id) ? <StatusPill label="CD" tone="accent" /> : undefined}
-            onPress={() => abrir(f.id)} />
-        );
-      })}
-      {!filiais.length ? <Text style={[t.caption, { padding: 12 }]}>Nenhuma filial com &quot;{busca.trim()}&quot;.</Text> : null}
-    </Card>
+
+    {g.emColeta.length ? <>
+      {secao('Em coleta', g.emColeta.length)}
+      <Grade min={340}>
+        {g.emColeta.map(({ f, pr, cd }, i) => (
+          <CardEmColeta key={f.id} titulo={f.nome} etiqueta={[f.codigo, cd ? 'Centro de distribuição' : local(f)].filter(Boolean).join(' · ')}
+            pct={pr.pct} trilho={`${pr.coletas} de ${pr.meta} coletas`} auditores={pr.auditores} aoVivo={g.aoVivo.has(f.id)}
+            onPress={() => abrir(f.id)} foto={foto} atraso={Math.min(i, 6) * 70} />
+        ))}
+      </Grade>
+    </> : null}
+
+    {g.finalizadas.length ? <>
+      {secao('Finalizadas', g.finalizadas.length)}
+      <Grade min={250}>
+        {g.finalizadas.map(({ f, pr, fim }, i) => (
+          <CardFilial key={f.id} codigo={f.codigo} nome={f.nome} local={local(f)} cor={corDaFilial(f.id)} etiqueta={{ texto: 'Finalizada', ok: true }}
+            numeros={[[pr.coletas, 'coletas'], [pr.registros, 'registros'], [[pr.ciclo.cronometradas, pr.ciclo.cadastradas], 'atividades']]}
+            pct={1} rodape={`Finalizada em ${new Date(String(fim)).toLocaleDateString('pt-BR')}`} onPress={() => abrir(f.id)} atraso={base + Math.min(i, 8) * 50} />
+        ))}
+      </Grade>
+    </> : null}
+
+    {g.semColetas.length ? <>
+      {secao('Sem coletas', g.semColetas.length)}
+      <Grade min={250}>
+        {g.semColetas.map(({ f, pr, cd }, i) => (
+          <CardFilial key={f.id} codigo={f.codigo} nome={f.nome} local={local(f)} cor={corDaFilial(f.id)} etiqueta={cd ? { texto: 'CD' } : undefined}
+            numeros={[[pr.ciclo.cadastradas, 'atividades'], [setoresDoTipo(data, cd ? 'cd' : 'posto').length, 'setores'], [pr.meta, 'coletas (meta)']]}
+            pct={0} rodape="Nenhuma coleta ainda" onPress={() => abrir(f.id)} atraso={base + Math.min(i + g.finalizadas.length, 8) * 50} />
+        ))}
+      </Grade>
+    </> : null}
+
+    {!g.total ? <Text style={t.captionBg}>Nenhuma filial com &quot;{busca.trim()}&quot;.</Text> : null}
   </>;
 }
 
@@ -122,7 +165,7 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
     <PageHead title={`${filial.codigo} · ${filial.nome}`} subtitle={fim ? `Coletas finalizadas em ${new Date(fim).toLocaleString('pt-BR')}${st?.finalizado_por_nome ? ` por ${st.finalizado_por_nome}` : ''}` : 'Em coleta'}
       action={<View style={[s.row, { flexWrap: 'wrap', justifyContent: 'flex-end' }]}>
         {pr.coletas ? <IconButton icon={FilePdfIcon} label="Relatório em PDF" onPress={() => setPdf(true)} /> : null}
-        {!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario, setores))} /> : null}
+        {!fim ? <Button title="Nova coleta" icon={PlusIcon} size="sm" onPress={() => setForm(novaColetaForm(usuario))} /> : null}
       </View>} />
 
     {tipo === 'cd' ? (
@@ -142,6 +185,7 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
       <Text style={t.caption}>Turnos: {pr.turnos.map(([x, n]) => `${x} ${sim(n > 0)}`).join('  ·  ')}</Text>
       <Text style={t.caption}>Demandas: {pr.demandas.map(([x, n]) => `${x} ${sim(n > 0)}`).join('  ·  ')}</Text>
       <Text style={t.caption}>Atividades com {pr.minimo}+ ciclos: {pr.comAmostra} de {pr.atividades}</Text>
+      <Text style={t.caption}>Ciclo completo (todos os setores): {pr.ciclo.cronometradas} de {pr.ciclo.cadastradas} atividades cadastradas já cronometradas</Text>
       {!pr.completo && pr.faltas.length ? <Text style={[t.caption, { color: colors.warning }]}>Falta: {pr.faltas.join('; ')}.</Text> : null}
     </Card>
 
@@ -177,7 +221,7 @@ export function FilialScreen({ data, nav, filialId }: { data: TmData; nav: Nav; 
       </View>
     )) : (
       <EmptyState icon={CalendarBlankIcon} title="Nenhuma coleta nesta filial" text="Abra uma coleta para registrar atendimentos e atividades com cronômetro."
-        action={!fim ? { label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario, setores)) } : undefined} />
+        action={!fim ? { label: 'Nova coleta', icon: PlusIcon, onPress: () => setForm(novaColetaForm(usuario)) } : undefined} />
     )}
 
     {pdf ? <OpcoesImpressao onClose={() => setPdf(false)} onGerar={o => void gerarPdf(o)} /> : null}
@@ -299,9 +343,13 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
   const [verTodas, setVerTodas] = useState(false);
   // Quem está online: cronometragem em andamento (etapa atual e quantas já foram).
   const nomeEtapa = (id: string) => data.atividades.find(x => x.id === id)?.nome ?? 'etapa';
+  // Coleta de todos os setores: o setor de cada etapa sai da atividade cronometrada.
+  const setores = c && a ? setoresDasEtapas(data, c, a) : [];
+  const ciclo = !!c && coletaDoCiclo(c);
+  const setorAgora = ciclo ? (setores[setores.length - 1] || 'Todos os setores') : c?.setor ?? '';
   useAtividade(c && a && rascunho && !ehSomenteLeitura() ? {
     modulo: 'tempos', titulo: `Cronometragem · ${a.tipo === 'completo' ? 'atendimento completo' : 'atividade individual'}`, filial: nomeFilial(data, c.filial_id),
-    detalhe: `${c.setor} · ${a.etapas.length} etapa(s)${aberta ? ` · agora: ${nomeEtapa(aberta.atividade_id)}${pausada ? ' (pausada)' : ''}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`,
+    detalhe: `${setorAgora} · ${a.etapas.length} etapa(s)${aberta ? ` · agora: ${nomeEtapa(aberta.atividade_id)}${pausada ? ' (pausada)' : ''}` : ''}${a.funcionario ? ` · ${a.funcionario}` : ''}`,
     recentes: a.etapas.slice(-4).reverse().map(e => `${horaBR(e.inicio)} · ${nomeEtapa(e.atividade_id)}${e.fim ? '' : ' (em andamento)'}`),
     abrir: '/tempos',
   } : null);
@@ -311,7 +359,8 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
   const lista = atividadesDaColeta(data, c);
   // Ciclo completo com ordem sugerida: no posto, o atendimento na pista; no CD, as etapas são escolhidas livremente.
   const cicloTipo = TIPOS_OPERACAO[tipoDe(data, c.filial_id)].ciclo;
-  const sequencia = a.tipo === 'completo' && setorDoCiclo(data, tipoDe(data, c.filial_id)) === c.setor
+  const setorPista = setorDoCiclo(data, tipoDe(data, c.filial_id));
+  const sequencia = a.tipo === 'completo' && setorPista !== null && (setorPista === c.setor || ciclo)
     ? cicloTipo.etapas.map(nome => lista.find(x => x.nome === nome)).filter((x): x is Atividade => !!x)
     : [];
   const outras = lista.filter(x => !sequencia.includes(x));
@@ -357,6 +406,7 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
           <Text style={[t.section, s.flex]} numberOfLines={2}>{nomeAtv(data, aberta.atividade_id)}</Text>
         </View>
         <Text style={t.caption}>Iniciada às {horaBR(aberta.inicio)}{aberta.pausas.length ? ` · pausas ${fmtDur(pausaSeg(aberta, now))}` : ''}</Text>
+        {ciclo && setores[setores.length - 1] ? <View style={s.row}><StatusPill label={`Setor: ${setores[setores.length - 1]}`} tone="accent" /></View> : null}
         <Text style={[s.clock, { color: pausada ? colors.warning : colors.accentText }]}>{fmtCrono(duracaoEtapa(aberta, now))}</Text>
         <View style={s.twoCol}>
           <Button title={pausada ? 'Retomar' : 'Pausar'} icon={pausada ? PlayIcon : TimerIcon} variant="secondary" style={s.flex} onPress={() => (pausada ? ops.retomar(a.id) : ops.pausar(a.id))} />
@@ -372,9 +422,10 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
         <Text style={t.label}>Sequência do atendimento (as intermediárias são opcionais)</Text>
         <ActivityPicker atividades={sequencia} onPick={pick} destaque={aberta ? undefined : proxima} feitas={feitas} />
         {atalhos.length ? <><Text style={t.label}>Pausas e correções</Text><ActivityPicker atividades={atalhos} onPick={pick} feitas={feitas} /></> : null}
-        {verTodas ? <><Text style={t.label}>Outras atividades do setor</Text><ActivityPicker atividades={restantes} onPick={pick} feitas={feitas} /></> : null}
+        {verTodas ? (ciclo ? <PorSetor lista={restantes} onPick={pick} feitas={feitas} />
+          : <><Text style={t.label}>Outras atividades do setor</Text><ActivityPicker atividades={restantes} onPick={pick} feitas={feitas} /></>) : null}
         {restantes.length ? <Button title={verTodas ? 'Ocultar outras atividades' : `Mostrar outras atividades (${restantes.length})`} variant="ghost" size="sm" style={s.alignStart} onPress={() => setVerTodas(v => !v)} /> : null}
-      </> : <ActivityPicker atividades={lista} onPick={pick} feitas={feitas} />}
+      </> : ciclo ? <PorSetor lista={lista} onPick={pick} feitas={feitas} /> : <ActivityPicker atividades={lista} onPick={pick} feitas={feitas} />}
     </>}
 
     {a.etapas.length > 0 && <>
@@ -388,6 +439,7 @@ export function AtendimentoScreen({ data, nav, coletaId, atendimentoId }: { data
               <Text style={[t.caption, s.mono]}>
                 {e.inicio ? `${horaBR(e.inicio)} até ${e.fim ? horaBR(e.fim) : 'agora'}` : 'Sem horário (importado)'}
                 {e.pausas.length ? ` · pausas ${fmtDur(pausaSeg(e, now))}` : ''}
+                {ciclo && setores[i] ? ` · ${setores[i]}` : ''}
               </Text>
             </View>
             <Text style={s.clockSmall}>{fmtCrono(duracaoEtapa(e, now))}</Text>
@@ -448,8 +500,8 @@ const valoresVolume = (a: Atendimento) => {
 };
 
 type ColetaForm = { data: string; setor: string; funcao: string; turno: string; demanda: string; auditor: string };
-/** Nova coleta: o auditor já vem com o usuário logado (dá para editar). */
-const novaColetaForm = (auditor: string, setores: string[]): ColetaForm => ({ data: hoje(), setor: setores[0] ?? '', funcao: '', turno: TURNOS[0], demanda: DEMANDAS[1], auditor });
+/** Nova coleta: o auditor já vem com o usuário logado (dá para editar); o padrão é o ciclo completo, sem escolher setor. */
+const novaColetaForm = (auditor: string): ColetaForm => ({ data: hoje(), setor: COLETA_TODOS_SETORES, funcao: '', turno: TURNOS[0], demanda: DEMANDAS[1], auditor });
 
 function ColetaSheet({ title, form, setForm, onClose, onSave, setores, tipo }: { title: string; form: ColetaForm; setForm: (f: ColetaForm) => void; onClose: () => void; onSave: () => void; setores: string[]; tipo: TipoOperacao }) {
   const { s, t } = useLook();
@@ -458,13 +510,32 @@ function ColetaSheet({ title, form, setForm, onClose, onSave, setores, tipo }: {
     <Sheet title={title} onClose={onClose}
       footer={<View style={s.twoCol}><Button title="Cancelar" variant="secondary" style={s.flex} onPress={onClose} /><Button title="Salvar" icon={CheckIcon} style={s.flex} onPress={onSave} /></View>}>
       <Field label="Data" icon={CalendarBlankIcon} helper="Formato AAAA-MM-DD" value={form.data} onChangeText={set('data')} />
-      <View style={s.group}><Text style={t.label}>Setor</Text><ChoiceChips value={form.setor} options={form.setor && !setores.includes(form.setor) ? [form.setor, ...setores] : setores} onChange={set('setor')} /></View>
+      <View style={s.group}>
+        <Text style={t.label}>Setor</Text>
+        <ChoiceChips value={form.setor} options={[COLETA_TODOS_SETORES, ...(form.setor && form.setor !== COLETA_TODOS_SETORES && !setores.includes(form.setor) ? [form.setor] : []), ...setores]} onChange={set('setor')} />
+        <Text style={t.caption}>{coletaDoCiclo(form)
+          ? 'Ciclo completo: aparecem todas as atividades cadastradas da filial, e o setor de cada registro é escolhido sozinho pela atividade cronometrada.'
+          : 'Só as atividades deste setor (e as que valem para todos).'}</Text>
+      </View>
       <Field label="Função observada" value={form.funcao} onChangeText={set('funcao')} placeholder={tipo === 'cd' ? 'Conferente, separador, operador de empilhadeira' : 'Frentista, caixa, gerente'} />
       <View style={s.group}><Text style={t.label}>Turno</Text><ChoiceChips value={form.turno} options={[...TURNOS]} onChange={set('turno')} /></View>
       <View style={s.group}><Text style={t.label}>Condição de demanda</Text><ChoiceChips value={form.demanda} options={[...DEMANDAS]} onChange={set('demanda')} /></View>
       <Field label="Auditor" value={form.auditor} onChangeText={set('auditor')} placeholder="Nome de quem está cronometrando" />
     </Sheet>
   );
+}
+
+/** Atividades agrupadas por setor (coleta de todos os setores): o setor da etapa é o do grupo tocado. */
+function PorSetor({ lista, onPick, feitas }: { lista: Atividade[]; onPick: (a: Atividade) => void; feitas: string[] }) {
+  const { s, t } = useLook();
+  return <>
+    {porSetor(lista).map(([setor, xs]) => (
+      <View key={setor || 'todos'} style={s.group}>
+        <Text style={t.label}>{setor || 'Pausas e correções (qualquer setor)'}</Text>
+        <ActivityPicker atividades={xs} onPick={onPick} feitas={feitas} />
+      </View>
+    ))}
+  </>;
 }
 
 export function FilialPicker({ data, atual, onClose, onPick, incluirTodas = false }: { data: TmData; atual: string; onClose: () => void; onPick: (id: string) => void; incluirTodas?: boolean }) {

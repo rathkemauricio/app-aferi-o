@@ -1,7 +1,36 @@
-import { type Atendimento, ciclosMinimos, CLASSES, type Coleta, DEMANDAS, metaColetas, pausaSeg, TURNOS } from './model';
-import type { TmData } from './store';
+import { type Atendimento, ciclosMinimos, CLASSES, type Coleta, coletaDoCiclo, DEMANDAS, metaColetas, pausaSeg, TURNOS } from './model';
+import { sequenciaDe, tipoDe, type TmData } from './store';
 
 export type Filtro = { filialId: string; setor: string; demanda: string };
+
+/**
+ * Setor de cada etapa do registro. Coleta de um setor: o setor da coleta. Coleta de todos os setores (ciclo completo):
+ * o setor da atividade cronometrada; as que valem para todos (Espera, Retrabalho) ficam com o da etapa vizinha.
+ */
+export function setoresDasEtapas(d: Pick<TmData, 'atividades'>, c: Pick<Coleta, 'setor'>, a: Pick<Atendimento, 'etapas'>): string[] {
+  if (!coletaDoCiclo(c)) return a.etapas.map(() => c.setor);
+  const proprio = a.etapas.map(e => d.atividades.find(x => x.id === e.atividade_id)?.setor ?? '');
+  return proprio.map((se, i) => se || [...proprio.slice(0, i)].reverse().find(Boolean) || proprio.slice(i + 1).find(Boolean) || '');
+}
+
+/**
+ * Coletas e registros finalizados que entram no filtro. Com um setor escolhido, as coletas de todos os setores entram
+ * só com as etapas daquele setor (e só se tiverem alguma).
+ */
+export function recorte(d: TmData, f: Filtro) {
+  const base = d.coletas.filter(c => (!f.filialId || c.filial_id === f.filialId) && (!f.demanda || c.demanda === f.demanda) && (!f.setor || c.setor === f.setor || coletaDoCiclo(c)));
+  const porId = new Map(base.map(c => [c.id, c]));
+  const ats = d.atendimentos.filter(a => porId.has(a.coleta_id)).flatMap(a => {
+    const c = porId.get(a.coleta_id)!;
+    if (!f.setor || !coletaDoCiclo(c)) return [a];
+    const setores = setoresDasEtapas(d, c, a);
+    const etapas = a.etapas.filter((_, i) => setores[i] === f.setor);
+    if (!etapas.length) return [];
+    return [etapas.length === a.etapas.length ? a : { ...a, etapas, duracao_s: etapas.reduce((s, e) => s + e.duracao_s, 0) }];
+  });
+  const usadas = new Set(ats.map(a => a.coleta_id));
+  return { cs: base.filter(c => !f.setor || !coletaDoCiclo(c) || usadas.has(c.id)), ats };
+}
 
 export type IndicadorAtividade = {
   id: string;
@@ -14,8 +43,7 @@ export type IndicadorAtividade = {
   situacao: 'amostra' | 'sem-ref' | 'acima' | 'dentro';
 };
 
-export const coletasFiltradas = (d: TmData, f: Filtro) =>
-  d.coletas.filter(c => (!f.filialId || c.filial_id === f.filialId) && (!f.setor || c.setor === f.setor) && (!f.demanda || c.demanda === f.demanda));
+export const coletasFiltradas = (d: TmData, f: Filtro) => recorte(d, f).cs;
 
 /** Atendimentos finalizados das coletas informadas. */
 export function atendimentosDe(d: TmData, cs: Coleta[]) {
@@ -24,8 +52,7 @@ export function atendimentosDe(d: TmData, cs: Coleta[]) {
 }
 
 export function indicadores(d: TmData, f: Filtro) {
-  const cs = coletasFiltradas(d, f);
-  const ats = atendimentosDe(d, cs);
+  const { cs, ats } = recorte(d, f);
   const etapas = ats.flatMap(a => a.etapas);
   const byId = new Map(d.atividades.map(a => [a.id, a]));
 
@@ -88,13 +115,22 @@ export function progressoFilial(d: TmData, filialId: string) {
   const demandas = DEMANDAS.map(x => [x, cs.filter(c => c.demanda === x).length] as const);
   const ind = indicadores(d, { filialId, setor: '', demanda: '' });
   const comAmostra = ind.atividades.filter(a => a.ciclos >= minimo).length;
+  // Ciclo completo: todas as atividades cadastradas para o tipo da unidade (posto ou CD), de todos os setores.
+  const doCiclo = sequenciaDe(d, tipoDe(d, filialId));
+  const medidas = new Set(ind.atividades.map(a => a.id));
+  const ciclo = { cadastradas: doCiclo.length, cronometradas: doCiclo.filter(a => medidas.has(a.id)).length };
+  const auditores = [...new Set(cs.map(c => String(c.auditor ?? '').trim()).filter(Boolean))];
   const faltas = [
     ...(cs.length < meta ? [`${meta - cs.length} coleta(s) para a meta de ${meta}`] : []),
     ...turnos.filter(([, n]) => !n).map(([t]) => `turno ${t.toLowerCase()} sem coleta`),
     ...demandas.filter(([, n]) => !n).map(([x]) => `demanda "${x.toLowerCase()}" sem coleta`),
     ...(ind.atividades.length && comAmostra < ind.atividades.length ? [`${ind.atividades.length - comAmostra} atividade(s) com menos de ${minimo} ciclos`] : []),
   ];
-  return { coletas: cs.length, meta, minimo, turnos, demandas, atividades: ind.atividades.length, comAmostra, atendimentos: ind.atendimentos, pct: Math.min(1, cs.length / meta), completo: !faltas.length, faltas };
+  return {
+    coletas: cs.length, meta, minimo, turnos, demandas, atividades: ind.atividades.length, comAmostra, atendimentos: ind.atendimentos,
+    registros: ind.atendimentos + ind.isoladas, ciclo, auditores, ultimaData: cs.reduce((m, c) => (c.data > m ? c.data : m), ''),
+    pct: Math.min(1, cs.length / meta), completo: !faltas.length, faltas,
+  };
 }
 
 /** Média observada de uma atividade (por nome normalizado) numa filial, para o dimensionamento. */
@@ -113,9 +149,10 @@ export function csvEtapas(d: TmData, cs: Coleta[]) {
   const porColeta = new Map(cs.map(c => [c.id, c]));
   d.atendimentos.filter(a => porColeta.has(a.coleta_id)).forEach((a: Atendimento) => {
     const c = porColeta.get(a.coleta_id)!;
-    a.etapas.forEach(e => {
+    const setores = setoresDasEtapas(d, c, a);
+    a.etapas.forEach((e, i) => {
       const x = atv(e.atividade_id);
-      rows.push([c.data, filial(c.filial_id), c.setor, c.funcao, c.turno, c.demanda, c.auditor, a.id, a.tipo, d.veiculos.find(v => v.id === a.veiculo)?.nome ?? '', a.funcionario, e.ordem, x?.nome ?? '', x?.classe ?? '',
+      rows.push([c.data, filial(c.filial_id), setores[i] || c.setor, c.funcao, c.turno, c.demanda, c.auditor, a.id, a.tipo, d.veiculos.find(v => v.id === a.veiculo)?.nome ?? '', a.funcionario, e.ordem, x?.nome ?? '', x?.classe ?? '',
         e.inicio ?? '', e.fim ?? '', e.duracao_s.toFixed(1), pausaSeg(e).toFixed(1), a.duracao_s.toFixed(1), a.volume ?? '', a.volume_faixa ?? '', a.deslocamentos ?? '', a.origem, a.obs]);
     });
   });
@@ -167,11 +204,11 @@ function somar(xs: Omit<Ocio, 'pct' | 'minPorHora'>[]): Ocio {
  * Devolve o total e a divisão por turno, demanda e setor.
  */
 export function ociosidade(d: TmData, f: Filtro) {
-  const cs = coletasFiltradas(d, f);
+  const { cs, ats } = recorte(d, f);
   const classe = new Map(d.atividades.map(a => [a.id, a.classe]));
   const porColeta = new Map(cs.map(c => [c.id, c]));
   const grupos = new Map<string, Atendimento[]>();
-  d.atendimentos.filter(a => porColeta.has(a.coleta_id)).forEach(a => {
+  ats.forEach(a => {
     const k = `${a.coleta_id}|${(a.funcionario || '').trim().toLowerCase()}`;
     grupos.set(k, [...(grupos.get(k) ?? []), a]);
   });

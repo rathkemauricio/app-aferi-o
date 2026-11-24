@@ -47,6 +47,7 @@ export const XIcon: Icon = require('phosphor-react-native/src/icons/X').XIcon;
 export const XCircleIcon: Icon = require('phosphor-react-native/src/icons/XCircle').XCircleIcon;
 export const CalendarBlankIcon: Icon = require('phosphor-react-native/src/icons/CalendarBlank').CalendarBlankIcon;
 export const ArrowRightIcon: Icon = require('phosphor-react-native/src/icons/ArrowRight').ArrowRightIcon;
+export const SpinnerIcon: Icon = require('phosphor-react-native/src/icons/Spinner').SpinnerIcon;
 export const MoonIcon: Icon = require('phosphor-react-native/src/icons/Moon').MoonIcon;
 export const SquaresFourIcon: Icon = require('phosphor-react-native/src/icons/SquaresFour').SquaresFourIcon;
 export const SunIcon: Icon = require('phosphor-react-native/src/icons/Sun').SunIcon;
