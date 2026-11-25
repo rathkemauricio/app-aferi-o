@@ -19,7 +19,9 @@ export type Rodada = 1 | 2 | 3;
 export type Produto = { codigo: string; eans: string[]; nome: string; categoria: string; classe: Classe; saldo: number; custo: number | null; venda: number | null };
 
 export type Inventario = SyncRow & {
-  codigo: string; filial_id: string; tipo: 'completo' | 'parcial'; status: 'carregando' | 'aberto' | 'encerrado';
+  codigo: string;
+  /** Nome dado por quem abriu (opcional); o código continua sendo a identificação. */
+  nome?: string; filial_id: string; tipo: 'completo' | 'parcial'; status: 'carregando' | 'aberto' | 'encerrado';
   fonte: 'arquivo' | 'petros'; arquivo: string; itens_total: number;
   erp_em: string | null; encerrado_em: string | null; enviado_erp_em: string | null;
   /** PDF com o preço de venda (o `arquivo` é o de custo). */
@@ -60,6 +62,9 @@ export type Pausa = { de: string; ate: string | null; por?: string | null };
  * Início da contagem: o horário de impressão que vem no PDF de saldos (o momento do estoque congelado);
  * sem ele, quando a carga entrou. Vale para todas as contagens do inventário.
  */
+/** Código e nome do inventário para títulos e relatórios ("INV-2026-005 · Balanço de novembro"). */
+export const rotuloInv = (inv: Pick<Inventario, 'codigo' | 'nome'>) => (inv.nome?.trim() ? `${inv.codigo} · ${inv.nome.trim()}` : inv.codigo);
+
 export const inicioContagem = (inv: Pick<Inventario, 'saldo_em' | 'erp_em'>) => inv.saldo_em ?? inv.erp_em ?? null;
 
 /** Tempo pausado em ms; a pausa aberta conta até `fim` (agora, ou o encerramento do inventário). */

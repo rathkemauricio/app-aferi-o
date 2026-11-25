@@ -20,7 +20,7 @@ import { Carregando } from '../../ui/carregando';
 import { useVoltarSemBotao } from '../../ui/voltar';
 import {
   bateBusca, categoriasDe, categoriasDoArquivo, podeSobra, rotuloSemSaldo, normalizar, progressoPorCategoria, type ClasseContagem, type Contagem, concluida, detalheContagem, type LinhaDetalhe, porCategoria, escopo, finalizarRodada, fmtQ, type Inventario, itensDaRodada, motivo, type Produto,
-  percentualContagem, percentualGeral, proximoCodigo, quantidades, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
+  percentualContagem, percentualGeral, proximoCodigo, quantidades, rotuloInv, reabrir, relatorio, resultadoCsv, resumoRodada, type Rodada, ROTULO_CLASSE, ROTULO_RODADA,
   rodadaAtual, situacaoNaRodada, type StatusRodada, uid, alternarPausa, fmtDuracao, inicioContagem, pausaAberta, tempoPausado,
 } from './model';
 import {
@@ -343,7 +343,7 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
           : <Pilula texto={conts.some(x => x.rodadas.includes('andamento') && !x.pausada) ? 'Em andamento' : 'Aberto'} tom="alerta" icone={HourglassIcon} />}
       </View>
       <View style={k.linha}>
-        <Text style={[k.mono, { color: c.textMuted, flex: 1 }]}>{inv.codigo}</Text>
+        <Text style={[k.mono, { color: c.textMuted, flex: 1 }]} numberOfLines={1}>{inv.codigo}{inv.nome?.trim() ? <Text style={[k.b, { color: c.text }]}>{`  ${inv.nome.trim()}`}</Text> : null}</Text>
         {inv.origem === 'filial' && !filialConta ? <Pilula texto="Aberto pela filial" tom="neutro" icone={StorefrontIcon} /> : null}
       </View>
       {inv.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={1}>Aberto por <Text style={[k.b, { color: c.text }]}>{inv.criado_por_nome}</Text>{inv.criado_em ? ` · ${dataHora(inv.criado_em)}` : ''}</Text> : null}
@@ -369,6 +369,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [fonte, setFonte] = useState<'arquivo' | 'petros'>('arquivo');
   const [arquivo, setArquivo] = useState<ArquivoErp | null>(null);
   const [arquivoVenda, setArquivoVenda] = useState<ArquivoErp | null>(null);
+  const [nomeInv, setNomeInv] = useState('');
   const [enviando, setEnviando] = useState(false);
   useEffect(() => { void statusErp().then(r => setPetros(r.petros)).catch(() => undefined); }, []);
   // A filial pode ter mais de um inventário aberto ao mesmo tempo.
@@ -385,7 +386,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     setEnviando(true);
     const id = uid('inv');
     try {
-      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV'), filial_id: filialId, tipo, status: comSaldos ? 'carregando' : 'aberto', fonte, arquivo: arquivo?.nome ?? '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
+      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV'), filial_id: filialId, nome: nomeInv.trim().slice(0, 80), tipo, status: comSaldos ? 'carregando' : 'aberto', fonte, arquivo: arquivo?.nome ?? '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
       await inventariosCol.flush();
       if (comSaldos) {
         const r = await carregarErp(id, fonte, arquivo ?? undefined, arquivoVenda ?? undefined);
@@ -424,6 +425,9 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
             </View>
           </Cartao>
         ) : null}
+        <Rotulo>Nome do inventário (opcional)</Rotulo>
+        <Field value={nomeInv} onChangeText={setNomeInv} placeholder="Ex.: Balanço de novembro" maxLength={80} />
+        <Text style={[k.cap, { color: c.textMuted }]}>O código ({proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV')}) continua sendo a identificação; o nome aparece junto nas telas e nos relatórios.</Text>
         <Rotulo>Tipo de inventário</Rotulo>
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         <Cartao>
@@ -600,6 +604,8 @@ function BasesBarras({ dados, nav, destaque }: { dados: Dados; nav: Nav; destaqu
 function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; nav: Nav }) {
   const c = useCores();
   const [tipo, setTipo] = useState(inv.tipo);
+  const [nomeInv, setNomeInv] = useState(inv.nome ?? '');
+  const mudouNome = nomeInv.trim() !== (inv.nome ?? '').trim();
   const [custo, setCusto] = useState<ArquivoErp | null>(null);
   const [venda, setVenda] = useState<ArquivoErp | null>(null);
   const [modo, setModo] = useState<'adicionar' | 'substituir'>(inv.erp_em ? 'adicionar' : 'substituir');
@@ -607,7 +613,7 @@ function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; 
   const salvar = async () => {
     setSalvando(true);
     try {
-      if (tipo !== inv.tipo) { inventariosCol.put({ ...inv, tipo }); await inventariosCol.flush(); }
+      if (tipo !== inv.tipo || mudouNome) { inventariosCol.put({ ...inv, tipo, nome: nomeInv.trim().slice(0, 80) }); await inventariosCol.flush(); }
       if (inv.fonte === 'arquivo' && (custo || venda)) {
         const r = await carregarErp(inv.id, 'arquivo', custo ?? undefined, venda ?? undefined, modo);
         await inventariosCol.sync();
@@ -618,11 +624,13 @@ function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; 
   };
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={`Editar ${inv.codigo}`} sub={nomeFilial(dados, inv.filial_id)} onVoltar={nav.voltar} />
+      <Topo titulo={`Editar ${rotuloInv(inv)}`} sub={nomeFilial(dados, inv.filial_id)} onVoltar={nav.voltar} />
       <Corpo rodape={<>
-        <Botao titulo={salvando ? 'Salvando…' : 'Salvar alterações'} onPress={() => void salvar()} desabilitado={salvando || (tipo === inv.tipo && !custo && !venda)} />
+        <Botao titulo={salvando ? 'Salvando…' : 'Salvar alterações'} onPress={() => void salvar()} desabilitado={salvando || (tipo === inv.tipo && !mudouNome && !custo && !venda)} />
         <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={salvando} />
       </>}>
+        <Rotulo>{`Nome do inventário (código ${inv.codigo})`}</Rotulo>
+        <Field value={nomeInv} onChangeText={setNomeInv} placeholder="Ex.: Balanço de novembro" maxLength={80} />
         <Rotulo>Tipo de inventário</Rotulo>
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         {inv.fonte === 'arquivo' ? <>
@@ -686,7 +694,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
 
   if (inv.status === 'carregando') return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={inv.codigo} sub={sub} onVoltar={nav.voltar} />
+      <Topo titulo={rotuloInv(inv)} sub={sub} onVoltar={nav.voltar} />
       <Corpo rodape={<Botao titulo={recarregando ? 'Carregando…' : inv.fonte === 'arquivo' ? 'Carregar os PDFs' : 'Carregar do Petros'} onPress={() => void recarregar()} desabilitado={recarregando || (inv.fonte === 'arquivo' && !arqCusto && !arqVenda)} />}>
         <EmptyState icon={PackageIcon} title="Saldos do Petros ainda não carregados" text="A carga dos produtos não terminou. Carregue de novo para começar as contagens." />
         {inv.fonte === 'arquivo' ? <ArquivosErp custo={arqCusto} setCusto={setArqCusto} venda={arqVenda} setVenda={setArqVenda} /> : null}
@@ -696,7 +704,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={inv.codigo} sub={inv.erp_em ? `${sub} · saldo ${dataHora(inv.saldo_em ?? inv.erp_em)}` : `${sub} · sem saldos carregados`} onVoltar={nav.voltar} />
+      <Topo titulo={rotuloInv(inv)} sub={inv.erp_em ? `${sub} · saldo ${dataHora(inv.saldo_em ?? inv.erp_em)}` : `${sub} · sem saldos carregados`} onVoltar={nav.voltar} />
       <Corpo rodape={enc
         ? <><Botao titulo="Ver relatório" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })} /><Botao titulo="Reabrir inventário" tipo="s" onPress={() => {
           confirmAction('Reabrir inventário?', 'As contagens voltam a aceitar leituras.', 'Reabrir', () => reabrirInventario(inv));
@@ -753,6 +761,18 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
             </View>
           </Cartao>
         ) : null}
+        {!enc && inv.fonte === 'arquivo' ? (
+          <Cartao onPress={() => nav.ir({ n: 'editarInv', id: inv.id })}>
+            <View style={k.linha}>
+              <UploadSimpleIcon size={22} color={c.text} />
+              <View style={{ flex: 1 }}>
+                <Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>{inv.erp_em ? 'Adicionar PDFs de saldos' : 'Carregar PDFs de saldos'}</Text>
+                <Text style={[k.cap, { color: c.textMuted }]}>{inv.erp_em ? 'Soma os itens de outro PDF a este inventário (o item de mesmo código é atualizado); o que já foi coletado continua. Aqui também se muda o nome e o tipo.' : 'Carregue os saldos agora ou ao abrir a primeira contagem. Aqui também se muda o nome e o tipo.'}</Text>
+              </View>
+              <CaretRightIcon size={18} color={c.textMuted} />
+            </View>
+          </Cartao>
+        ) : null}
         {inv.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]}>Inventário aberto por <Text style={[k.b, { color: c.text }]}>{inv.criado_por_nome}</Text>{inv.criado_em ? ` em ${dataHora(inv.criado_em)}` : ''}.</Text> : null}
         {!inv.erp_em ? <Text style={[k.cap, { color: c.textMuted }]}>Inventário aberto sem arquivo: os saldos do Petros são carregados ao abrir a primeira contagem.</Text> : <Text style={[k.cap, { color: c.textMuted }]}>Saldo do Petros de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo ||(inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>}
       </Corpo>
@@ -787,7 +807,7 @@ function CarregarSaldos({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   };
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo="Nova contagem" sub={`${inv.codigo} · ${filialCurta(dados, inv.filial_id)} · saldos do Petros`} onVoltar={nav.voltar} />
+      <Topo titulo="Nova contagem" sub={`${rotuloInv(inv)} · ${filialCurta(dados, inv.filial_id)} · saldos do Petros`} onVoltar={nav.voltar} />
       <Corpo rodape={<>
         <Botao titulo={carregando ? 'Carregando os saldos…' : 'Carregar saldos e continuar'} onPress={() => void carregar()} desabilitado={carregando || (fonte === 'arquivo' && !custo && !venda)} />
         <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={carregando} />
@@ -859,7 +879,7 @@ function NovaContagemForm({ inv, dados, nav, editar }: { inv: Inventario; dados:
   const opcoes = (parcial ? [] : [{ id: 'completa' as ClasseContagem, titulo: 'Completa' }]).concat([{ id: 'pista', titulo: 'Pista' }, { id: 'conveniencia', titulo: 'Conveniência' }]);
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={editar ? 'Editar contagem' : 'Nova contagem'} sub={`${inv.codigo} · ${filialCurta(dados, inv.filial_id)} · ${parcial ? 'Parcial' : 'Completo'}`} onVoltar={nav.voltar} />
+      <Topo titulo={editar ? 'Editar contagem' : 'Nova contagem'} sub={`${rotuloInv(inv)} · ${filialCurta(dados, inv.filial_id)} · ${parcial ? 'Parcial' : 'Completo'}`} onVoltar={nav.voltar} />
       <Corpo rodape={<>
         <Text style={[k.cap, { color: c.textMuted, textAlign: 'center' }]}>{todas ? 'Todas as categorias' : `${cats.length} categoria${cats.length === 1 ? '' : 's'} selecionada${cats.length === 1 ? '' : 's'}`} · {itens.toLocaleString('pt-BR')} itens com saldo</Text>
         <Botao titulo={editar ? 'Salvar alterações' : 'Criar contagem'} onPress={criar} desabilitado={!produtos || !itens} />
@@ -1002,7 +1022,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   const contados = useMemo(() => lista.filter(p => (q.get(p.codigo)?.[r - 1] ?? null) !== null).length, [lista, q, r]);
   // Só quem está coletando (quem só abriu para ver, ou o dono em visita, não aparece como coletando).
   useAtividade(produtos && !ehSomenteLeitura() && (coletavel || recentes.length > 0) ? {
-    modulo: 'coleta', titulo: `${inv.codigo} · ${ct.nome}`, filial: nomeFilial(dados, inv.filial_id),
+    modulo: 'coleta', titulo: `${rotuloInv(inv)} · ${ct.nome}`, filial: nomeFilial(dados, inv.filial_id),
     detalhe: `${ct.pausada ? 'Pausada · ' : ativa ? '' : 'Rodada parada · '}Rodada ${r} · ${contados.toLocaleString('pt-BR')} de ${lista.length.toLocaleString('pt-BR')} itens contados · ${Math.round(prog * 100)}%`,
     pct: Math.min(100, prog * 100), recentes, abrir: `/coleta?abrir=${encodeURIComponent(ct.id)}`,
   } : null);
@@ -1050,7 +1070,7 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   return (<SaldoVisivel.Provider value={verSaldo}>
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo={ct.nome} cor={tela.aba === 'coleta' && ativa && simples ? P.verde : undefined}
-        sub={tela.aba === 'coleta' ? `${r}ª contagem · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}` : `${inv.codigo} · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}`}
+        sub={tela.aba === 'coleta' ? `${r}ª contagem · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}` : `${rotuloInv(inv)} · ${filialCurta(dados, inv.filial_id)}${ct.pausada ? ' · PAUSADA' : ''}`}
         onVoltar={nav.voltar} direita={<View style={k.linha}>
         {tela.aba === 'coleta' ? <Anel pct={progVisivel} size={46} claro /> : null}
         {podePausar ? (
@@ -1233,7 +1253,7 @@ function Detalhamento({ ct, produtos, q, inv, filial }: { ct: Contagem; produtos
     const divergentes: LinhaDivergente[] = [
       ...d.faltas.map(l => ({ ...l, situacao: 'Falta' })), ...d.sobras.map(l => ({ ...l, situacao: 'Sobra' })), ...d.naoColetados.map(l => ({ ...l, situacao: 'Não coletado' })),
     ];
-    const sub = `${filial}${ct.cega ? ' · Contagem cega' : ''}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · Inventário ${inv.codigo} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${textoTempo(ct, inv, Date.now(), true)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
+    const sub = `${filial}${ct.cega ? ' · Contagem cega' : ''}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · Inventário ${rotuloInv(inv)} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${textoTempo(ct, inv, Date.now(), true)} · Emitido em ${new Date().toLocaleString('pt-BR')}${usuario ? ` · Responsável: ${usuario}` : ''}`;
     const html = htmlDivergencias({ titulo: `Itens divergentes · ${ct.nome}`, sub, divergentes, nota: 'Vale a última quantidade coletada de cada item; item não coletado entra como falta.' });
     try { await imprimirHtml(html, `Divergências ${ct.nome}`, true); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
@@ -2038,7 +2058,7 @@ function FinalizarRodada({ c: ct, inv, r, nav }: { c: Contagem; inv: Inventario;
   const cor = (t: Tom) => (t === 'ok' ? [c.successSoft, c.success] : t === 'erro' ? [c.dangerSoft, c.danger] : t === 'alerta' ? [c.warningSoft, c.warning] : [c.accentSoft, c.accent]);
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={`Finalizar contagem ${r}`} sub={`${ct.nome} · ${inv.codigo}`} onVoltar={nav.voltar} />
+      <Topo titulo={`Finalizar contagem ${r}`} sub={`${ct.nome} · ${rotuloInv(inv)}`} onVoltar={nav.voltar} />
       <Corpo rodape={<>
         <Botao titulo={`Finalizar contagem ${r}`} onPress={finalizar} desabilitado={!produtos} />
         <Text style={[k.cap, { color: c.textMuted, textAlign: 'center' }]}>{ct.cega ? 'Contagem cega: quando terminar, as sobras e as faltas aparecem no Detalhamento e ela não pode ser reaberta.' : 'Pode ser reaberta depois. Os itens já coletados são mantidos.'}</Text>
@@ -2101,7 +2121,7 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
     // Mesmo formato do módulo Inventários: resumo, categorias, contagens e, numa folha separada no fim, o
     // detalhamento item a item das faltas e sobras — que também pode ser impresso sozinho.
     const html = htmlDoInventario({ inv, filialNome: filial, usuario, produtos, contagens: dados.contagens, coletas: col.list, contagem: soDela, soDivergencias });
-    try { await imprimirHtml(html, soDivergencias ? `Divergências ${inv.codigo}` : `Inventário ${inv.codigo}`, true); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
+    try { await imprimirHtml(html, soDivergencias ? `Divergências ${rotuloInv(inv)}` : `Inventário ${rotuloInv(inv)}`, true); } catch (e) { notify('Não foi possível gerar o PDF', e instanceof Error ? e.message : ''); }
   };
 
   const tile = (n: number, t: string, cores: [string, string]) => (
@@ -2110,7 +2130,7 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={soDela ? `Relatório · ${soDela.nome}` : 'Relatório geral do inventário'} sub={`${inv.codigo} · ${filialCurta(dados, inv.filial_id)} · ${soDela ? 'só esta contagem' : enc ? 'Finalizado' : 'Parcial'}`} onVoltar={nav.voltar} />
+      <Topo titulo={soDela ? `Relatório · ${soDela.nome}` : 'Relatório geral do inventário'} sub={`${rotuloInv(inv)} · ${filialCurta(dados, inv.filial_id)} · ${soDela ? 'só esta contagem' : enc ? 'Finalizado' : 'Parcial'}`} onVoltar={nav.voltar} />
       <Corpo rodape={<>
         <Botao titulo={divergentes ? 'Ocultar itens divergentes' : 'Ver itens divergentes'} onPress={() => nav.trocar({ n: 'relatorio', inv: inv.id, divergentes: !divergentes, contagem: soDela?.id })} desabilitado={!rel} />
         <Botao titulo="Voltar ao início" tipo="s" onPress={nav.inicio} />

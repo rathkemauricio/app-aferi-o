@@ -1,5 +1,5 @@
 import { dataBR, esc } from '../../lib/util';
-import { type Coleta, type Consolidado, type Contagem, fmtDuracao, fmtQ, inicioContagem, type Inventario, percentualGeral, porCategoria, type Produto, relatorio, tempoPausado } from './model';
+import { type Coleta, type Consolidado, type Contagem, fmtDuracao, fmtQ, inicioContagem, type Inventario, percentualGeral, porCategoria, type Produto, relatorio, rotuloInv, tempoPausado } from './model';
 
 // Impressão (PDF) do inventário e das contagens — o mesmo documento no painel web e no app.
 // Letras maiores que as do relatório antigo (os itens saíam pequenos demais) e o detalhamento das faltas e
@@ -142,10 +142,10 @@ export function htmlDoInventario(o: {
   const rs = (v: number, tem: boolean) => (tem ? brl(v) : '—');
   const corT = (v: number) => cor(v).trim();
   const t = cons.total;
-  const titulo = `${soDela ? `Relatório da contagem ${soDela.nome}${soDela.cega ? ' (contagem cega)' : ''}` : 'Relatório do inventário'} · ${inv.codigo}`;
+  const titulo = `${soDela ? `Relatório da contagem ${soDela.nome}${soDela.cega ? ' (contagem cega)' : ''}` : 'Relatório do inventário'} · ${rotuloInv(inv)}`;
   const sub = `${o.filialNome}${inv.origem === 'filial' ? ' · Contagem aberta pela filial' : ''}${inv.criado_por_nome ? ` · Aberto por ${inv.criado_por_nome}` : ''} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'} · Saldo do Petros de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${enc ? `Finalizado em ${dataBR(inv.encerrado_em)}` : 'Em andamento (parcial)'} · Emitido em ${new Date().toLocaleString('pt-BR')}${o.usuario ? ` · Responsável: ${o.usuario}` : ''}`;
   const divergentes: LinhaDivergente[] = problemas.map(l => ({ ...l, situacao: l.status === 'divergente' ? (l.diferenca < 0 ? 'Falta' : 'Sobra') : 'Não encontrado', contagem: l.contagem }));
-  if (o.soDivergencias) return htmlDivergencias({ titulo: `Itens divergentes · ${soDela ? soDela.nome : 'inventário'} · ${inv.codigo}`, sub, divergentes });
+  if (o.soDivergencias) return htmlDivergencias({ titulo: `Itens divergentes · ${soDela ? soDela.nome : 'inventário'} · ${rotuloInv(inv)}`, sub, divergentes });
   return htmlRelatorioInventario({
     titulo, sub,
     resumo: [
