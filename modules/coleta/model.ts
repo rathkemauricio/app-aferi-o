@@ -294,11 +294,14 @@ export function percentualInventario(produtos: Produto[], contagens: Contagem[],
  * sistema de TODOS os itens carregados do arquivo. Itens ainda sem contagem entram como zero.
  */
 export function percentualGeral(produtos: Produto[], contagens: Contagem[], coletas: Coleta[]) {
+  // Só itens com saldo positivo no Petros (regra do usuário): o que se conta de item sem saldo (sobra) não entra.
   const rel = relatorio(produtos, contagens, coletas);
-  const doArquivo = produtos.filter(p => p.saldo !== 0);
-  const sistema = doArquivo.reduce((n, p) => n + Math.max(0, p.saldo), 0);
-  const contado = rel.linhas.reduce((n, l) => n + l.qtd, 0);
-  const coletados = new Set(rel.linhas.filter(l => l.coletado && l.produto.saldo !== 0).map(l => l.produto.codigo)).size;
+  const comSaldo = produtos.filter(p => p.saldo > 0);
+  const sistema = comSaldo.reduce((n, p) => n + p.saldo, 0);
+  const linhas = rel.linhas.filter(l => l.produto.saldo > 0);
+  const contado = linhas.reduce((n, l) => n + l.qtd, 0);
+  const coletados = new Set(linhas.filter(l => l.coletado).map(l => l.produto.codigo)).size;
+  const doArquivo = comSaldo;
   return { contado, sistema, itens: doArquivo.length, coletados, pct: fracao(contado, sistema) };
 }
 

@@ -153,7 +153,7 @@ export function htmlDoInventario(o: {
       ['Falta R$ (custo)', rs(t.custo.faltas, t.temCusto), 'neg'], ['Sobra R$ (custo)', rs(t.custo.sobras, t.temCusto), 'pos'], ['Resultado R$ (custo)', rs(t.custo.resultado, t.temCusto), corT(t.custo.resultado)],
       ['Falta R$ (venda)', rs(t.venda.faltas, t.temVenda), 'neg'], ['Sobra R$ (venda)', rs(t.venda.sobras, t.temVenda), 'pos'], ['Resultado R$ (venda)', rs(t.venda.resultado, t.temVenda), corT(t.venda.resultado)],
       [soDela ? 'Percentual da contagem (acurácia)' : 'Percentual contado (acurácia)', pct(t.acuracia)], ['Eficiência', pct(t.eficiencia)],
-      ...(geral ? [['Percentual geral do arquivo', `${fmtQ(Math.round(geral.pct * 1000) / 10)}%`], ['Itens do arquivo coletados', `${geral.coletados.toLocaleString('pt-BR')} de ${geral.itens.toLocaleString('pt-BR')}`]] as Metrica[] : []),
+      ...(geral ? [['Percentual geral (itens com saldo)', `${fmtQ(Math.round(geral.pct * 1000) / 10)}%`], ['Itens com saldo coletados', `${geral.coletados.toLocaleString('pt-BR')} de ${geral.itens.toLocaleString('pt-BR')}`]] as Metrica[] : []),
       ['Itens corretos', rel.corretos.toLocaleString('pt-BR')], ['Itens divergentes', rel.divergentes.toLocaleString('pt-BR')], ['Não encontrados', rel.naoEncontrados.toLocaleString('pt-BR')],
     ],
     categorias: cons.categorias, total: t,

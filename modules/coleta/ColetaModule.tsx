@@ -351,7 +351,7 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
       <Barra pct={enc ? 1 : prog?.pct ?? 0} />
       <Text style={[k.cap, { color: c.textMuted }]}>
         {enc ? (inv.enviado_erp_em ? `Enviado ao Petros em ${dataBR(inv.enviado_erp_em)}` : `Encerrado em ${dataBR(inv.encerrado_em)}`)
-          : !inv.erp_em ? `Sem arquivo · saldos carregados na primeira contagem` : prog ? `Geral ${Math.round(prog.pct * 100)}% · ${fmtQ(prog.contado)} de ${fmtQ(prog.sistema)} unidades do arquivo${nCont ? '' : ' · nenhuma contagem aberta'}` : 'Calculando…'}
+          : !inv.erp_em ? `Sem arquivo · saldos carregados na primeira contagem` : prog ? `Geral ${Math.round(prog.pct * 100)}% · ${fmtQ(prog.contado)} de ${fmtQ(prog.sistema)} unidades dos itens com saldo${nCont ? '' : ' · nenhuma contagem aberta'}` : 'Calculando…'}
       </Text>
     </Cartao>
   );
@@ -660,7 +660,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
   const [recarregando, setRecarregando] = useState(false);
   const contagens = useMemo(() => dados.contagens.filter(x => x.inventario_id === inv.id).sort((a, b) => (concluida(a) ? 1 : 0) - (concluida(b) ? 1 : 0)), [dados.contagens, inv.id]);
   // Só os itens das categorias das contagens abertas (não o arquivo inteiro).
-  // Percentual geral do arquivo: unidades contadas ÷ saldo de todos os itens carregados (cada contagem mostra o seu no cartão).
+  // Percentual geral: unidades contadas ÷ saldo, só dos itens com saldo positivo (cada contagem mostra o seu no cartão).
   const prog = useMemo(() => (produtos ? percentualGeral(produtos, contagens, col.list) : { contado: 0, sistema: 0, itens: 0, coletados: 0, pct: 0 }), [produtos, contagens, col.list]);
   const enc = inv.status === 'encerrado';
   const sub = `${nomeFilial(dados, inv.filial_id)} · ${inv.tipo === 'completo' ? 'Completo' : 'Parcial'}`;
@@ -713,9 +713,9 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
         {inv.erp_em ? <Cartao style={k.linha}>
           <Anel pct={prog.pct} />
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[k.cTit, { color: c.text }]}>Percentual geral do arquivo</Text>
+            <Text style={[k.cTit, { color: c.text }]}>Percentual geral dos itens com saldo</Text>
             <Text style={[k.cTxt, { color: c.textMuted }]}>{fmtQ(prog.contado)} de {fmtQ(prog.sistema)} unidades contadas</Text>
-            <Text style={[k.cap, { color: c.textMuted }]}>{prog.coletados.toLocaleString('pt-BR')} de {prog.itens.toLocaleString('pt-BR')} itens do arquivo já coletados · cada contagem mostra o próprio percentual</Text>
+            <Text style={[k.cap, { color: c.textMuted }]}>{prog.coletados.toLocaleString('pt-BR')} de {prog.itens.toLocaleString('pt-BR')} itens com saldo já coletados · cada contagem mostra o próprio percentual</Text>
           </View>
         </Cartao> : null}
         {erro ? <Text style={[k.cap, { color: c.danger }]}>{erro}</Text> : null}
@@ -2154,7 +2154,7 @@ function Relatorio({ inv, dados, nav, divergentes, contagem: soDela }: { inv: In
                   </View>
                   {geralTela ? (
                     <View style={{ flex: 1 }}>
-                      <Text style={[k.cap, { color: c.textMuted }]}>Percentual geral do arquivo</Text>
+                      <Text style={[k.cap, { color: c.textMuted }]}>Percentual geral dos itens com saldo</Text>
                       <Text style={[k.monoM, k.b, { color: c.text, fontSize: 22 }]}>{fmtQ(Math.round(geralTela.pct * 1000) / 10)}%</Text>
                       <Text style={[k.cap, { color: c.textMuted }]}>{geralTela.coletados.toLocaleString('pt-BR')} de {geralTela.itens.toLocaleString('pt-BR')} itens coletados</Text>
                     </View>
