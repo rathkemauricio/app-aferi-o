@@ -9,7 +9,7 @@ import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { MODULES } from '../modules/registry';
 import { Alvo } from '../tutoriais';
-import { ChartLineUpIcon, BroadcastIcon, CaretLeftIcon, DropIcon, GearIcon, GraduationCapIcon, HouseIcon, ListMagnifyingGlassIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
+import { ChartLineUpIcon, BroadcastIcon, DropIcon, GearIcon, GraduationCapIcon, HouseIcon, ListMagnifyingGlassIcon, MoonIcon, SignOutIcon, SquaresFourIcon, StorefrontIcon, SunIcon, UserCircleIcon, type Icon } from '../ui/icons';
 import { confirmAction } from '../ui/kit';
 import { ThemeContext, type ThemeColors } from '../ui/theme';
 
@@ -136,8 +136,6 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   const sMarca = useAnimatedStyle(() => ({ opacity: textoOp(larg.value), transform: [{ translateX: (1 - abertura(larg.value)) * -10 }] }));
   const sPerfil = useAnimatedStyle(() => ({ opacity: textoOp(larg.value), transform: [{ translateX: (1 - abertura(larg.value)) * -10 }] }));
   const sAba = useAnimatedStyle(() => ({ opacity: indOp.value, height: indH.value, transform: [{ translateY: indY.value }] }));
-  const sAlca = useAnimatedStyle(() => ({ left: larg.value - 12 }));
-  const sSeta = useAnimatedStyle(() => ({ transform: [{ rotate: `${(1 - abertura(larg.value)) * 180}deg` }] }));
 
   const isActive = (route: string) => route === '/' ? pathname === '/' || pathname === '/index' : pathname === route || pathname.startsWith(`${route}/`);
   const grupos: { titulo: string; itens: LinkItem[] }[] = [
@@ -175,7 +173,11 @@ export function DesktopShell({ children }: { children: ReactNode }) {
     <View style={styles.shell}>
       <Animated.View style={[styles.sidebar, sBarra]}>
         <View style={styles.brand}>
-          <Image source={require('../assets/favicon.png')} style={styles.logo} accessibilityLabel="EasyAudit" />
+          {/* O logo abre e fecha a barra lateral. */}
+          <Pressable accessibilityRole="button" accessibilityLabel={compact ? 'Expandir menu lateral' : 'Recolher menu lateral'} hitSlop={6} onPress={() => setCollapsed(v => !v)}
+            style={({ pressed }) => [pressed && { transform: [{ scale: 0.92 }] }]}>
+            <Image source={require('../assets/favicon.png')} style={styles.logo} />
+          </Pressable>
           <Animated.View style={[styles.brandCopy, sMarca]}><Text style={styles.brandName}>EasyAudit</Text><Text numberOfLines={1} style={styles.brandSub}>{empresa?.nome ?? 'EasyAudit'}</Text></Animated.View>
         </View>
 
@@ -217,13 +219,6 @@ export function DesktopShell({ children }: { children: ReactNode }) {
         </View>
       </Animated.View>
 
-      <Animated.View style={[styles.alca, sAlca]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={compact ? 'Expandir menu lateral' : 'Recolher menu lateral'} hitSlop={8} onPress={() => setCollapsed(v => !v)}
-          style={({ pressed }) => [styles.alcaBotao, pressed && { transform: [{ scale: 0.92 }] }]}>
-          <Animated.View style={sSeta}><CaretLeftIcon size={12} color={colors.accent} weight="bold" /></Animated.View>
-        </Pressable>
-      </Animated.View>
-
       <View style={styles.main}>{children}</View>
     </View>
   );
@@ -259,7 +254,5 @@ const makeStyles = (c: ThemeColors, p: Paleta) => StyleSheet.create({
   profileCopy: { width: 130, gap: 2 },
   profileName: { color: p.texto, fontSize: 12, fontWeight: '700' },
   profileRole: { color: p.suave, fontSize: 10.5 },
-  alca: { position: 'absolute', top: 34, zIndex: 30 },
-  alcaBotao: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, borderWidth: 1, borderColor: c.border },
   main: { flex: 1, minWidth: 0, minHeight: 0 },
 });
