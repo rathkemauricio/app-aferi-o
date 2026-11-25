@@ -124,6 +124,7 @@ export function useProdutos(inv: Inventario | undefined) {
   const chave = inv ? `${inv.id}:${inv.itens_total}:${inv.erp_em ?? ''}` : '';
   useEffect(() => {
     if (!inv || inv.status === 'carregando') { setLista(null); return; }
+    if (!inv.erp_em) { setLista([]); setErro(null); return; } // aberto sem PDF: os saldos entram com a primeira contagem
     let vivo = true;
     void (async () => {
       try {

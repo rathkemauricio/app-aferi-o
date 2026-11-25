@@ -125,10 +125,12 @@ function useCores() { return useContext(ThemeContext).colors; }
 
 function Topo({ titulo, sub, onVoltar, direita, cor }: { titulo: string; sub?: string; onVoltar?: () => void; direita?: ReactNode; cor?: string }) {
   const insets = useSafeAreaInsets();
-  const semBotao = useVoltarSemBotao(onVoltar); // no painel web largo voltar é por Esc / Alt+← / botão do mouse
+  // Registra Esc / Alt+← / botão do mouse. Nas Contagens o botão de voltar fica SEMPRE visível (também no painel web largo):
+  // a última tela fica guardada e a barra lateral não leva de volta à lista de contagens.
+  useVoltarSemBotao(onVoltar);
   return (
     <View style={[k.topo, { backgroundColor: cor ?? P.topo, paddingTop: insets.top + 12 }]}>
-      {onVoltar && !semBotao ? <Pressable accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={10} onPress={onVoltar} style={k.voltar}><CaretLeftIcon size={22} color="#fff" weight="bold" /></Pressable> : null}
+      {onVoltar ? <Pressable accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={10} onPress={onVoltar} style={k.voltar}><CaretLeftIcon size={22} color="#fff" weight="bold" /></Pressable> : null}
       <View style={{ flex: 1 }}>
         <Text style={[k.topoTit, !cor && { color: P.topoTxt }]} numberOfLines={1}>{titulo}</Text>
         {sub ? <Text style={[k.topoSub, !cor && { color: P.topoTxt, opacity: 0.85 }]} numberOfLines={1}>{sub}</Text> : null}
@@ -351,7 +353,7 @@ function CartaoInventario({ inv, dados, onPress }: { inv: Inventario; dados: Dad
       <Barra pct={enc ? 1 : prog?.pct ?? 0} />
       <Text style={[k.cap, { color: c.textMuted }]}>
         {enc ? (inv.enviado_erp_em ? `Enviado ao Petros em ${dataBR(inv.enviado_erp_em)}` : `Encerrado em ${dataBR(inv.encerrado_em)}`)
-          : prog ? `Geral ${Math.round(prog.pct * 100)}% · ${fmtQ(prog.contado)} de ${fmtQ(prog.sistema)} unidades do arquivo${nCont ? '' : ' · nenhuma contagem aberta'}` : 'Calculando…'}
+          : !inv.erp_em ? `Sem arquivo · saldos carregados na primeira contagem` : prog ? `Geral ${Math.round(prog.pct * 100)}% · ${fmtQ(prog.contado)} de ${fmtQ(prog.sistema)} unidades do arquivo${nCont ? '' : ' · nenhuma contagem aberta'}` : 'Calculando…'}
       </Text>
     </Cartao>
   );
@@ -365,12 +367,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [tipo, setTipo] = useState<'completo' | 'parcial'>(() => preferencias().tipoPadrao);
   const [escolher, setEscolher] = useState(false);
   const [busca, setBusca] = useState('');
-  const [petros, setPetros] = useState(false);
-  const [fonte, setFonte] = useState<'arquivo' | 'petros'>('arquivo');
-  const [arquivo, setArquivo] = useState<ArquivoErp | null>(null);
-  const [arquivoVenda, setArquivoVenda] = useState<ArquivoErp | null>(null);
   const [enviando, setEnviando] = useState(false);
-  useEffect(() => { void statusErp().then(r => { setPetros(r.petros); if (r.petros) setFonte('petros'); }).catch(() => undefined); }, []);
   // Um inventário aberto por filial e origem: a contagem da filial não trava a da auditoria (e vice-versa).
   const minhaOrigem = filialConta ? 'filial' : 'auditoria';
   const aberto = dados.inventarios.find(i => i.filial_id === filialId && (i.origem ?? 'auditoria') === minhaOrigem && i.status !== 'encerrado');
@@ -382,19 +379,15 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     if (!filialId) { notify('Escolha a filial'); return; }
     if (aberto) { notify('Filial com inventário aberto', `${aberto.codigo} ainda está aberto nesta filial. Encerre-o antes de abrir outro.`); return; }
     if (!base) { notify('Base de códigos de barra pendente', filialConta ? 'A base de códigos de barra é cadastrada pela auditoria. Peça ao administrador para importá-la.' : 'Importe a relação de códigos de barra da rede (ou desta filial) antes de abrir o inventário.'); return; }
-    if (fonte === 'arquivo' && !arquivo && !arquivoVenda) { notify('Escolha o PDF de saldos', 'Use a Conferência de Estoque da filial com preço de custo, com preço de venda ou as duas.'); return; }
+    // O inventário abre sem PDF: os saldos do Petros são carregados quando se abre a primeira contagem dele.
     setEnviando(true);
-    const id = uid('inv');
     try {
-      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV'), filial_id: filialId, tipo, status: 'carregando', fonte, arquivo: arquivo?.nome ?? '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
+      const id = uid('inv');
+      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV'), filial_id: filialId, tipo, status: 'aberto', fonte: 'arquivo', arquivo: '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
       await inventariosCol.flush();
-      const r = await carregarErp(id, fonte, arquivo ?? undefined, arquivoVenda ?? undefined);
-      await inventariosCol.sync();
-      if (r.avisos.length) notify(`${r.itens.toLocaleString('pt-BR')} itens carregados`, r.avisos.join('\n'));
       nav.trocar({ n: 'inventario', id });
     } catch (e) {
-      notify('Inventário não aberto', `${e instanceof Error ? e.message : ''}\n\nO inventário ficou como "carregando": abra-o para tentar carregar os saldos de novo.`);
-      await inventariosCol.sync().catch(() => undefined);
+      notify('Inventário não aberto', e instanceof Error ? e.message : '');
     } finally { setEnviando(false); }
   };
 
@@ -402,7 +395,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo="Abrir inventário" sub={filialConta ? filialCurta(dados, filialConta) : 'Selecione a filial e o tipo'} onVoltar={nav.voltar} />
       <Corpo rodape={<>
-        <Botao titulo={enviando ? 'Carregando os saldos…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
+        <Botao titulo={enviando ? 'Abrindo…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
         <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={enviando} />
       </>}>
         <Rotulo>Filial</Rotulo>
@@ -427,13 +420,11 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         <Cartao>
           <Text style={[k.cTit, { color: c.text }]}>Pista e Conveniência</Text>
-          <Text style={[k.cTxt, { color: c.textMuted }]}>Importe o relatório de saldos com todas as categorias. Ao montar a contagem, cada categoria mostra se é Pista ou Conveniência: toque no rótulo para trocar. A escolha fica guardada para a rede e os próximos inventários.</Text>
+          <Text style={[k.cTxt, { color: c.textMuted }]}>Na primeira contagem, importe o relatório de saldos com todas as categorias. Ao montar a contagem, cada categoria mostra se é Pista ou Conveniência: toque no rótulo para trocar. A escolha fica guardada para a rede e os próximos inventários.</Text>
           <View style={k.linha}><Pilula texto="Pista" tom="alerta" /><Pilula texto="Conveniência" tom="neutro" /></View>
           <Text style={[k.cap, { color: c.textMuted }]}>Sem escolha (marcadas com ?), o app sugere pelo nome: acessórios, aditivos, lubrificantes e filtros são Pista. Só entram itens com saldo diferente de zero na filial.</Text>
         </Cartao>
-        <Rotulo>Saldos do Petros</Rotulo>
-        <Segmentos opcoes={[{ id: 'arquivo', titulo: 'Arquivo exportado', sub: 'PDF ou CSV' }, { id: 'petros', titulo: 'API do Petros', sub: petros ? 'Conectada' : 'Em breve', desab: !petros }]} valor={fonte} onChange={setFonte} />
-        {fonte === 'arquivo' ? <ArquivosErp custo={arquivo} setCusto={setArquivo} venda={arquivoVenda} setVenda={setArquivoVenda} /> : null}
+        <Text style={[k.cap, { color: c.textMuted }]}>O inventário abre sem arquivo. O PDF de saldos do Petros é pedido quando você abrir a primeira contagem dentro dele.</Text>
       </Corpo>
       {escolher && (
         <Sheet title="Filial" onClose={() => setEscolher(false)}>
@@ -618,8 +609,10 @@ function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; 
         <Rotulo>Tipo de inventário</Rotulo>
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         {inv.fonte === 'arquivo' ? <>
-          <Rotulo>Recarregar saldos (opcional)</Rotulo>
-          <Text style={[k.cap, { color: c.textMuted }]}>Saldo atual de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''}. Escolha novos PDFs só se quiser trocar os saldos; o que já foi coletado continua.</Text>
+          <Rotulo>{inv.erp_em ? 'Recarregar saldos (opcional)' : 'Carregar saldos (opcional)'}</Rotulo>
+          <Text style={[k.cap, { color: c.textMuted }]}>{inv.erp_em
+            ? `Saldo atual de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${inv.arquivo}${inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''}. Escolha novos PDFs só se quiser trocar os saldos; o que já foi coletado continua.`
+            : 'Os saldos ainda não foram carregados: eles são pedidos ao abrir a primeira contagem, mas já podem ser carregados aqui.'}</Text>
           <ArquivosErp custo={custo} setCusto={setCusto} venda={venda} setVenda={setVenda} />
         </> : null}
       </Corpo>
@@ -685,7 +678,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Topo titulo={inv.codigo} sub={`${sub} · saldo ${dataHora(inv.saldo_em ?? inv.erp_em)}`} onVoltar={nav.voltar} />
+      <Topo titulo={inv.codigo} sub={inv.erp_em ? `${sub} · saldo ${dataHora(inv.saldo_em ?? inv.erp_em)}` : `${sub} · sem saldos carregados`} onVoltar={nav.voltar} />
       <Corpo rodape={enc
         ? <><Botao titulo="Ver relatório" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })} /><Botao titulo="Reabrir inventário" tipo="s" onPress={() => {
           const outro = dados.inventarios.find(x => x.filial_id === inv.filial_id && x.id !== inv.id && x.status !== 'encerrado');
@@ -693,14 +686,14 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
           confirmAction('Reabrir inventário?', 'As contagens voltam a aceitar leituras.', 'Reabrir', () => reabrirInventario(inv));
         }} /></>
         : <><Botao titulo="Abrir nova contagem" onPress={() => nav.ir({ n: 'nova', inv: inv.id })} desabilitado={!produtos} /><Botao titulo="Finalizar inventário" tipo="s" onPress={finalizarInv} desabilitado={!contagens.length} /></>}>
-        <Cartao style={k.linha}>
+        {inv.erp_em ? <Cartao style={k.linha}>
           <Anel pct={prog.pct} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[k.cTit, { color: c.text }]}>Percentual geral do arquivo</Text>
             <Text style={[k.cTxt, { color: c.textMuted }]}>{fmtQ(prog.contado)} de {fmtQ(prog.sistema)} unidades contadas</Text>
             <Text style={[k.cap, { color: c.textMuted }]}>{prog.coletados.toLocaleString('pt-BR')} de {prog.itens.toLocaleString('pt-BR')} itens do arquivo já coletados · cada contagem mostra o próprio percentual</Text>
           </View>
-        </Cartao>
+        </Cartao> : null}
         {erro ? <Text style={[k.cap, { color: c.danger }]}>{erro}</Text> : null}
         {!produtos && !erro ? <Carregando texto="Carregando os itens…" /> : null}
         <Text style={[k.secao, { color: c.text }]}>Contagens</Text>
@@ -745,7 +738,7 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
           </Cartao>
         ) : null}
         {inv.criado_por_nome ? <Text style={[k.cap, { color: c.textMuted }]}>Inventário aberto por <Text style={[k.b, { color: c.text }]}>{inv.criado_por_nome}</Text>{inv.criado_em ? ` em ${dataHora(inv.criado_em)}` : ''}.</Text> : null}
-        <Text style={[k.cap, { color: c.textMuted }]}>Saldo do Petros de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo || (inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>
+        {!inv.erp_em ? <Text style={[k.cap, { color: c.textMuted }]}>Inventário aberto sem arquivo: os saldos do Petros são carregados ao abrir a primeira contagem.</Text> : <Text style={[k.cap, { color: c.textMuted }]}>Saldo do Petros de {dataHora(inv.saldo_em ?? inv.erp_em)} · {inv.arquivo ||(inv.fonte === 'petros' ? 'API Petros' : 'arquivo')}{inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''} · {inv.itens_total.toLocaleString('pt-BR')} itens com saldo{inv.sem_barras ? ` · ${inv.sem_barras.toLocaleString('pt-BR')} sem código de barras (ler pelo código interno)` : ''}</Text>}
       </Corpo>
     </View>
   );
@@ -754,7 +747,45 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
 /* =====================================================================
    Nova contagem
    ===================================================================== */
-function NovaContagem({ inv, dados, nav, editar }: { inv: Inventario; dados: Dados; nav: Nav; editar?: Contagem }) {
+function NovaContagem(p: { inv: Inventario; dados: Dados; nav: Nav; editar?: Contagem }) {
+  // Inventário aberto sem PDF: a primeira contagem começa carregando os saldos do Petros.
+  return !p.editar && !p.inv.erp_em ? <CarregarSaldos inv={p.inv} dados={p.dados} nav={p.nav} /> : <NovaContagemForm {...p} />;
+}
+
+function CarregarSaldos({ inv, dados, nav }: { inv: Inventario; dados: Dados; nav: Nav }) {
+  const c = useCores();
+  const [petros, setPetros] = useState(false);
+  const [fonte, setFonte] = useState<'arquivo' | 'petros'>('arquivo');
+  const [custo, setCusto] = useState<ArquivoErp | null>(null);
+  const [venda, setVenda] = useState<ArquivoErp | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  useEffect(() => { void statusErp().then(r => { setPetros(r.petros); if (r.petros) setFonte('petros'); }).catch(() => undefined); }, []);
+  const carregar = async () => {
+    if (fonte === 'arquivo' && !custo && !venda) { notify('Escolha o PDF de saldos', 'Use a Conferência de Estoque da filial com preço de custo, com preço de venda ou as duas.'); return; }
+    try {
+      setCarregando(true);
+      const r = await carregarErp(inv.id, fonte, custo ?? undefined, venda ?? undefined);
+      await inventariosCol.sync();
+      if (r.avisos.length) notify(`${r.itens.toLocaleString('pt-BR')} itens carregados`, r.avisos.join('\n'));
+    } catch (e) { notify('Saldos não carregados', e instanceof Error ? e.message : ''); } finally { setCarregando(false); }
+  };
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <Topo titulo="Nova contagem" sub={`${inv.codigo} · ${filialCurta(dados, inv.filial_id)} · saldos do Petros`} onVoltar={nav.voltar} />
+      <Corpo rodape={<>
+        <Botao titulo={carregando ? 'Carregando os saldos…' : 'Carregar saldos e continuar'} onPress={() => void carregar()} desabilitado={carregando || (fonte === 'arquivo' && !custo && !venda)} />
+        <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={carregando} />
+      </>}>
+        <EmptyState icon={PackageIcon} title="Carregue os saldos do Petros" text="Este inventário foi aberto sem arquivo. Para abrir a primeira contagem, carregue os saldos: depois você escolhe as categorias. As próximas contagens usam os mesmos saldos." />
+        <Rotulo>Saldos do Petros</Rotulo>
+        <Segmentos opcoes={[{ id: 'arquivo', titulo: 'Arquivo exportado', sub: 'PDF ou CSV' }, { id: 'petros', titulo: 'API do Petros', sub: petros ? 'Conectada' : 'Em breve', desab: !petros }]} valor={fonte} onChange={setFonte} />
+        {fonte === 'arquivo' ? <ArquivosErp custo={custo} setCusto={setCusto} venda={venda} setVenda={setVenda} /> : null}
+      </Corpo>
+    </View>
+  );
+}
+
+function NovaContagemForm({ inv, dados, nav, editar }: { inv: Inventario; dados: Dados; nav: Nav; editar?: Contagem }) {
   const c = useCores();
   const { produtos } = useProdutos(inv);
   const parcial = inv.tipo === 'parcial';

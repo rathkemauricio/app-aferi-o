@@ -46,7 +46,7 @@ export const TUTORIAIS: TutorialApp[] = [
       { alvo: 'contagens-abas', titulo: 'Em aberto e encerrados', texto: 'Em aberto: as filiais com inventário em andamento. Encerrados: os finalizados, com o relatório e a opção de reabrir.' },
       { alvo: 'contagens-leitor', opcional: true, titulo: 'Como a filial conta', texto: 'Com leitor de código (coletor) ou pelo celular: lista dos itens, câmera ou digitando o código.' },
       { alvo: 'contagens-bases', opcional: true, titulo: 'Base de códigos de barra', texto: 'Importe uma vez a relação de códigos da rede: ela vale para todas as filiais e liga cada código ao item.' },
-      { alvo: 'contagens-abrir', titulo: 'Abrir inventário', texto: 'Escolha a filial e carregue os saldos (PDF ou API do ERP). Depois crie as contagens por categoria.' },
+      { alvo: 'contagens-abrir', titulo: 'Abrir inventário', texto: 'Escolha a filial e o tipo: o inventário abre sem arquivo. Ao abrir a primeira contagem, carregue os saldos (PDF ou API do ERP) e escolha as categorias.' },
       { titulo: 'Dentro da contagem', texto: 'Na lista de itens, filtre Pendentes, Incorretos e Corretos. Na Coleta simples (web e celular; dá para desligar em Configurações), a própria lista é a coleta: digite a quantidade e toque em Somar (as partes se somam) e toque no cartão para ver as informações e o histórico. Com coletor ou câmera, use a aba Coleta. Ao finalizar, os divergentes vão para a próxima contagem.' },
     ],
   },
