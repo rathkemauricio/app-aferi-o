@@ -960,6 +960,8 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
   // Coleta simples (web e app, ligada em Configurações): a aba Itens é a própria coleta manual, sem coletor nem câmera:
   // cada item tem o campo de somar e, ao expandir o cartão, as informações e o histórico de coleta.
   const itensColetaveis = usePreferencias().coletaSimples; // Configurações → Contagens → Coleta simples (web e app)
+  /** Coleta simples ligada numa contagem em andamento: a aba mostra só a pesquisa, as informações básicas e os itens. */
+  const coletaSimplesAtiva = itensColetaveis && coletavel;
   const [disp, setDisp] = useState<string | null>(null);
   useEffect(() => { void idDispositivo().then(setDisp); }, []);
   const lancamentos = useMemo(() => {
@@ -1085,13 +1087,11 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
               keyboardShouldPersistTaps="handled"
               ListHeaderComponent={<View style={{ gap: space.md }}>
                 {rodadas}
-                <Text style={[k.cap, { color: c.textMuted }]}>{textoTempo(ct, inv, agora)}</Text>
+                {/* Coleta simples ligada: só a pesquisa, as informações básicas e os itens (sem tempo, filtros e dicas). */}
+                {coletaSimplesAtiva ? null : <Text style={[k.cap, { color: c.textMuted }]}>{textoTempo(ct, inv, agora)}</Text>}
                 <Field icon={MagnifyingGlassIcon} value={busca} onChangeText={setBusca} placeholder="Pesquisar item: nome, código ou código de barras" />
-                <FiltroSituacao valor={filtro} onChange={setFiltro} n={nSit} />
-                {busca.trim() || filtro !== 'todos' ? <Text style={[k.cap, { color: c.textMuted }]}>{filtrada.length.toLocaleString('pt-BR')} de {lista.length.toLocaleString('pt-BR')} itens desta contagem</Text>
-                  : coletavel && itensColetaveis ? <Text style={[k.cap, { color: c.textMuted }]}>Digite quanto achou e toque em Somar (o item pode estar em mais de um lugar: as partes se somam). Toque no cartão para ver o histórico e as informações do item.</Text>
-                  : coletavel ? <Text style={[k.cap, { color: c.textMuted }]}>Arraste um item já coletado: para a direita corrige, para a esquerda zera.</Text>
-                  : null}
+                {coletaSimplesAtiva ? null : <FiltroSituacao valor={filtro} onChange={setFiltro} n={nSit} />}
+                {busca.trim() || filtro !== 'todos' ? <Text style={[k.cap, { color: c.textMuted }]}>{filtrada.length.toLocaleString('pt-BR')} de {lista.length.toLocaleString('pt-BR')} itens desta contagem</Text> : null}
                 {r > 1 ? <Cartao><Text style={[k.cTit, { color: c.text, fontSize: 15 }]}>Recontagem: {lista.length.toLocaleString('pt-BR')} itens vindos da contagem {r - 1}</Text><Text style={[k.cTxt, { color: c.textMuted }]}>{r === 2 ? 'Divergentes, saldo negativo e não coletados. Os corretos já estão fechados.' : 'Não coletados e divergências não confirmadas na 2ª. Esta contagem confirma o resultado.'}</Text></Cartao> : null}
                 {ct.rodadas[r - 1] === 'aguardando' ? <Text style={[k.cap, { color: c.textMuted }]}>Esta contagem começa quando a anterior for finalizada.</Text> : null}
               </View>}
@@ -1135,14 +1135,8 @@ function ContagemTela({ c: ct, inv, dados, tela: telaPedida, nav }: { c: Contage
                   return <LinhaLista ct={ct} r={r} p={p} qq={qq} meu={minhas(p.codigo).meu} partes={lancamentos.get(p.codigo)} historico={historico.get(p.codigo)} expandivel leitura={!coletavel} onCorrigir={() => setCorrigir(p)} />;
                 }
                 const linha = <LinhaItem p={p} r={r} q={qq} onPress={coletavel ? () => { setSel(p.codigo); mudar({ aba: 'coleta' }); } : undefined} />;
-                const total = qq[r - 1];
-                // Arrastar para a direita: corrigir a quantidade; para a esquerda: zerar o que foi coletado.
-                return coletavel && total !== null ? (
-                  <Deslizavel raio={12} direita={ARRASTE_CORRIGIR} esquerda={{ ...ARRASTE_ZERAR, habilitada: total > 0 }}
-                    onDireita={() => setCorrigir(p)} onEsquerda={() => zerarItem(ct, r, p, total, minhas(p.codigo).meu, avisoLista)}>
-                    {linha}
-                  </Deslizavel>
-                ) : linha;
+                // Coleta simples desligada: a lista só consulta (sem corrigir nem zerar nela); coletar é pela aba Coleta.
+                return linha;
               }}
             />
             {ativa ? <Rodape><Botao titulo={`Finalizar contagem ${r}`} tipo="s" onPress={() => nav.ir({ n: 'finalizar', id: ct.id, rodada: r })} /></Rodape> : null}
