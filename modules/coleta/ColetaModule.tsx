@@ -242,13 +242,11 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
   useEffect(() => { if (isSupabaseConfigured) void statusErp().then(r => setPetros(r.petros)).catch(() => setPetros(null)); }, []);
   const ultimaCarga = dados.inventarios.map(i => i.erp_em).filter(Boolean).sort().pop();
   const sub = filialConta ? `Filial ${filialCurta(dados, filialConta)} · ${usuario}` : `Usuário ${usuario} · ${petros ? 'Petros conectado (API)' : ultimaCarga ? `Petros carregado ${new Date(ultimaCarga).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Petros por arquivo'}`;
-  // Em aberto: uma filial por cartão (cada filial tem no máximo um inventário aberto). Encerrados: os mais recentes primeiro.
-  const abertos = useMemo(() => dados.inventarios.filter(i => i.status !== 'encerrado').sort((a, b) => nomeFilial(dados, a.filial_id).localeCompare(nomeFilial(dados, b.filial_id), 'pt-BR', { numeric: true })), [dados]);
+  // Em aberto: um cartão por inventário (a filial pode ter vários abertos). Encerrados: os mais recentes primeiro.
+  const abertos = useMemo(() => dados.inventarios.filter(i => i.status !== 'encerrado').sort((a, b) => nomeFilial(dados, a.filial_id).localeCompare(nomeFilial(dados, b.filial_id), 'pt-BR', { numeric: true }) || b.codigo.localeCompare(a.codigo)), [dados]);
   const encerrados = useMemo(() => dados.inventarios.filter(i => i.status === 'encerrado').sort((a, b) => (b.encerrado_em ?? '').localeCompare(a.encerrado_em ?? '')), [dados.inventarios]);
   const lista = aba === 'abertos' ? abertos : encerrados;
   const reabrirSeLivre = (i: Inventario) => {
-    const outro = dados.inventarios.find(x => x.filial_id === i.filial_id && mesmaOrigem(x, i) && x.id !== i.id && x.status !== 'encerrado');
-    if (outro) { notify('Filial com inventário aberto', `${nomeFilial(dados, i.filial_id)} já tem o ${outro.codigo} aberto. Encerre-o antes de reabrir o ${i.codigo}.`); return; }
     confirmAction(`Reabrir ${i.codigo}?`, 'O inventário volta para as filiais em aberto e as contagens voltam a aceitar leituras.', 'Reabrir', () => { reabrirInventario(i); setAba('abertos'); });
   };
   return (
@@ -256,7 +254,7 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
       <Topo titulo={filialConta ? 'Contagens da filial' : 'Inventários'} sub={sub} onVoltar={nav.voltar} />
       <Corpo rodape={<Alvo id="contagens-abrir"><Botao titulo="Abrir inventário" onPress={() => nav.ir({ n: 'abrir' })} desabilitado={!isSupabaseConfigured} /></Alvo>}>
         <Alvo id="contagens-abas"><Segmentos opcoes={[
-          { id: 'abertos', titulo: 'Em aberto', sub: `${abertos.length} filia${abertos.length === 1 ? 'l' : 'is'}` },
+          { id: 'abertos', titulo: 'Em aberto', sub: `${abertos.length} inventário${abertos.length === 1 ? '' : 's'}` },
           { id: 'encerrados', titulo: 'Encerrados', sub: `${encerrados.length} inventário${encerrados.length === 1 ? '' : 's'}` },
         ]} valor={aba} onChange={setAba} /></Alvo>
         {aba === 'abertos' && filialConta ? <Alvo id="contagens-leitor"><LeitorDaFilial /></Alvo> : null}
@@ -274,12 +272,12 @@ function ListaInventarios({ dados, nav }: { dados: Dados; nav: Nav }) {
         ) : null}
         {!lista.length
           ? (aba === 'abertos'
-            ? <EmptyState icon={PackageIcon} title={filialConta ? 'Nenhuma contagem aberta' : 'Nenhuma filial com inventário aberto'} text={filialConta ? 'Toque em Abrir inventário e carregue os saldos do Petros da filial.' : 'Toque em Abrir inventário: escolha a filial e carregue os saldos do Petros.'} />
+            ? <EmptyState icon={PackageIcon} title={filialConta ? 'Nenhuma contagem aberta' : 'Nenhum inventário aberto'} text={filialConta ? 'Toque em Abrir inventário e carregue os saldos do Petros da filial.' : 'Toque em Abrir inventário: escolha a filial e carregue os saldos do Petros.'} />
             : <EmptyState icon={PackageIcon} title="Nenhum inventário encerrado" text="Os inventários finalizados aparecem aqui, com o relatório e a opção de reabrir." />)
           : <>
-            <Text style={[k.secao, { color: c.text }]}>{aba === 'abertos' ? 'Filiais com inventário aberto' : 'Inventários encerrados'}</Text>
+            <Text style={[k.secao, { color: c.text }]}>{aba === 'abertos' ? 'Inventários abertos' : 'Inventários encerrados'}</Text>
             <Text style={[k.cap, { color: c.textMuted }]}>{aba === 'abertos'
-              ? 'Toque na filial para ver as contagens. Arraste para a direita para editar ou para a esquerda para excluir.'
+              ? 'Toque no inventário para ver as contagens. Arraste para a direita para editar ou para a esquerda para excluir.'
               : 'Toque para ver o relatório. Arraste para a direita para reabrir ou para a esquerda para excluir.'}</Text>
             {lista.map(i => {
               const enc = i.status === 'encerrado';
@@ -373,16 +371,14 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [arquivoVenda, setArquivoVenda] = useState<ArquivoErp | null>(null);
   const [enviando, setEnviando] = useState(false);
   useEffect(() => { void statusErp().then(r => setPetros(r.petros)).catch(() => undefined); }, []);
-  // Um inventário aberto por filial e origem: a contagem da filial não trava a da auditoria (e vice-versa).
-  const minhaOrigem = filialConta ? 'filial' : 'auditoria';
-  const aberto = dados.inventarios.find(i => i.filial_id === filialId && (i.origem ?? 'auditoria') === minhaOrigem && i.status !== 'encerrado');
+  // A filial pode ter mais de um inventário aberto ao mesmo tempo.
+  const abertosDaFilial = filialId ? dados.inventarios.filter(i => i.filial_id === filialId && i.status !== 'encerrado') : [];
   const base = filialId ? baseDaFilial(dados, filialId) : undefined;
   const daRede = !!base && base.id === BASE_REDE;
   const filtradas = dados.filiais.filter(f => `${f.codigo} ${f.nome} ${f.cidade}`.toLowerCase().includes(busca.toLowerCase()));
 
   const abrir = async () => {
     if (!filialId) { notify('Escolha a filial'); return; }
-    if (aberto) { notify('Filial com inventário aberto', `${aberto.codigo} ainda está aberto nesta filial. Encerre-o antes de abrir outro.`); return; }
     if (!base) { notify('Base de códigos de barra pendente', filialConta ? 'A base de códigos de barra é cadastrada pela auditoria. Peça ao administrador para importá-la.' : 'Importe a relação de códigos de barra da rede (ou desta filial) antes de abrir o inventário.'); return; }
     // Os saldos podem vir já na abertura (PDF ou API do Petros) ou ficar para a primeira contagem do inventário.
     const comSaldos = fonte === 'petros' || !!arquivo || !!arquivoVenda;
@@ -415,7 +411,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
           <Text style={[k.selectTxt, { color: filialId ? c.text : c.textFaint }]} numberOfLines={1}>{filialId ? nomeFilial(dados, filialId) : 'Escolha a filial'}</Text>
           {filialConta ? null : <CaretDownIcon size={18} color={c.textMuted} />}
         </Pressable>
-        {aberto ? <Text style={[k.cap, { color: c.danger }]}>{aberto.codigo} ainda está aberto nesta filial.</Text> : null}
+        {abertosDaFilial.length ? <Text style={[k.cap, { color: c.textMuted }]}>Esta filial já tem {abertosDaFilial.map(x => x.codigo).join(', ')} aberto{abertosDaFilial.length === 1 ? '' : 's'}. Você pode abrir mais um.</Text> : null}
         {filialId ? (
           <Cartao onPress={filialConta ? undefined : () => nav.ir({ n: 'bases', filial: filialId })}>
             <View style={k.linha}>
@@ -601,15 +597,16 @@ function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; 
   const [tipo, setTipo] = useState(inv.tipo);
   const [custo, setCusto] = useState<ArquivoErp | null>(null);
   const [venda, setVenda] = useState<ArquivoErp | null>(null);
+  const [modo, setModo] = useState<'adicionar' | 'substituir'>(inv.erp_em ? 'adicionar' : 'substituir');
   const [salvando, setSalvando] = useState(false);
   const salvar = async () => {
     setSalvando(true);
     try {
       if (tipo !== inv.tipo) { inventariosCol.put({ ...inv, tipo }); await inventariosCol.flush(); }
       if (inv.fonte === 'arquivo' && (custo || venda)) {
-        const r = await carregarErp(inv.id, 'arquivo', custo ?? undefined, venda ?? undefined);
+        const r = await carregarErp(inv.id, 'arquivo', custo ?? undefined, venda ?? undefined, modo);
         await inventariosCol.sync();
-        notify(`${r.itens.toLocaleString('pt-BR')} itens recarregados`, ['Os saldos foram substituídos; as coletas feitas continuam valendo.', ...r.avisos].join('\n'));
+        notify(`${r.itens.toLocaleString('pt-BR')} itens com saldo no inventário`, [modo === 'adicionar' && inv.erp_em ? 'Os itens do novo PDF foram adicionados (o item de mesmo código é atualizado); os demais continuam. As coletas feitas continuam valendo.' : 'Os saldos foram substituídos; as coletas feitas continuam valendo.', ...r.avisos].join('\n'));
       }
       nav.voltar();
     } catch (e) { notify('Inventário não alterado', e instanceof Error ? e.message : ''); } finally { setSalvando(false); }
@@ -624,10 +621,11 @@ function EditarInventario({ inv, dados, nav }: { inv: Inventario; dados: Dados; 
         <Rotulo>Tipo de inventário</Rotulo>
         <Segmentos opcoes={[{ id: 'completo', titulo: 'Completo' }, { id: 'parcial', titulo: 'Parcial' }]} valor={tipo} onChange={setTipo} />
         {inv.fonte === 'arquivo' ? <>
-          <Rotulo>{inv.erp_em ? 'Recarregar saldos (opcional)' : 'Carregar saldos (opcional)'}</Rotulo>
+          <Rotulo>{inv.erp_em ? 'Adicionar ou trocar PDFs de saldos (opcional)' : 'Carregar saldos (opcional)'}</Rotulo>
           <Text style={[k.cap, { color: c.textMuted }]}>{inv.erp_em
-            ? `Saldo atual de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${inv.arquivo}${inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''}. Escolha novos PDFs só se quiser trocar os saldos; o que já foi coletado continua.`
+            ? `Saldo atual de ${dataHora(inv.saldo_em ?? inv.erp_em)} · ${inv.arquivo}${inv.arquivo_venda ? ` + ${inv.arquivo_venda}` : ''}. Escolha os PDFs novos; o que já foi coletado continua.`
             : 'Os saldos ainda não foram carregados: eles são pedidos ao abrir a primeira contagem, mas já podem ser carregados aqui.'}</Text>
+          {inv.erp_em ? <Segmentos opcoes={[{ id: 'adicionar', titulo: 'Adicionar ao inventário', sub: 'mantém os itens atuais' }, { id: 'substituir', titulo: 'Substituir os saldos', sub: 'troca tudo' }]} valor={modo} onChange={setModo} /> : null}
           <ArquivosErp custo={custo} setCusto={setCusto} venda={venda} setVenda={setVenda} />
         </> : null}
       </Corpo>
@@ -696,8 +694,6 @@ function InventarioTela({ inv, dados, nav }: { inv: Inventario; dados: Dados; na
       <Topo titulo={inv.codigo} sub={inv.erp_em ? `${sub} · saldo ${dataHora(inv.saldo_em ?? inv.erp_em)}` : `${sub} · sem saldos carregados`} onVoltar={nav.voltar} />
       <Corpo rodape={enc
         ? <><Botao titulo="Ver relatório" onPress={() => nav.ir({ n: 'relatorio', inv: inv.id })} /><Botao titulo="Reabrir inventário" tipo="s" onPress={() => {
-          const outro = dados.inventarios.find(x => x.filial_id === inv.filial_id && x.id !== inv.id && x.status !== 'encerrado');
-          if (outro) { notify('Filial com inventário aberto', `${nomeFilial(dados, inv.filial_id)} já tem o ${outro.codigo} aberto. Encerre-o antes de reabrir este.`); return; }
           confirmAction('Reabrir inventário?', 'As contagens voltam a aceitar leituras.', 'Reabrir', () => reabrirInventario(inv));
         }} /></>
         : <><Botao titulo="Abrir nova contagem" onPress={() => nav.ir({ n: 'nova', inv: inv.id })} desabilitado={!produtos} /><Botao titulo="Finalizar inventário" tipo="s" onPress={finalizarInv} desabilitado={!contagens.length} /></>}>

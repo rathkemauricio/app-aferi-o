@@ -121,7 +121,7 @@ export async function carregarProdutos(inv: Inventario): Promise<Produto[]> {
 export function useProdutos(inv: Inventario | undefined) {
   const [lista, setLista] = useState<Produto[] | null>(inv ? memoria.get(inv.id) ?? null : null);
   const [erro, setErro] = useState<string | null>(null);
-  const chave = inv ? `${inv.id}:${inv.itens_total}:${inv.erp_em ?? ''}` : '';
+  const chave = inv ? `${inv.id}:${inv.itens_total}:${inv.erp_em ?? ''}:${inv.arquivo ?? ''}:${inv.arquivo_venda ?? ''}` : '';
   useEffect(() => {
     if (!inv || inv.status === 'carregando') { setLista(null); return; }
     if (!inv.erp_em) { setLista([]); setErro(null); return; } // aberto sem PDF: os saldos entram com a primeira contagem
@@ -269,8 +269,11 @@ export async function escolherArquivoErp(): Promise<{ nome: string; base64: stri
 }
 
 /** Carrega produtos e saldos da filial no inventário (arquivo exportado ou API do Petros). */
-export function carregarErp(inventarioId: string, fonte: 'arquivo' | 'petros', arquivo?: { nome: string; base64: string }, arquivoVenda?: { nome: string; base64: string }) {
-  return chamar<CargaErp>({ acao: 'carregar', inventario_id: inventarioId, fonte, arquivo, arquivo_venda: arquivoVenda });
+export async function carregarErp(inventarioId: string, fonte: 'arquivo' | 'petros', arquivo?: { nome: string; base64: string }, arquivoVenda?: { nome: string; base64: string }, modo: 'substituir' | 'adicionar' = 'substituir') {
+  const r = await chamar<CargaErp>({ acao: 'carregar', inventario_id: inventarioId, fonte, arquivo, arquivo_venda: arquivoVenda, modo });
+  memoria.delete(inventarioId); // a lista mudou no servidor: a cópia deste aparelho é baixada de novo
+  await apagarCopiaLocal(inventarioId);
+  return r;
 }
 
 /** Envia o resultado ao Petros pela API (quando configurada). */

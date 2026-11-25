@@ -122,8 +122,11 @@ async function extrairPdf(body: { caminho: string; de: number; ate: number }, em
 }
 
 type Arquivo = { nome: string; base64: string };
-async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petros'; arquivo?: Arquivo; arquivo_venda?: Arquivo }, emp: string) {
+async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petros'; arquivo?: Arquivo; arquivo_venda?: Arquivo; modo?: 'substituir' | 'adicionar' }, emp: string) {
   const inv = await inventario(body.inventario_id, emp);
+  // 'adicionar': os itens do novo arquivo entram (ou atualizam o item de mesmo código) e os que já estavam no inventário ficam.
+  const { data: atual } = await admin.from('ce_inventarios').select('arquivo,arquivo_venda,saldo_em,erp_em,sem_barras').eq('id', inv.id).maybeSingle();
+  const adicionar = body.modo === 'adicionar' && !!atual?.erp_em;
   if (body.fonte === 'petros' && emp !== REDE_NEVOEIRO) return json(400, { erro: 'A integração com o ERP Petros não está configurada para a sua empresa. Envie o arquivo exportado do ERP.' });
   if (inv.status === 'encerrado') return json(400, { erro: 'Este inventário já foi encerrado.' });
   // Os códigos de barra vêm da base fixa da filial; sem ela o coletor não reconhece os EANs.
@@ -183,7 +186,7 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
   // Itens da base de códigos de barra sem saldo no ERP entram com saldo 0: não fazem parte das contagens,
   // mas o coletor os reconhece (estoque físico sem saldo no sistema → sobra).
   const comSaldo = new Set(linhas.map(l => l.codigo));
-  const zerados = [...base.values()].filter(b => !comSaldo.has(b.codigo)).map(b => {
+  const zerados = adicionar ? [] : [...base.values()].filter(b => !comSaldo.has(b.codigo)).map(b => {
     const p = porCodigo.get(b.codigo);
     const categoria = (p?.categoria && p.categoria !== 'Sem categoria' ? p.categoria : b.categoria) || 'Sem categoria';
     return {
@@ -193,13 +196,30 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
   });
   const todas = [...linhas, ...zerados];
 
-  const { error: e1 } = await admin.from('ce_produtos').delete().eq('inventario_id', inv.id);
-  if (e1) throw new Error(`Falha ao limpar a carga anterior: ${e1.message}`);
+  if (adicionar) {
+    // Só troca os itens que vieram no novo arquivo.
+    for (let i = 0; i < todas.length; i += 200) {
+      const { error } = await admin.from('ce_produtos').delete().eq('inventario_id', inv.id).in('codigo', todas.slice(i, i + 200).map(l => l.codigo));
+      if (error) throw new Error(`Falha ao atualizar os itens: ${error.message}`);
+    }
+  } else {
+    const { error: e1 } = await admin.from('ce_produtos').delete().eq('inventario_id', inv.id);
+    if (e1) throw new Error(`Falha ao limpar a carga anterior: ${e1.message}`);
+  }
   for (let i = 0; i < todas.length; i += 1000) {
     const { error } = await admin.from('ce_produtos').insert(todas.slice(i, i + 1000).map(l => ({ ...l, empresa_id: emp })));
     if (error) throw new Error(`Falha ao gravar os produtos: ${error.message}`);
   }
-  const { error: e2 } = await admin.from('ce_inventarios').update({
+  let itensTotal = linhas.length;
+  if (adicionar) {
+    const { count } = await admin.from('ce_produtos').select('codigo', { count: 'exact', head: true }).eq('inventario_id', inv.id).neq('saldo', 0);
+    itensTotal = count ?? linhas.length;
+  }
+  const junta = (antes: unknown, novo: string) => [...new Set([String(antes ?? ''), novo].filter(Boolean))].join(' + ');
+  const { error: e2 } = await admin.from('ce_inventarios').update(adicionar ? {
+    status: 'aberto', arquivo: junta(atual?.arquivo, body.fonte === 'petros' ? 'API Petros' : nomeCusto || nomeVenda), arquivo_venda: junta(atual?.arquivo_venda, nomeVenda), itens_total: itensTotal,
+    saldo_em: atual?.saldo_em ?? saldoEm, sem_barras: Number(atual?.sem_barras ?? 0) + semBarras,
+  } : {
     status: 'aberto', fonte: body.fonte, arquivo: body.fonte === 'petros' ? 'API Petros' : nomeCusto || nomeVenda, arquivo_venda: nomeVenda, itens_total: linhas.length, erp_em: new Date().toISOString(),
     saldo_em: saldoEm, sem_barras: semBarras,
   }).eq('id', inv.id);
@@ -212,7 +232,7 @@ async function carregar(body: { inventario_id: string; fonte: 'arquivo' | 'petro
     ...(semBarras ? [`${semBarras} item(ns) com saldo não têm código de barras na base: leia-os digitando o código interno (ou cadastre o código de barras na hora da coleta).`] : []),
     ...(produtos.length - linhas.length > 0 ? [`${produtos.length - linhas.length} item(ns) com saldo zero ou repetidos ficaram de fora.`] : []),
   ];
-  return json(200, { ok: true, itens: linhas.length, categorias: new Set(linhas.map(l => l.categoria)).size, avisos });
+  return json(200, { ok: true, itens: adicionar ? itensTotal : linhas.length, categorias: new Set(linhas.map(l => l.categoria)).size, avisos });
 }
 
 /** Liga um código de barras lido na coleta ao item da carga e grava na base em uso (vale para os próximos inventários). */
