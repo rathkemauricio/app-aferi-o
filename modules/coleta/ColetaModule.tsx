@@ -367,7 +367,12 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
   const [tipo, setTipo] = useState<'completo' | 'parcial'>(() => preferencias().tipoPadrao);
   const [escolher, setEscolher] = useState(false);
   const [busca, setBusca] = useState('');
+  const [petros, setPetros] = useState(false);
+  const [fonte, setFonte] = useState<'arquivo' | 'petros'>('arquivo');
+  const [arquivo, setArquivo] = useState<ArquivoErp | null>(null);
+  const [arquivoVenda, setArquivoVenda] = useState<ArquivoErp | null>(null);
   const [enviando, setEnviando] = useState(false);
+  useEffect(() => { void statusErp().then(r => setPetros(r.petros)).catch(() => undefined); }, []);
   // Um inventário aberto por filial e origem: a contagem da filial não trava a da auditoria (e vice-versa).
   const minhaOrigem = filialConta ? 'filial' : 'auditoria';
   const aberto = dados.inventarios.find(i => i.filial_id === filialId && (i.origem ?? 'auditoria') === minhaOrigem && i.status !== 'encerrado');
@@ -379,15 +384,22 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     if (!filialId) { notify('Escolha a filial'); return; }
     if (aberto) { notify('Filial com inventário aberto', `${aberto.codigo} ainda está aberto nesta filial. Encerre-o antes de abrir outro.`); return; }
     if (!base) { notify('Base de códigos de barra pendente', filialConta ? 'A base de códigos de barra é cadastrada pela auditoria. Peça ao administrador para importá-la.' : 'Importe a relação de códigos de barra da rede (ou desta filial) antes de abrir o inventário.'); return; }
-    // O inventário abre sem PDF: os saldos do Petros são carregados quando se abre a primeira contagem dele.
+    // Os saldos podem vir já na abertura (PDF ou API do Petros) ou ficar para a primeira contagem do inventário.
+    const comSaldos = fonte === 'petros' || !!arquivo || !!arquivoVenda;
     setEnviando(true);
+    const id = uid('inv');
     try {
-      const id = uid('inv');
-      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV'), filial_id: filialId, tipo, status: 'aberto', fonte: 'arquivo', arquivo: '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
+      inventariosCol.put({ id, codigo: proximoCodigo(dados.inventarios.map(i => i.codigo), filialConta ? 'CNT' : 'INV'), filial_id: filialId, tipo, status: comSaldos ? 'carregando' : 'aberto', fonte, arquivo: arquivo?.nome ?? '', itens_total: 0, erp_em: null, encerrado_em: null, enviado_erp_em: null });
       await inventariosCol.flush();
+      if (comSaldos) {
+        const r = await carregarErp(id, fonte, arquivo ?? undefined, arquivoVenda ?? undefined);
+        await inventariosCol.sync();
+        if (r.avisos.length) notify(`${r.itens.toLocaleString('pt-BR')} itens carregados`, r.avisos.join('\n'));
+      }
       nav.trocar({ n: 'inventario', id });
     } catch (e) {
-      notify('Inventário não aberto', e instanceof Error ? e.message : '');
+      notify('Inventário não aberto', `${e instanceof Error ? e.message : ''}\n\nO inventário ficou como "carregando": abra-o para tentar carregar os saldos de novo.`);
+      await inventariosCol.sync().catch(() => undefined);
     } finally { setEnviando(false); }
   };
 
@@ -395,7 +407,7 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Topo titulo="Abrir inventário" sub={filialConta ? filialCurta(dados, filialConta) : 'Selecione a filial e o tipo'} onVoltar={nav.voltar} />
       <Corpo rodape={<>
-        <Botao titulo={enviando ? 'Abrindo…' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
+        <Botao titulo={enviando ? 'Abrindo…' : fonte === 'petros' || arquivo || arquivoVenda ? 'Abrir e carregar saldos' : 'Abrir inventário'} onPress={() => void abrir()} desabilitado={enviando || !filialId || !base} />
         <Botao titulo="Cancelar" tipo="s" onPress={nav.voltar} desabilitado={enviando} />
       </>}>
         <Rotulo>Filial</Rotulo>
@@ -424,7 +436,10 @@ function AbrirInventario({ dados, nav }: { dados: Dados; nav: Nav }) {
           <View style={k.linha}><Pilula texto="Pista" tom="alerta" /><Pilula texto="Conveniência" tom="neutro" /></View>
           <Text style={[k.cap, { color: c.textMuted }]}>Sem escolha (marcadas com ?), o app sugere pelo nome: acessórios, aditivos, lubrificantes e filtros são Pista. Só entram itens com saldo diferente de zero na filial.</Text>
         </Cartao>
-        <Text style={[k.cap, { color: c.textMuted }]}>O inventário abre sem arquivo. O PDF de saldos do Petros é pedido quando você abrir a primeira contagem dentro dele.</Text>
+        <Rotulo>Saldos do Petros (opcional)</Rotulo>
+        <Text style={[k.cap, { color: c.textMuted }]}>Pode abrir o inventário sem arquivo: o PDF de saldos é pedido quando você abrir a primeira contagem dentro dele. Se já tiver o PDF, carregue agora.</Text>
+        <Segmentos opcoes={[{ id: 'arquivo', titulo: 'Arquivo exportado', sub: 'PDF ou CSV' }, { id: 'petros', titulo: 'API do Petros', sub: petros ? 'Conectada' : 'Em breve', desab: !petros }]} valor={fonte} onChange={setFonte} />
+        {fonte === 'arquivo' ? <ArquivosErp custo={arquivo} setCusto={setArquivo} venda={arquivoVenda} setVenda={setArquivoVenda} /> : null}
       </Corpo>
       {escolher && (
         <Sheet title="Filial" onClose={() => setEscolher(false)}>
