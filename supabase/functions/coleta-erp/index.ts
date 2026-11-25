@@ -8,7 +8,9 @@
 //        (só itens com saldo diferente de zero) e abre o inventário.
 //   { acao: 'enviar_resultado', inventario_id, linhas: [{ codigo, saldo, contado }] } → envia ao Petros pela API
 //   { acao: 'gravar_barras', filial_id, arquivo, itens: [{ codigo, nome, categoria, eans }] }
-//        substitui a base fixa de códigos de barra (o PDF é lido no navegador: é pesado demais aqui).
+//        mescla com a base de códigos de barra (o PDF é lido no navegador: é pesado demais aqui): item do arquivo
+//        sobrescreve nome e categoria e soma os códigos de barra; itens e códigos que já estavam continuam.
+//        Os inventários abertos que usam a base recebem os códigos novos na hora (eans_extra).
 //        filial_id = 'rede' grava a base da rede, que vale para todas as filiais; a de uma filial se soma a ela.
 //        A carga de saldos exige uma base e liga os EANs aos itens pelo código interno.
 //   { acao: 'associar_ean', inventario_id, codigo, ean } → liga um código de barras lido na coleta (que não estava
@@ -77,7 +79,11 @@ async function baseEmUso(filialId: string, emp: string) {
   return data ? filialId : REDE;
 }
 
-/** Grava (substitui) uma base de códigos de barra (da rede ou de uma filial), lida no navegador a partir do PDF do ERP. */
+/**
+ * Grava uma base de códigos de barra (da rede ou de uma filial), lida no navegador a partir do PDF do ERP.
+ * Mescla com o que já existe (pedido do usuário): o item que veio no arquivo sobrescreve nome e categoria e soma os
+ * códigos de barra; item que não veio continua; código de barras que já estava no item continua.
+ */
 async function gravarBarras(body: { filial_id: string; arquivo: string; itens: ItemBarras[] }, emp: string) {
   if (body.filial_id !== REDE) {
     const { data: f } = await admin.from('filiais').select('id').eq('id', body.filial_id).eq('empresa_id', emp).maybeSingle();
@@ -92,19 +98,70 @@ async function gravarBarras(body: { filial_id: string; arquivo: string; itens: I
     if (ja) ja.eans = [...new Set([...ja.eans, ...eans])];
     else porCodigo.set(codigo, { codigo, nome: String(i.nome ?? '').slice(0, 200), categoria: String(i.categoria ?? '').slice(0, 120), eans });
   });
-  const linhas = [...porCodigo.values()].map(i => ({ empresa_id: emp, filial_id: body.filial_id, ...i }));
-  if (!linhas.length) return json(400, { erro: 'Nenhum produto reconhecido na relação de códigos de barra.' });
+  if (!porCodigo.size) return json(400, { erro: 'Nenhum produto reconhecido na relação de códigos de barra.' });
 
-  const { error: e1 } = await admin.from('ce_barras').delete().eq('empresa_id', emp).eq('filial_id', body.filial_id);
-  if (e1) throw new Error(`Falha ao limpar a base anterior: ${e1.message}`);
+  const atual = await lerBase(body.filial_id, emp);
+  let novos = 0, eansNovos = 0;
+  const linhas = [...porCodigo.values()].map(i => {
+    const a = atual.get(i.codigo);
+    if (!a) novos++;
+    const eans = [...new Set([...(a?.eans ?? []), ...i.eans])];
+    eansNovos += eans.length - (a?.eans.length ?? 0);
+    return { empresa_id: emp, filial_id: body.filial_id, codigo: i.codigo, nome: i.nome || a?.nome || '', categoria: i.categoria || a?.categoria || '', eans };
+  });
   for (let i = 0; i < linhas.length; i += 1000) {
-    const { error } = await admin.from('ce_barras').insert(linhas.slice(i, i + 1000));
+    const { error } = await admin.from('ce_barras').upsert(linhas.slice(i, i + 1000), { onConflict: 'empresa_id,filial_id,codigo' });
     if (error) throw new Error(`Falha ao gravar a base de códigos de barra: ${error.message}`);
   }
-  const eans = linhas.reduce((n, l) => n + l.eans.length, 0);
-  const { error: e2 } = await admin.from('ce_bases').upsert({ empresa_id: emp, id: body.filial_id, arquivo: String(body.arquivo ?? '').slice(0, 200), itens: linhas.length, eans, importado_em: new Date().toISOString(), deleted_at: null });
+  const itensBase = atual.size + novos;
+  const eansBase = [...atual.values()].reduce((n, b) => n + b.eans.length, 0) + eansNovos;
+  const { error: e2 } = await admin.from('ce_bases').upsert({ empresa_id: emp, id: body.filial_id, arquivo: String(body.arquivo ?? '').slice(0, 200), itens: itensBase, eans: eansBase, importado_em: new Date().toISOString(), deleted_at: null });
   if (e2) throw new Error(`Falha ao registrar a base: ${e2.message}`);
-  return json(200, { ok: true, itens: linhas.length, eans, semEan: linhas.filter(l => !l.eans.length).length });
+  const sinc = await sincronizarInventarios(body.filial_id, emp, new Map(linhas.map(l => [l.codigo, l.eans])));
+  return json(200, {
+    ok: true, itens: porCodigo.size, eans: linhas.reduce((n, l) => n + l.eans.length, 0), semEan: linhas.filter(l => !l.eans.length).length,
+    novos, atualizados: porCodigo.size - novos, eansNovos, itensBase, eansBase, inventarios: sinc.inventarios, eansInventarios: sinc.eans,
+  });
+}
+
+/**
+ * Leva os códigos de barra da base aos inventários abertos que a usam (os da filial; da rede, todos), sem recarregar:
+ * o código novo de um item que já está na carga entra no item (ce_produtos) e em eans_extra, que os aparelhos que
+ * estão coletando sincronizam na hora. Item que não está na carga entra na próxima carga de saldos.
+ */
+async function sincronizarInventarios(baseId: string, emp: string, eansPorCodigo: Map<string, string[]>) {
+  let q = admin.from('ce_inventarios').select('id,eans_extra').eq('empresa_id', emp).neq('status', 'encerrado').is('deleted_at', null);
+  if (baseId !== REDE) q = q.eq('filial_id', baseId);
+  const { data: invs, error } = await q;
+  if (error) throw new Error(`Falha ao ler os inventários abertos: ${error.message}`);
+  let inventarios = 0, total = 0;
+  for (const inv of invs ?? []) {
+    const extra = { ...((inv.eans_extra as Record<string, string>) ?? {}) };
+    const mudou: Record<string, unknown>[] = [];
+    for (let de = 0; ; de += 1000) {
+      const { data, error: e1 } = await admin.from('ce_produtos').select('*').eq('inventario_id', inv.id).order('codigo').range(de, de + 999);
+      if (e1) throw new Error(`Falha ao ler os itens do inventário: ${e1.message}`);
+      for (const p of data ?? []) {
+        const base = eansPorCodigo.get(String(p.codigo));
+        if (!base?.length) continue;
+        const tinha = (p.eans as string[]) ?? [];
+        const faltam = base.filter(e => !tinha.includes(e));
+        if (!faltam.length) continue;
+        mudou.push({ ...p, eans: [...tinha, ...faltam] });
+        faltam.forEach(e => { if (!extra[e]) { extra[e] = String(p.codigo); total++; } });
+      }
+      if (!data || data.length < 1000) break;
+    }
+    if (!mudou.length) continue;
+    for (let i = 0; i < mudou.length; i += 500) {
+      const { error: e2 } = await admin.from('ce_produtos').upsert(mudou.slice(i, i + 500), { onConflict: 'inventario_id,codigo' });
+      if (e2) throw new Error(`Falha ao atualizar os itens do inventário: ${e2.message}`);
+    }
+    const { error: e3 } = await admin.from('ce_inventarios').update({ eans_extra: extra }).eq('id', inv.id);
+    if (e3) throw new Error(`Falha ao atualizar o inventário: ${e3.message}`);
+    inventarios++;
+  }
+  return { inventarios, eans: total };
 }
 
 /** Lote de páginas de um PDF enviado ao bucket coleta-arquivos (o app monta a base a partir dos textos). */

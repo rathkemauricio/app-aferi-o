@@ -530,14 +530,19 @@ function BasesBarras({ dados, nav, destaque }: { dados: Dados; nav: Nav; destaqu
       setLendo(null);
       const ja = dados.bases.get(filialId);
       confirmAction(`Importar base da ${nome}?`,
-        `${lido.itens.length.toLocaleString('pt-BR')} itens e ${lido.eans.toLocaleString('pt-BR')} códigos de barra em "${a.name}" (${lido.semEan.toLocaleString('pt-BR')} itens sem código de barra).${ja ? `\n\nSubstitui a base atual (${ja.itens.toLocaleString('pt-BR')} itens, ${dataHora(ja.importado_em)}). Inventários já abertos não mudam.` : ''}`,
-        ja ? 'Substituir' : 'Importar', () => {
+        `${lido.itens.length.toLocaleString('pt-BR')} itens e ${lido.eans.toLocaleString('pt-BR')} códigos de barra em "${a.name}" (${lido.semEan.toLocaleString('pt-BR')} itens sem código de barra).${ja ? `\n\nSoma à base atual (${ja.itens.toLocaleString('pt-BR')} itens, ${dataHora(ja.importado_em)}): o item que veio no PDF tem nome e categoria atualizados e ganha os códigos de barra novos; itens e códigos que já estavam continuam.` : ''} Os inventários abertos recebem os códigos novos na hora.`,
+        ja ? 'Somar à base' : 'Importar', () => {
           void (async () => {
             setLendo({ filial: filialId, txt: 'Gravando no servidor…' });
             try {
               const g = await gravarBarras(filialId, a.name, lido.itens);
               await basesCol.sync();
-              notify('Base importada', `${nome}: ${g.itens.toLocaleString('pt-BR')} itens e ${g.eans.toLocaleString('pt-BR')} códigos de barra. ${filialId === BASE_REDE ? 'Os próximos inventários de todas as filiais já usam esta base.' : 'Os próximos inventários desta filial usam esta base, somada à da rede.'}`);
+              notify('Base importada', [
+                `${nome}: ${g.itens.toLocaleString('pt-BR')} itens no PDF (${g.novos.toLocaleString('pt-BR')} novos, ${g.atualizados.toLocaleString('pt-BR')} atualizados) e ${g.eansNovos.toLocaleString('pt-BR')} códigos de barra novos.`,
+                `A base agora tem ${g.itensBase.toLocaleString('pt-BR')} itens e ${g.eansBase.toLocaleString('pt-BR')} códigos de barra; nada foi apagado.`,
+                g.inventarios ? `${g.eansInventarios.toLocaleString('pt-BR')} códigos de barra entraram em ${g.inventarios} inventário(s) aberto(s).` : '',
+                filialId === BASE_REDE ? 'Vale para todas as filiais.' : 'Esta base se soma à da rede.',
+              ].filter(Boolean).join('\n'));
             } catch (e) { notify('Base não gravada', e instanceof Error ? e.message : ''); } finally { setLendo(null); }
           })();
         });
@@ -565,7 +570,7 @@ function BasesBarras({ dados, nav, destaque }: { dados: Dados; nav: Nav; destaqu
               <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={2}>
                 {aqui && lendo ? lendo.txt : b ? `${b.itens.toLocaleString('pt-BR')} itens · ${b.eans.toLocaleString('pt-BR')} códigos · ${dataHora(b.importado_em)} · ${b.arquivo}` : 'Sem a base da rede, só abrem inventário as filiais com base própria.'}
               </Text>
-              {aqui ? <ActivityIndicator color={c.textMuted} /> : !lendo ? <Text style={[k.cap, k.b, { color: c.accentText }]}>{b ? 'Toque para substituir pelo PDF mais recente' : 'Toque para importar o PDF'}</Text> : null}
+              {aqui ? <ActivityIndicator color={c.textMuted} /> : !lendo ? <Text style={[k.cap, k.b, { color: c.accentText }]}>{b ? 'Toque para somar um PDF mais recente (não apaga nada)' : 'Toque para importar o PDF'}</Text> : null}
             </Cartao>
           );
         })()}
@@ -582,7 +587,7 @@ function BasesBarras({ dados, nav, destaque }: { dados: Dados; nav: Nav; destaqu
               <Text style={[k.cap, { color: c.textMuted }]} numberOfLines={2}>
                 {aqui && lendo ? lendo.txt : b ? `${b.itens.toLocaleString('pt-BR')} itens · ${b.eans.toLocaleString('pt-BR')} códigos · ${dataHora(b.importado_em)} · ${b.arquivo}${rede ? ' · somada à da rede' : ''}` : rede ? 'Usa a base da rede.' : 'Sem base de códigos de barra: importe a da rede para abrir inventário.'}
               </Text>
-              {aqui ? <ActivityIndicator color={c.textMuted} /> : !lendo ? <Text style={[k.cap, k.b, { color: c.accentText }]}>{b ? 'Toque para substituir pelo PDF mais recente' : 'Toque para importar uma base só desta filial'}</Text> : null}
+              {aqui ? <ActivityIndicator color={c.textMuted} /> : !lendo ? <Text style={[k.cap, k.b, { color: c.accentText }]}>{b ? 'Toque para somar um PDF mais recente (não apaga nada)' : 'Toque para importar uma base só desta filial'}</Text> : null}
             </Cartao>
           );
         })}

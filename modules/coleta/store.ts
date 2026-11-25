@@ -237,9 +237,12 @@ export async function salvarNoServidor(inv: string) {
   return cols.reduce((n, c) => n + c.getSnapshot().pending, 0);
 }
 
-/** Grava a base de códigos de barra da filial (lida no navegador por `lerPdfBarras`). */
+/** Soma à base de códigos de barra da filial (ou da rede) o que foi lido no PDF por `lerPdfBarras`: não apaga nada. */
 export function gravarBarras(filialId: string, arquivo: string, itens: ItemBarras[]) {
-  return chamar<{ ok: boolean; itens: number; eans: number; semEan: number }>({ acao: 'gravar_barras', filial_id: filialId, arquivo, itens });
+  return chamar<{
+    ok: boolean; itens: number; eans: number; semEan: number; novos: number; atualizados: number; eansNovos: number;
+    itensBase: number; eansBase: number; inventarios: number; eansInventarios: number;
+  }>({ acao: 'gravar_barras', filial_id: filialId, arquivo, itens });
 }
 
 /* ---------- ERP (Edge Function "coleta-erp") ---------- */
